@@ -1,0 +1,115 @@
+# podstage runtime — self-contained streaming sandbox image.
+#
+# Design decision (OSS goal): bake ALL software into the image so it is
+# host-independent — it carries its whole software stack. Only user DATA (the
+# Steam HOME: login, saves, downloaded games + Proton) is a runtime volume — a
+# distributable image cannot contain an account or a game library.
+#
+# The NVIDIA userspace is injected at RUN time via CDI
+# (`--device nvidia.com/gpu=all`) to match the host driver version.
+#
+#   cage (WLR_BACKENDS=headless)  ← Sunshine captures this via wlr (NVENC/VAAPI)
+#     └─ gamescope (--backend wayland, nested)
+#          └─ steam -gamepadui  → game
+#
+# gamescope's Vulkan renderer inits in-container on the host driver, identical
+# to a host run (where Wolf's smithay-EGL fails, GOW #124).
+
+# Pinned digest: build cache + audit anchor.
+FROM docker.io/library/archlinux:latest@sha256:fe6972d4dc1f660c0c10f4c41b2de8986bab89e7e2955378f8beadb8ebcd7433
+
+# --- multilib (Steam is 32-bit) + base refresh -----------------------------
+RUN printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf && \
+    pacman -Sy --noconfirm archlinux-keyring && \
+    pacman -Su --noconfirm
+
+# --- compositor / renderer / streaming stack -------------------------------
+# 64-bit + 32-bit Vulkan loaders + mesa (llvmpipe fallback + libgbm). NVIDIA
+# ICD/libs come from CDI at runtime. steam pulls its own lib32 GL/Vulkan deps.
+RUN pacman -S --noconfirm --needed \
+        gamescope \
+        cage \
+        wlroots0.19 \
+        seatd \
+        vulkan-icd-loader lib32-vulkan-icd-loader \
+        vulkan-tools \
+        vulkan-mesa-layers lib32-vulkan-mesa-layers \
+        vulkan-swrast lib32-vulkan-swrast \
+        mesa lib32-mesa \
+        libglvnd lib32-libglvnd \
+        pipewire pipewire-pulse wireplumber pipewire-alsa \
+        steam \
+        wlr-randr \
+        bash coreutils procps-ng curl && \
+    pacman -Scc --noconfirm
+
+# --- Sunshine (native Arch package from the official release) --------------
+# The AppImage bundles its own libva, which can't load the image's Mesa VAAPI
+# driver (Debian dri path + too-old libva ABI) — VAAPI init fails and Sunshine
+# silently falls back to software x264. The release's Arch package links
+# against the image's own libva/Mesa instead, so the VAAPI path just works.
+# Version- AND content-pinned: the sha256 comes from the GitHub release asset
+# digest, so a tampered or corrupted download fails the build instead of
+# landing in the image. When bumping SUNSHINE_VERSION, take the new hash from
+#   https://api.github.com/repos/LizardByte/Sunshine/releases/tags/<tag>
+# (assets[].digest).
+ARG SUNSHINE_VERSION=v2026.516.143833
+ARG SUNSHINE_SHA256=676539cfb079f81f38e7001b85d72c39cd5bf25abe0956bab4577cb25afc5299
+ARG SUNSHINE_URL=https://github.com/LizardByte/Sunshine/releases/download/${SUNSHINE_VERSION}/sunshine-${SUNSHINE_VERSION#v}-1-x86_64.pkg.tar.zst
+RUN curl -fL "$SUNSHINE_URL" -o /tmp/sunshine.pkg.tar.zst && \
+    echo "${SUNSHINE_SHA256}  /tmp/sunshine.pkg.tar.zst" | sha256sum -c - && \
+    pacman -U --noconfirm /tmp/sunshine.pkg.tar.zst && \
+    rm -f /tmp/sunshine.pkg.tar.zst && \
+    pacman -Scc --noconfirm && \
+    printf '%s\n' "$SUNSHINE_VERSION" > /opt/sunshine.version
+
+# A machine-id lets wireplumber/dbus optional components load quietly.
+RUN systemd-machine-id-setup 2>/dev/null || \
+    tr -dc 'a-f0-9' < /dev/urandom | head -c 32 > /etc/machine-id
+
+# Steam (steam-runtime-launcher-service) requires a session D-Bus; without one it
+# crash-loops and never reaches Big Picture. Ship the dbus daemon; the entrypoint
+# starts a private session bus. (Separate layer to keep the big package layer cached.)
+RUN pacman -Sy --noconfirm dbus && pacman -Scc --noconfirm
+
+# Capture + AMD userspace (separate layer, keeps the big layer cached):
+#  * wf-recorder + ffmpeg — thumbnail loop (entrypoint) and headless frame
+#    verification, previously installed ad hoc via podman exec.
+#  * RADV Vulkan ICDs + Mesa VAAPI drivers — the AMD GPU path (host NVIDIA
+#    userspace comes via CDI instead; Mesa has no host-version coupling).
+RUN pacman -Sy --noconfirm --needed \
+        wf-recorder ffmpeg \
+        vulkan-radeon lib32-vulkan-radeon \
+        libva-mesa-driver lib32-libva-mesa-driver libva-utils && \
+    pacman -Scc --noconfirm
+
+# Seat shim: cage must enumerate the STREAMING seat ("seat9" — where the host
+# udev rule puts Sunshine's virtual devices) instead of seatd's hardcoded
+# "seat0", or it grabs the host desktop's real keyboard/mouse (input leak in
+# both directions). Also fakes the udev hotplug monitor (inotify + eventfd on
+# a pthread) because the kernel delivers no uevents into the rootless user
+# namespace. LD_PRELOAD; the entrypoint loads it for cage only.
+COPY seat-shim.c /tmp/seat-shim.c
+RUN pacman -S --noconfirm --needed gcc && \
+    gcc -shared -fPIC -O2 -pthread -o /usr/local/lib/podstage-seat-shim.so /tmp/seat-shim.c && \
+    rm /tmp/seat-shim.c && \
+    pacman -Rns --noconfirm gcc && pacman -Scc --noconfirm
+
+# --- unprivileged runtime user ---------------------------------------------
+RUN useradd -u 1000 -m -s /bin/bash player
+
+COPY entrypoint.sh /usr/local/bin/podstage-entrypoint
+RUN chmod +x /usr/local/bin/podstage-entrypoint
+
+# Streaming ports (Moonlight): TCP 47984/47989/48010, UDP 47998-48000/48100/48200
+EXPOSE 47984/tcp 47989/tcp 48010/tcp 47998/udp 47999/udp 48000/udp 48100/udp 48200/udp
+
+USER player
+ENV HOME=/home/player \
+    XDG_RUNTIME_DIR=/run/user/1000 \
+    WLR_BACKENDS=headless \
+    WLR_NO_HARDWARE_CURSORS=1 \
+    WLR_RENDERER_ALLOW_SOFTWARE=1 \
+    PS_RESOLUTION=1280x800@60
+
+ENTRYPOINT ["/usr/local/bin/podstage-entrypoint"]

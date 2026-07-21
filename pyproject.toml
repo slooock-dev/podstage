@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "podstage"
+version = "0.1.0"
+description = "Headless game-streaming sandbox manager: isolated Steam sessions on a virtual gamescope display, streamed via Sunshine/Moonlight, without disturbing the desktop."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "slooock-dev" }]
+keywords = ["steam", "sunshine", "moonlight", "gamescope", "streaming", "steam-deck", "pipewire"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment",
+    "Topic :: Multimedia :: Video :: Capture",
+    "Topic :: System :: Emulators",
+]
+dependencies = [
+    "tomli-w>=1.0",
+]
+
+[project.optional-dependencies]
+ui = ["PyQt6>=6.6"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/slooock-dev/podstage"
+Repository = "https://github.com/slooock-dev/podstage"
+Issues = "https://github.com/slooock-dev/podstage/issues"
+
+[project.scripts]
+podstage = "podstage.cli:main"
+
+[project.gui-scripts]
+podstage-ui = "podstage.ui.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

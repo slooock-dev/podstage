@@ -1,0 +1,54 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! podstage is very environment-sensitive, so the
+        details below matter a lot. `podstage doctor` output is especially useful.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`podstage doctor` output"
+      description: Paste the full output.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU / driver
+      placeholder: "e.g. NVIDIA RTX 4080 SUPER, driver 610.43 — or AMD RX 7800 XT"
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distro / desktop / compositor
+      placeholder: "e.g. Bazzite 43 (Fedora 43), KDE Plasma, Wayland"
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Moonlight client
+      placeholder: "e.g. Steam Deck (LCD), Moonlight flatpak"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Container logs
+      description: "`journalctl -f CONTAINER_NAME=podstage-runtime` around the failure."
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: podstage version / commit
+      placeholder: "e.g. 0.1.0 or a commit SHA"

@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install (core + dev tools)
+        run: pip install -e '.[dev]'
+      # Lint everything, including the GUI modules: ruff parses them statically,
+      # so no PyQt6/GPU/display is needed here.
+      - name: Lint
+        run: ruff check src/ tests/
+      # The suite is headless and hardware-free (PyQt6 is intentionally NOT
+      # installed, mirroring the local system-Python test run).
+      - name: Test
+        run: pytest -q

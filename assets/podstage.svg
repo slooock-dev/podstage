@@ -1,0 +1,35 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#20242c"/>
+      <stop offset="1" stop-color="#111318"/>
+    </linearGradient>
+    <linearGradient id="play" x1="112" y1="104" x2="160" y2="166" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7aa6ff"/>
+      <stop offset="1" stop-color="#2b6cff"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="128" y1="48" x2="128" y2="186" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9cc0ff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#9cc0ff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- app tile -->
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#bg)"/>
+  <rect x="8.5" y="8.5" width="239" height="239" rx="53.5" fill="none"
+        stroke="#ffffff" stroke-opacity="0.06" stroke-width="1"/>
+
+  <!-- spotlight cone from the lamp down onto the stage -->
+  <path d="M128 50 L196 184 L60 184 Z" fill="url(#beam)"/>
+  <!-- lamp -->
+  <circle cx="128" cy="44" r="8" fill="#dce8ff"/>
+
+  <!-- stage floor: a perspective ellipse with a lit pool where the light lands -->
+  <ellipse cx="128" cy="184" rx="76" ry="20" fill="#25459a"/>
+  <ellipse cx="128" cy="182" rx="76" ry="20" fill="#2b6cff"/>
+  <ellipse cx="128" cy="181" rx="50" ry="12" fill="#bcd6ff" fill-opacity="0.92"/>
+
+  <!-- performer: a rounded play button standing in the spotlight -->
+  <path d="M115 108 Q115 101 121 104 L160 129 Q166 133 160 137 L121 162 Q115 165 115 158 Z"
+        fill="url(#play)"/>
+</svg>
