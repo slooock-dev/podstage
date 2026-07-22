@@ -12,6 +12,7 @@ from __future__ import annotations
 import getpass
 import glob
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -57,6 +58,12 @@ def check_podman() -> CheckResult:
     if not shutil.which("podman"):
         return CheckResult("podman", Status.FAIL, "not found — the runtime is a podman container")
     _, ver = _run(["podman", "--version"])
+    # Overlay volume options (:O with upperdir=) need podman ≥ 4 — older
+    # podman silently ignores them.
+    m = re.search(r"(\d+)\.(\d+)", ver or "")
+    if m and int(m.group(1)) < 4:
+        return CheckResult("podman", Status.FAIL,
+                           f"{ver} — overlay volume mounts need podman ≥ 4")
     return CheckResult("podman", Status.OK, ver or "present")
 
 

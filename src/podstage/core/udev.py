@@ -45,7 +45,6 @@ def owner_rule_text(user: str | None = None) -> str:
 # uid. Group access does not map through the rootless user namespace —
 # owner-uid does.
 SUBSYSTEMS=="input", ATTRS{{name}}=="Sunshine*", OWNER="{user}"
-SUBSYSTEMS=="input", ATTRS{{name}}=="Wolf*", OWNER="{user}"
 SUBSYSTEMS=="input", ATTRS{{name}}=="*passthrough*", OWNER="{user}"
 SUBSYSTEMS=="input", ATTRS{{id/vendor}}=="28de", OWNER="{user}"
 # Sunshine (in the container, as this uid) creates its virtual devices on the

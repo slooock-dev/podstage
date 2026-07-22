@@ -71,12 +71,13 @@ The container is rootless (`--userns=keep-id`): no sudo, no extra capabilities.
 - `--network host`: Moonlight ports. (Collides with host X on the abstract
   `@/tmp/.X11-unix/X0`; gamescope harmlessly falls back to Xwayland `:2`.)
 - Shared host Steam libraries (steamapps + `compatibilitytools.d`) are
-  bind-mounted at their host paths **read-write**: the sandbox Steam won't
-  launch an app with a pending update, and that update writes into the shared
-  library (a `:ro` default broke launches with "Disk write failure").
-  Prefixes, saves and shader caches still live in the sandbox HOME.
-  `PS_SHARED_LIBS_RO=enabled` opts into read-only if the host library is kept
-  up to date.
+  **overlay volumes** (`:O,upperdir=…,workdir=…`) at their host paths: the
+  host library is a read-only lowerdir; writes go to per-sandbox upper dirs
+  under `~/.local/share/podstage/overlays/` (`:ro` broke pending updates
+  with "Disk write failure", rw let the sandbox write into host game files).
+  Uppers persist across streams, are purged per app once the host overtakes
+  it, and are deleted with the sandbox. Prefixes, saves and shader caches
+  still live in the sandbox HOME.
 
 ## Status
 

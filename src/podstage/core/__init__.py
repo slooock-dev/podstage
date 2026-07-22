@@ -7,4 +7,5 @@ Modules:
   udev         – host udev rules (seat isolation + per-user device access)
   session      – client profile ↔ runtime container lifecycle
   doctor       – environment validation for all of the above
+  teardown     – detection-based uninstall of everything setup created
 """

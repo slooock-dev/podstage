@@ -61,10 +61,14 @@ host GUI.
   natively. Client keyboard/mouse input is deliberately not injected, and
   non-Steam launchers aren't wired up.
 - **Shared games, separate prefixes.** Game files are symlinked from your main
-  Steam libraries, so nothing is downloaded twice. Prefixes and saves stay per
-  sandbox.
+  Steam libraries, so nothing is downloaded twice. The libraries are mounted
+  as read-only overlay lowerdirs — a session can never modify host game
+  files; its writes land in per-sandbox overlay storage. Prefixes and saves
+  stay per sandbox.
 - **Input isolation.** The client's virtual input devices live on a dedicated
   seat (udev rules plus a small `libseat` shim) and never touch the desktop.
+  This isolates input routing, not malware: processes running as your user
+  keep their usual `uinput` access, as on any gaming distro.
 - **Per-client sandboxes.** One isolated `$HOME` per client, created and
   Steam-logged-in from the GUI.
 - **Light host footprint.** No daemons, no system services, nothing running as
@@ -272,12 +276,19 @@ Patches widening distro and GPU support are very welcome.
   (`nvidia-ctk cdi generate`) also fixes it.
 - **The preview stays blank.** The in-container capture only produces a frame
   while the Big Picture UI is actually animating.
-- **"Disk write failure" when launching a game** (with
-  `PS_SHARED_LIBS_RO=enabled`). Steam refuses to launch an app whose update is
-  pending, and the update needs write access to the shared library. Update the
-  game on the host first, or drop the `:ro` opt-in.
+- **A game re-downloads the same update in every session.** Sandbox-side
+  updates live in per-sandbox overlay storage
+  (`~/.local/share/podstage/overlays/`) and are purged once the host updates
+  the game past the sandbox. Update games on the host.
 
 Live container logs: `journalctl -f CONTAINER_NAME=podstage-runtime`.
+
+## Uninstall
+
+`podstage uninstall` (or Setup → *Remove podstage*) detects and removes
+everything setup created: udev rules, firewall ports, the runtime image,
+sandboxes, data and configuration. Shared pieces (the mDNS firewall service,
+the NVIDIA CDI spec) are kept unless `--all` — other software uses them too.
 
 ## Development
 

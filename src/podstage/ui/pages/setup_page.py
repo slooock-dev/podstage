@@ -14,13 +14,14 @@ from __future__ import annotations
 
 import subprocess
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel, QPushButton,
-    QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
+    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 from ... import config
-from ...core import desktop, doctor, elevate, runtime, udev
+from ...core import desktop, doctor, elevate, runtime, teardown, udev
 from ..i18n import tr
 from ..widgets import ElideLabel, card
 from ..workers import start_action
@@ -59,6 +60,24 @@ def _move_home_root(new_root: str) -> str:
     return tr("Sandboxes moved to {path}.", path=str(new))
 
 
+def _uninstall(delete_sandboxes: bool, include_shared: bool) -> str:
+    results = teardown.remove_user_artifacts(keep_sandboxes=not delete_sandboxes)
+    steps = teardown.root_steps(teardown.inventory(), include_shared=include_shared)
+    if steps:
+        if not elevate.available():
+            raise RuntimeError(tr("pkexec is missing — finish with the CLI: "
+                                  "podstage uninstall"))
+        rc, out = elevate.run_root(" && ".join(steps))
+        if rc != 0:
+            raise RuntimeError(out)
+    left = teardown.leftovers(include_shared=include_shared)
+    done = "; ".join(f"{label}: {outcome}" for label, outcome in results)
+    if left:
+        return tr("Removed ({done}) — still present: {names}", done=done,
+                  names=", ".join(a.label for a in left))
+    return tr("podstage removed — no residues found. ({done})", done=done)
+
+
 def _run_fix(fix: str) -> str:
     shell, needs_root = elevate.fix_shell(fix)
     if needs_root:
@@ -84,7 +103,18 @@ class SetupPage(QWidget):
 
     # -- layout ----------------------------------------------------------
     def _build(self) -> None:
-        root = QVBoxLayout(self)
+        # The page grew past one window height — scroll instead of letting
+        # the layout crush the check rows to zero.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        body = QWidget()
+        scroll.setWidget(body)
+        outer.addWidget(scroll)
+        root = QVBoxLayout(body)
         root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(12)
 
@@ -165,6 +195,26 @@ class SetupPage(QWidget):
         lrow.addWidget(lhint, 1)
         llay.addLayout(lrow)
         root.addWidget(lframe)
+
+        uframe, ulay = card(tr("Remove podstage"))
+        uexpl = QLabel(tr("Removes the udev rules, firewall ports, runtime "
+                          "image, data and configuration. Shared pieces stay "
+                          "unless selected."))
+        uexpl.setProperty("muted", True)
+        uexpl.setWordWrap(True)
+        ulay.addWidget(uexpl)
+        self._rm_sandboxes = QCheckBox(tr("Also delete sandboxes (Steam logins, saves)"))
+        self._rm_sandboxes.setChecked(True)
+        self._rm_shared = QCheckBox(tr("Also remove shared pieces (mDNS service, NVIDIA CDI spec)"))
+        ulay.addWidget(self._rm_sandboxes)
+        ulay.addWidget(self._rm_shared)
+        urow = QHBoxLayout()
+        self._uninstall_btn = QPushButton(tr("Uninstall …"))
+        self._uninstall_btn.clicked.connect(self._on_uninstall_clicked)
+        urow.addStretch(1)
+        urow.addWidget(self._uninstall_btn)
+        ulay.addLayout(urow)
+        root.addWidget(uframe)
 
         if not elevate.available():
             warn = QLabel(tr("pkexec is missing, so there is no graphical "
@@ -277,6 +327,28 @@ class SetupPage(QWidget):
             str(config.SESSIONS_HOME_ROOT))
         if chosen:
             self._start("Sandbox", lambda: _move_home_root(chosen))
+
+    def _on_uninstall_clicked(self) -> None:
+        present = [a for a in teardown.inventory() if a.present]
+        if not present:
+            self._action_status.setText(tr("Nothing to remove."))
+            return
+        lines = "\n".join(
+            f"• {a.label}" + (f" — {a.detail}" if a.detail else "")
+            + ("  " + tr("(shared — kept)")
+               if a.shared and not self._rm_shared.isChecked() else "")
+            for a in present)
+        answer = QMessageBox.question(
+            self, tr("Remove podstage?"),
+            tr("This removes:") + f"\n\n{lines}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        delete_sandboxes = self._rm_sandboxes.isChecked()
+        include_shared = self._rm_shared.isChecked()
+        self._start("Uninstall",
+                    lambda: _uninstall(delete_sandboxes, include_shared))
 
     def _on_autostart_toggled(self, enabled: bool) -> None:
         try:

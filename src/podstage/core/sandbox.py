@@ -87,6 +87,8 @@ def delete(home: Path) -> None:
     is using the sandbox (runtime.status()).
     """
     target = _guard(home)
+    # Overlay uppers (the sandbox's writes onto shared libraries) die with it.
+    shutil.rmtree(config.overlay_root(target), ignore_errors=True)
     if not target.exists():
         return
     try:

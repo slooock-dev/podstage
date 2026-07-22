@@ -23,6 +23,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from .. import config
 from . import steam
 
 _KEY_RE = lambda key: re.compile(rf'"{key}"\s+"([^"]+)"')  # noqa: E731
@@ -98,8 +99,26 @@ def _buildid(manifest: Path) -> int:
         return 0
 
 
-def _share_into(app: InstalledApp, target_steamapps: Path) -> None:
-    """Symlink an app's common dir + copy its manifest into a target library."""
+def _purge_stale_upper(app: InstalledApp, stream_home: Path) -> bool:
+    """Drop an app's files from the sandbox's overlay upper.
+
+    Sandbox-side updates land in the overlay upperdir. Once the HOST updates
+    the app further, those upper files are stale — and would shadow the newer
+    host files forever. Only safe while no container runs (callers provision
+    before ``podman run``).
+    """
+    upper, _ = config.overlay_dirs(stream_home, app.library.steamapps)
+    stale = upper / "common" / app.installdir
+    if not stale.exists():
+        return False
+    shutil.rmtree(stale, ignore_errors=True)
+    return True
+
+
+def _share_into(app: InstalledApp, target_steamapps: Path,
+                stream_home: Path) -> bool:
+    """Symlink an app's common dir + copy its manifest into a target library.
+    Returns True when a stale overlay upper was purged for the app."""
     (target_steamapps / "common").mkdir(parents=True, exist_ok=True)
     link = target_steamapps / "common" / app.installdir
     if link.is_symlink() or link.exists():
@@ -118,8 +137,14 @@ def _share_into(app: InstalledApp, target_steamapps: Path) -> None:
     # would revert that bump and make Steam re-apply the same update on every
     # single container start.
     dst = target_steamapps / app.manifest.name
-    if not dst.exists() or _buildid(app.manifest) > _buildid(dst):
+    purged = False
+    if not dst.exists():
         shutil.copy2(app.manifest, dst)
+    elif _buildid(app.manifest) > _buildid(dst):
+        # Host overtook the sandbox — its overlay upper is stale now.
+        purged = _purge_stale_upper(app, stream_home)
+        shutil.copy2(app.manifest, dst)
+    return purged
 
 
 def stream_steamapps(stream_home: Path) -> Path:
@@ -279,10 +304,10 @@ def ensure_app(app_id: int, stream_home: Path, steam_root: Path | None = None) -
             f"Launch the isolated Steam once (and log in) before provisioning."
         )
 
-    _share_into(app, target)
+    _share_into(app, target, stream_home)
     tools = _compat_tool_apps(steam_root)
     for tool in tools:
-        _share_into(tool, target)
+        _share_into(tool, target, stream_home)
 
     # Ensure a separate (fresh) prefix directory exists; Proton fills it on launch.
     compatdata = target / "compatdata" / str(app_id)
@@ -297,6 +322,7 @@ class ProvisionAllResult:
     steam_tools: int
     custom_tools: list[str]
     compat_default_set: bool = False
+    stale_uppers_purged: int = 0
 
 
 def ensure_all(stream_home: Path, steam_root: Path | None = None,
@@ -319,12 +345,14 @@ def ensure_all(stream_home: Path, steam_root: Path | None = None,
     if app_ids:
         wanted = set(app_ids)
         games = [a for a in games if a.app_id in wanted]
+    purged = 0
     for app in games:
-        _share_into(app, target)
+        purged += _share_into(app, target, stream_home)
         (target / "compatdata" / str(app.app_id)).mkdir(parents=True, exist_ok=True)
     tools = _compat_tool_apps(steam_root)
     for tool in tools:
-        _share_into(tool, target)
+        purged += _share_into(tool, target, stream_home)
     custom = share_custom_compat_tools(stream_home, steam_root)
     compat = mirror_compat_mappings(stream_home, steam_root) or ensure_compat_default(stream_home)
-    return ProvisionAllResult([a.installdir for a in games], len(tools), custom, compat)
+    return ProvisionAllResult([a.installdir for a in games], len(tools), custom, compat,
+                              stale_uppers_purged=purged)

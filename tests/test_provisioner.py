@@ -88,6 +88,38 @@ def test_share_keeps_newer_sandbox_manifest(main_steam: Path, tmp_path: Path):
     assert '"buildid"\t\t"12"' in dst.read_text()
 
 
+def test_host_update_purges_stale_overlay_upper(main_steam: Path, tmp_path: Path,
+                                                monkeypatch):
+    """Once the host updates an app past the sandbox's state, the sandbox's
+    overlay upper for that app is stale — and would SHADOW the newer host
+    files forever. Provisioning must purge it."""
+    from podstage import config
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    stream_home = tmp_path / "home"
+    target = provisioner.stream_steamapps(stream_home)
+    target.mkdir(parents=True)
+    provisioner.ensure_app(1623730, stream_home, steam_root=main_steam)
+
+    # Sandbox Steam applied an update: files in its overlay upper, buildid bumped.
+    upper, _ = config.overlay_dirs(stream_home, main_steam / "steamapps")
+    staged = upper / "common" / "Palworld" / "patched.pak"
+    staged.parent.mkdir(parents=True)
+    staged.write_text("sandbox update")
+    dst = target / "appmanifest_1623730.acf"
+    dst.write_text(dst.read_text().replace('"buildid"\t\t"10"', '"buildid"\t\t"11"'))
+
+    # Host still behind → the sandbox's upper is current and must stay.
+    provisioner.ensure_app(1623730, stream_home, steam_root=main_steam)
+    assert staged.exists()
+
+    # Host overtakes → upper purged, newer host manifest copied in.
+    _make_manifest(main_steam / "steamapps", 1623730, "Palworld", "Palworld",
+                   buildid=12)
+    provisioner.ensure_app(1623730, stream_home, steam_root=main_steam)
+    assert not staged.exists()
+    assert '"buildid"\t\t"12"' in dst.read_text()
+
+
 def test_ensure_compat_default_inserts_global_mapping(tmp_path: Path):
     cfg = tmp_path / "home/.local/share/Steam/config/config.vdf"
     cfg.parent.mkdir(parents=True)

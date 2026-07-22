@@ -231,6 +231,54 @@ def cmd_provision(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_uninstall(args: argparse.Namespace) -> int:
+    """Detection-based teardown: list what podstage set up, remove it on
+    confirmation. Shared artifacts (mDNS, CDI) stay unless --all."""
+    from .core import teardown
+
+    arts = teardown.inventory()
+    print("podstage uninstall — detected artifacts:")
+    for a in arts:
+        mark = _c("•", "33") if a.present else "–"
+        note = ""
+        if a.shared and a.present:
+            note = "  [shared — kept]" if not args.all else "  [shared — removing (--all)]"
+        detail = f"  {a.detail}" if a.present and a.detail else ""
+        print(f"  {mark} {a.label:22}{detail}{note}")
+    steps = teardown.root_steps(arts, include_shared=args.all)
+
+    if args.dry_run:
+        if steps:
+            print("\nRoot steps that would run:")
+            for s in steps:
+                print(f"  sudo {s}")
+        print("\nDry run — nothing removed.")
+        return 0
+
+    if not args.yes:
+        prompt = "Remove the artifacts above"
+        if not args.keep_sandboxes and any(a.key == "sandboxes" and a.present for a in arts):
+            prompt += " INCLUDING all sandboxes (Steam logins, saves)"
+        if input(f"{prompt}? Type 'yes': ").strip().lower() != "yes":
+            print("Aborted.")
+            return 1
+
+    for label, outcome in teardown.remove_user_artifacts(keep_sandboxes=args.keep_sandboxes):
+        print(f"  {label}: {outcome}")
+    if steps:
+        print("\nRoot steps (run these to finish):")
+        for s in steps:
+            print(f"  sudo {s}")
+
+    left = [a for a in teardown.leftovers(include_shared=args.all)
+            if not a.root]  # root-side pieces are pending the sudo lines above
+    if left:
+        print("\nStill present: " + ", ".join(a.label for a in left))
+        return 1
+    print(_c("\nUser-level removal complete." if steps else "\npodstage removed — no residues found.", "32"))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="podstage", description=__doc__.splitlines()[0])
     p.add_argument("-V", "--version", action="version", version=f"podstage {__version__}")
@@ -241,6 +289,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     st = sub.add_parser("setup", help="guided setup: stage the udev rules + print the sudo commands")
     st.set_defaults(func=cmd_setup)
+
+    un = sub.add_parser("uninstall", help="remove everything podstage set up (rules, image, data)")
+    un.add_argument("--dry-run", action="store_true", help="only show what would be removed")
+    un.add_argument("--keep-sandboxes", action="store_true",
+                    help="keep the sandbox HOMEs (Steam logins, saves)")
+    un.add_argument("--all", action="store_true",
+                    help="also remove shared artifacts (mDNS firewall service, NVIDIA CDI spec)")
+    un.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    un.set_defaults(func=cmd_uninstall)
 
     rt = sub.add_parser("runtime", help="manage the runtime container directly (by HOME dir)")
     rt_sub = rt.add_subparsers(dest="action", required=True)

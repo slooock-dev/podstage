@@ -10,6 +10,7 @@ The model is intentionally small in v0.1 — it grows with the session manager
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -58,6 +59,24 @@ def _persisted_sessions_home_root() -> Path | None:
 
 
 SESSIONS_HOME_ROOT = _persisted_sessions_home_root() or _default_sessions_home_root()
+
+
+# Shared host libraries are overlay-mounted (host = read-only lowerdir); the
+# writable upper/work dirs live here, per sandbox and library. NOT in the
+# sandbox HOME: writing an active overlay's upper through the HOME bind mount
+# is undefined behavior.
+def overlay_root(home_dir: Path) -> Path:
+    """Overlay storage for one sandbox's shared-library mounts."""
+    slug = hashlib.sha1(str(Path(home_dir).resolve()).encode()).hexdigest()[:12]
+    return DATA_DIR / "overlays" / slug
+
+
+def overlay_dirs(home_dir: Path, library_path: Path) -> tuple[Path, Path]:
+    """(upperdir, workdir) for one shared library's overlay mount. upper and
+    work must be siblings on the same filesystem and work must start empty."""
+    slug = hashlib.sha1(str(library_path).encode()).hexdigest()[:10]
+    root = overlay_root(home_dir) / f"{library_path.parent.name}-{slug}"
+    return root / "upper", root / "work"
 
 # Sunshine web-UI login. Generated once per install — there is deliberately no
 # fixed default ("podstage/podstage" was a LAN-reachable known credential).

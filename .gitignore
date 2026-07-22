@@ -17,3 +17,8 @@ venv/
 # Local runtime data (isolated Steam homes, generated configs, logs)
 /homes/
 *.log
+
+# Agent working files (local-only, never published)
+CLAUDE.md
+AGENTS.md
+.claude/

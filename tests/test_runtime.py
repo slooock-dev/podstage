@@ -3,6 +3,7 @@
 from pathlib import Path
 
 
+from podstage import config
 from podstage.core import runtime
 
 LIBS = [Path("/tmp/lib-a/steamapps"), Path("/tmp/lib-b/steamapps")]
@@ -102,14 +103,14 @@ def test_gpu_vendor_env_override(monkeypatch):
 
 
 def test_amd_flags_use_dri_without_nvidia_bits():
-    flags = " ".join(runtime.container_flags(LIBS, vendor="amd"))
+    flags = " ".join(runtime.container_flags(LIBS, Path("/tmp/home-x"), vendor="amd"))
     assert "--device /dev/dri" in flags
     assert "nvidia" not in flags
     assert "/usr/lib32" not in flags
 
 
 def test_nvidia_flags_keep_cdi_and_modeset():
-    flags = " ".join(runtime.container_flags(LIBS, vendor="nvidia"))
+    flags = " ".join(runtime.container_flags(LIBS, Path("/tmp/home-x"), vendor="nvidia"))
     assert "nvidia.com/gpu=all" in flags
     assert "/dev/nvidia-modeset" in flags
 
@@ -134,18 +135,35 @@ def test_web_credentials_explicit_override_wins():
     assert (env["PS_WEB_USER"], env["PS_WEB_PASS"]) == ("u", "p")
 
 
-def test_shared_libraries_mounted_rw_by_default(monkeypatch):
-    # NOT :ro — Steam refuses to launch apps with a pending update, and with a
-    # read-only library every pending update dies as "Disk write failure".
-    monkeypatch.delenv("PS_SHARED_LIBS_RO", raising=False)
-    flags = runtime.container_flags(LIBS, vendor="nvidia")
+def test_shared_libraries_mounted_as_overlay():
+    # :O — host library is a read-only lowerdir; sandbox writes land in a
+    # per-sandbox upperdir (rw corrupted host files, :ro blocked updates).
+    home = Path("/tmp/home-x")
+    flags = runtime.container_flags(LIBS, home, vendor="nvidia")
     for lib in LIBS:
-        assert f"{lib}:{lib}" in flags
-        assert f"{lib}:{lib}:ro" not in flags
+        upper, work = config.overlay_dirs(home, lib)
+        assert f"{lib}:{lib}:O,upperdir={upper},workdir={work}" in flags
+        # not in the HOME volume — writing a live upper through it is undefined
+        assert not str(upper).startswith(str(home))
+        assert str(upper).startswith(str(config.DATA_DIR))
 
 
-def test_shared_libraries_ro_opt_in(monkeypatch):
-    monkeypatch.setenv("PS_SHARED_LIBS_RO", "enabled")
-    flags = runtime.container_flags(LIBS, vendor="nvidia")
+def test_overlay_dirs_distinct_per_library_and_sandbox():
+    home = Path("/tmp/home-x")
+    uppers = {config.overlay_dirs(home, lib)[0] for lib in LIBS}
+    assert len(uppers) == len(LIBS)
     for lib in LIBS:
-        assert f"{lib}:{lib}:ro" in flags
+        upper, work = config.overlay_dirs(home, lib)
+        assert upper != work
+        assert upper.parent == work.parent
+    # Two sandboxes must never share an upper (their library writes differ).
+    assert (config.overlay_dirs(Path("/tmp/home-y"), LIBS[0])[0]
+            != config.overlay_dirs(home, LIBS[0])[0])
+
+
+def test_ensure_overlay_dirs_creates_upper_and_work(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    runtime.ensure_overlay_dirs(tmp_path / "home", LIBS)
+    for lib in LIBS:
+        upper, work = config.overlay_dirs(tmp_path / "home", lib)
+        assert upper.is_dir() and work.is_dir()

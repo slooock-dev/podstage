@@ -27,6 +27,5 @@
 #   sudo install -m 644 host/99-podstage-virtual-inputs.rules /etc/udev/rules.d/
 #   sudo udevadm control --reload
 SUBSYSTEMS=="input", ATTRS{name}=="Sunshine*", ENV{ID_SEAT}="seat9", MODE="0600"
-SUBSYSTEMS=="input", ATTRS{name}=="Wolf*", ENV{ID_SEAT}="seat9", MODE="0600"
 SUBSYSTEMS=="input", ATTRS{name}=="*passthrough*", ENV{ID_SEAT}="seat9", MODE="0600"
 SUBSYSTEMS=="input", ATTRS{id/vendor}=="28de", ENV{ID_SEAT}="seat9", MODE="0600"

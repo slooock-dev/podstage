@@ -309,4 +309,29 @@ TEXTS: dict[str, str] = {
         "sind eingerichtet.",
     "Done.": "Erledigt.",
     "podman build failed:\n{tail}": "podman build fehlgeschlagen:\n{tail}",
+
+    # -- setup page: uninstall --------------------------------------------
+    "Remove podstage": "podstage entfernen",
+    "Removes the udev rules, firewall ports, runtime "
+    "image, data and configuration. Shared pieces stay "
+    "unless selected.":
+        "Entfernt die udev-Regeln, Firewall-Ports, das Runtime-Image, "
+        "Daten und Konfiguration. Geteilte Bestandteile bleiben, außer sie "
+        "sind ausgewählt.",
+    "Also delete sandboxes (Steam logins, saves)":
+        "Auch Sandboxen löschen (Steam-Logins, Spielstände)",
+    "Also remove shared pieces (mDNS service, NVIDIA CDI spec)":
+        "Auch geteilte Bestandteile entfernen (mDNS-Dienst, NVIDIA-CDI-Spec)",
+    "Uninstall …": "Deinstallieren …",
+    "Nothing to remove.": "Nichts zu entfernen.",
+    "Remove podstage?": "podstage entfernen?",
+    "This removes:": "Das entfernt:",
+    "(shared — kept)": "(geteilt — bleibt)",
+    "pkexec is missing — finish with the CLI: "
+    "podstage uninstall":
+        "pkexec fehlt — mit der CLI abschließen: podstage uninstall",
+    "Removed ({done}) — still present: {names}":
+        "Entfernt ({done}) — noch vorhanden: {names}",
+    "podstage removed — no residues found. ({done})":
+        "podstage entfernt — keine Rückstände gefunden. ({done})",
 }

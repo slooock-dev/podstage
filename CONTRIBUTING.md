@@ -25,7 +25,7 @@ podman build -t podstage-runtime:latest containers/runtime/
 |-------|---------|----------------|
 | GUI | `podstage.ui` | PyQt6 management window (setup, sandboxes, session, logs) |
 | CLI | `podstage.cli` | scriptable surface; `doctor`, `setup`, `runtime`, `session`, … |
-| Core | `podstage.core` | `runtime`, `udev`, `provisioner`, `monitor`, `sandbox`, `doctor`, `elevate`, `sunshine_api`, `steam`, `session` |
+| Core | `podstage.core` | `runtime`, `udev`, `provisioner`, `monitor`, `sandbox`, `doctor`, `elevate`, `sunshine_api`, `steam`, `session`, `teardown` |
 | Image | `containers/runtime` | the self-contained streaming sandbox (cage → gamescope → Steam + Sunshine) |
 
 **`core/runtime.py` is the single source of truth** for the `podman run`
@@ -39,6 +39,17 @@ they cannot drift. Change container flags there.
 - **Shared game files, separate prefixes.** The provisioner symlinks
   `steamapps/common/<dir>` from the main library and copies the app manifest,
   but keeps `compatdata/<appid>` per-session.
+- **Host libraries are overlay lowerdirs.** Shared libraries mount as podman
+  overlay volumes: read-only lower = host library, per-sandbox upper/work
+  under `$XDG_DATA_HOME/podstage/overlays/` (`config.overlay_dirs`; not in
+  the HOME volume — writing an active overlay's upper through a second mount
+  is undefined). The provisioner purges an app's upper once the host manifest
+  overtakes the sandbox's — stale uppers shadow the newer library.
+- **No dedicated runtime user (considered, rejected).** Gaming distros grant
+  the desktop user `uinput` anyway (steam-devices uaccess rules), revoking
+  ACLs doesn't revoke open fds, and the attacker defended against already
+  owns the desktop UID. Not worth a root service, ACL upkeep, and a second
+  image store on a 1–2 user gaming PC.
 - **Rootless container.** `--userns=keep-id`, no sudo at runtime. Input
   hotplug (uevents don't reach user namespaces) is solved in userspace: the
   seat-shim fakes cage's udev monitor via inotify, SDL uses its inotify

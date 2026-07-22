@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "podstage"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Headless game-streaming sandbox manager: isolated Steam sessions on a virtual gamescope display, streamed via Sunshine/Moonlight, without disturbing the desktop."
 readme = "README.md"
 license = { text = "MIT" }
@@ -46,6 +46,9 @@ podstage-ui = "podstage.ui.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "podstage.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -198,6 +198,8 @@ def shared_library_paths(home_dir: Path, provision: bool = True,
                 f"[podstage] provisioned: {len(res.games)} games, "
                 f"{res.steam_tools} steam tools, {len(res.custom_tools)} custom compat tools"
                 + (", compat default set" if res.compat_default_set else "")
+                + (f", {res.stale_uppers_purged} stale overlay upper(s) purged"
+                   if res.stale_uppers_purged else "")
             )
         except RuntimeError as exc:
             print(f"[podstage] provisioning skipped: {exc}")
@@ -293,7 +295,7 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     vendor = gpu_vendor()
     args = ["run", "--rm", "--name", CONTAINER_NAME]
     args += ["-it"] if opts.attach else ["-d"]
-    args += container_flags(library_paths, vendor=vendor)
+    args += container_flags(library_paths, opts.home_dir, vendor=vendor)
     args += ["-v", f"{opts.home_dir}:/home/player"]
     for key, val in container_env(opts, library_paths, vendor=vendor).items():
         args += ["-e", f"{key}={val}"]
@@ -301,7 +303,15 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     return args
 
 
-def container_flags(library_paths: list[Path], vendor: str | None = None) -> list[str]:
+def ensure_overlay_dirs(home_dir: Path, library_paths: list[Path]) -> None:
+    for p in library_paths:
+        upper, work = config.overlay_dirs(home_dir, p)
+        upper.mkdir(parents=True, exist_ok=True)
+        work.mkdir(parents=True, exist_ok=True)
+
+
+def container_flags(library_paths: list[Path], home_dir: Path,
+                    vendor: str | None = None) -> list[str]:
     """Devices, isolation and mounts of the rootless runtime container.
     Excludes: container name/detach, the client HOME volume, env, image."""
     vendor = vendor or gpu_vendor()
@@ -344,16 +354,15 @@ def container_flags(library_paths: list[Path], vendor: str | None = None) -> lis
     ]
     if vendor != "amd":
         args += nvidia_lib32_mounts()
-    # Shared host libraries are mounted rw BY NECESSITY, not preference: the
-    # sandbox Steam schedules updates for shared apps (including Steamworks
-    # Common Redistributables, which most games depend on) and refuses to
-    # LAUNCH while an update is pending — with :ro every pending update ends
-    # in "Disk write failure" and blocks the stream. :ro was tried as the
-    # default and reverted for exactly that. PS_SHARED_LIBS_RO=enabled opts
-    # back in for hosts whose libraries are kept up to date on the desktop.
-    lib_suffix = ":ro" if os.environ.get("PS_SHARED_LIBS_RO") == "enabled" else ""
+    # Shared host libraries are overlay mounts (:O): read-only lowerdir =
+    # host library, per-sandbox upperdir (config.overlay_dirs) for writes.
+    # Resolves the old rw-vs-ro dilemma: :ro killed every pending update
+    # with "Disk write failure" (Steam won't launch an app with one
+    # pending), rw let the sandbox write into host game files. The
+    # provisioner purges an app's upper once the host manifest catches up.
     for p in library_paths:
-        args += ["-v", f"{p}:{p}{lib_suffix}"]
+        upper, work = config.overlay_dirs(home_dir, p)
+        args += ["-v", f"{p}:{p}:O,upperdir={upper},workdir={work}"]
     return args
 
 
@@ -456,6 +465,7 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     # discovered libraries to the pure args builder.
     library_paths = shared_library_paths(opts.home_dir, provision=opts.provision,
                                          app_ids=opts.app_ids)
+    ensure_overlay_dirs(opts.home_dir, library_paths)
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)
     publisher_pid = None
     if opts.mode == "pipeline":
