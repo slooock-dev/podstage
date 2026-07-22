@@ -168,8 +168,10 @@ how input hotplug works inside the container is documented in
 
 Everything runs as your user; after the one-time setup, nothing needs root. The
 container is a compatibility sandbox, not a security boundary: it shares your
-network and mounts your Steam libraries read-write, so a hostile game has the
-same reach it would if you launched it on the desktop.
+network and the real `/dev/uinput`. Your Steam libraries are read-only overlay
+lowerdirs — a hostile game cannot modify host game files, its writes stay in
+per-sandbox storage — but otherwise treat games with the same trust you would
+on the desktop.
 
 Sunshine is reachable on your LAN; its web-UI login is random per install and
 streaming needs the Moonlight pairing PIN. The image is built locally
