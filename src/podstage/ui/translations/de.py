@@ -337,6 +337,13 @@ TEXTS: dict[str, str] = {
 
     # -- login guards ------------------------------------------------------
     "Open sandbox Steam": "Sandbox-Steam öffnen",
+    "Close sandbox Steam?": "Sandbox-Steam schließen?",
+    "The sandbox Steam is open on the desktop. Close it and "
+    "start the stream?":
+        "Das Sandbox-Steam ist auf dem Desktop geöffnet. Schließen und den "
+        "Stream starten?",
+    "Could not close the sandbox Steam; close it manually.":
+        "Sandbox-Steam konnte nicht geschlossen werden; bitte manuell schließen.",
     "'{name}' has no Steam login yet. Log in via "
     "the 'Sandboxes' page first.":
         "»{name}« hat noch keinen Steam-Login. Zuerst über die Seite "

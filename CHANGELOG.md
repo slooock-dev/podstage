@@ -4,6 +4,13 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- If the sandbox Steam is open when a stream is started, the GUI offers to
+  close it and start, instead of just refusing.
+
 ## [0.1.2] - 2026-07-22
 
 ### Changed

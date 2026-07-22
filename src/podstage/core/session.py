@@ -42,13 +42,29 @@ class Session:
                              capture_output=True, text=True).stdout
         return any(str(self.home) not in ln for ln in out.splitlines() if ln.strip())
 
-    def _sandbox_steam_running(self) -> bool:
+    def sandbox_steam_running(self) -> bool:
         """True if the sandbox Steam (the visible login/settings instance)
         is open on the desktop. Steam is single-instance per HOME, so the
         container cannot start while it runs."""
         out = subprocess.run(["pgrep", "-af", "steamwebhelper"],
                              capture_output=True, text=True).stdout
         return any(str(self.home) in ln for ln in out.splitlines() if ln.strip())
+
+    def close_sandbox_steam(self, timeout: int = 30) -> bool:
+        """Gracefully shut down the sandbox Steam on the desktop. Returns
+        True once it is gone (shutdown can take a while after games ran)."""
+        if not self.sandbox_steam_running():
+            return True
+        if shutil.which("steam") is None:
+            return False
+        subprocess.run(["steam", "-shutdown"],
+                       env=dict(os.environ, HOME=str(self.home)),
+                       capture_output=True)
+        for _ in range(timeout):
+            if not self.sandbox_steam_running():
+                return True
+            time.sleep(1)
+        return False
 
     def close_host_steam(self, timeout: int = 20) -> None:
         """Gracefully shut down the desktop Steam, unless the user disabled it
@@ -172,7 +188,7 @@ class Session:
                 f"'podstage session setup {self.cfg.name}' (or the GUI's Steam "
                 f"login) and log in first"
             )
-        if self._sandbox_steam_running():
+        if self.sandbox_steam_running():
             raise RuntimeError(
                 "the sandbox Steam is still open on the desktop; close it "
                 "before starting the stream"

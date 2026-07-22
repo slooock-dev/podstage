@@ -40,9 +40,20 @@ def test_start_refuses_while_sandbox_steam_open(monkeypatch):
     s = Session(SessionConfig(name="deck"))
     monkeypatch.setattr(s, "is_bootstrapped", lambda: True)
     monkeypatch.setattr(sandbox, "steam_logged_in", lambda home: True)
-    monkeypatch.setattr(s, "_sandbox_steam_running", lambda: True)
+    monkeypatch.setattr(s, "sandbox_steam_running", lambda: True)
     with pytest.raises(RuntimeError, match="still open"):
         s.start()
+
+
+def test_close_sandbox_steam_without_binary(monkeypatch):
+    import shutil
+
+    s = Session(SessionConfig(name="deck"))
+    monkeypatch.setattr(s, "sandbox_steam_running", lambda: False)
+    assert s.close_sandbox_steam() is True  # nothing to close
+    monkeypatch.setattr(s, "sandbox_steam_running", lambda: True)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    assert s.close_sandbox_steam() is False  # cannot shut it down
 
 
 def test_setup_refuses_while_session_running(monkeypatch):

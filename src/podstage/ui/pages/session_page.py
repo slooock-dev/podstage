@@ -14,7 +14,8 @@ from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QGuiApplication, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox,
+    QVBoxLayout, QWidget,
 )
 
 from ... import config
@@ -534,19 +535,36 @@ class SessionPage(QWidget):
             self._last_error = tr("'{name}' has no Steam login yet. Log in via "
                                   "the 'Sandboxes' page first.", name=sc.name)
             return
+        close_sandbox_steam = False
+        if session.sandbox_steam_running():
+            answer = QMessageBox.question(
+                self, tr("Close sandbox Steam?"),
+                tr("The sandbox Steam is open on the desktop. Close it and "
+                   "start the stream?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Yes)
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            close_sandbox_steam = True
         resolution = None
         if sc.is_dynamic():
             resolution = self._ask_resolution(sc.name)
             if resolution is None:
                 return
+
+        def _launch() -> runtime.RuntimeStatus:
+            if close_sandbox_steam and not session.close_sandbox_steam():
+                raise RuntimeError(tr(
+                    "Could not close the sandbox Steam; close it manually."))
+            return session.start(resolution=resolution)
+
         self._last_error = ""
         self._pending = "start"
         self._start_btn.setEnabled(False)
         self._stop_btn.setEnabled(False)
         self._set_state("busy", tr("starting …"))
         self._detail.setText(tr("Starting container (provisioning + podman) …"))
-        start_action(self._pool, lambda: session.start(resolution=resolution),
-                     f"Start {sc.name}", self._on_action_done)
+        start_action(self._pool, _launch, f"Start {sc.name}", self._on_action_done)
 
     def _on_stop(self) -> None:
         sc = self._profile()
