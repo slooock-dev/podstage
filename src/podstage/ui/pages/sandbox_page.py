@@ -301,6 +301,7 @@ class SandboxPage(QWidget):
         self._table.setAlternatingRowColors(True)
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.setMinimumHeight(160)
+        self._table.itemSelectionChanged.connect(self._update_login_btn)
         lay.addWidget(self._table)
 
         buttons = QHBoxLayout()
@@ -351,7 +352,7 @@ class SandboxPage(QWidget):
         for row, sc in enumerate(sessions):
             info = sandbox.inspect(sc)
             resolution = tr("Pick at startup") if sc.is_dynamic() else sc.resolution
-            login = tr("✓ logged in") if info.bootstrapped else (
+            login = tr("✓ logged in") if info.logged_in else (
                 tr("— empty") if not info.exists else tr("✗ no login"))
             paired = ", ".join(info.paired) if info.paired else "—"
             values = [sc.name, resolution, str(sc.sunshine_port_base), login,
@@ -368,7 +369,16 @@ class SandboxPage(QWidget):
             self._table.setColumnWidth(col, self._table.columnWidth(col) + 20)
         if 0 <= selected < len(sessions):
             self._table.selectRow(selected)
+        self._update_login_btn()
         self._refresh_sizes()
+
+    def _update_login_btn(self) -> None:
+        """'Start Steam login' until the selected sandbox is logged in; after
+        that the same button opens the sandbox Steam for settings/Proton."""
+        sc = self._selected()
+        logged_in = sc is not None and sandbox.steam_logged_in(sc.home_dir())
+        self._login_btn.setText(tr("Open sandbox Steam") if logged_in
+                                else tr("Start Steam login"))
 
     def _refresh_sizes(self) -> None:
         profiles = [(sc.name, sc.home_dir()) for sc in self._ctx.config.sessions

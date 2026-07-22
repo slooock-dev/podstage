@@ -30,6 +30,7 @@ def test_run_args_core_flags():
 def test_run_args_rootless_input_flags():
     joined = " ".join(runtime.podman_run_args(_opts(), library_paths=LIBS))
     assert "--userns=keep-id" in joined            # the whole access model
+    assert "--tz local" in joined                  # container clock follows the host
     assert "--device /dev/uinput" in joined        # REAL uinput → Steam Input works
     assert "-v /dev/input:/dev/input" in joined
     assert "-v /run/udev:/run/udev:ro" in joined   # udev DB for enumeration

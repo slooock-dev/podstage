@@ -20,6 +20,7 @@ from .. import config
 from . import elevate, provisioner
 
 SUNSHINE_STATE = ".config/podstage-sunshine/state.json"
+LOGINUSERS = ".local/share/Steam/config/loginusers.vdf"
 
 
 @dataclass
@@ -28,6 +29,7 @@ class SandboxInfo:
     home: Path
     exists: bool
     bootstrapped: bool
+    logged_in: bool
     paired: list[str]
     size_bytes: int | None = None  # filled separately — du can take seconds
 
@@ -49,6 +51,16 @@ def is_bootstrapped(home: Path) -> bool:
     return provisioner.stream_steamapps(home).exists()
 
 
+def steam_logged_in(home: Path) -> bool:
+    """True once the sandbox Steam has a persisted account login.
+    loginusers.vdf appears with the first successful login; bootstrapping
+    alone (Steam opened and closed without logging in) does not create it."""
+    try:
+        return '"AccountName"' in (home / LOGINUSERS).read_text(errors="replace")
+    except OSError:
+        return False
+
+
 def inspect(cfg: config.SessionConfig) -> SandboxInfo:
     home = cfg.home_dir()
     return SandboxInfo(
@@ -56,6 +68,7 @@ def inspect(cfg: config.SessionConfig) -> SandboxInfo:
         home=home,
         exists=home.is_dir(),
         bootstrapped=is_bootstrapped(home),
+        logged_in=steam_logged_in(home),
         paired=paired_clients(home),
     )
 

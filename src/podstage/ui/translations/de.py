@@ -334,4 +334,11 @@ TEXTS: dict[str, str] = {
         "Entfernt ({done}) — noch vorhanden: {names}",
     "podstage removed — no residues found. ({done})":
         "podstage entfernt — keine Rückstände gefunden. ({done})",
+
+    # -- login guards ------------------------------------------------------
+    "Open sandbox Steam": "Sandbox-Steam öffnen",
+    "'{name}' has no Steam login yet. Log in via "
+    "the 'Sandboxes' page first.":
+        "»{name}« hat noch keinen Steam-Login. Zuerst über die Seite "
+        "»Sandboxen« anmelden.",
 }

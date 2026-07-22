@@ -255,6 +255,15 @@ that:
 
 Patches widening distro and GPU support are very welcome.
 
+## Tips
+
+- **Disable shader pre-caching on strong hardware.** In the sandbox Steam
+  (Settings → Downloads → Shader Pre-Caching): each sandbox keeps its own
+  shader cache, so turning it off saves gigabytes per sandbox and skips the
+  "Processing Vulkan shaders" wait. DXVK/VKD3D then compiles on the fly,
+  which a strong CPU/GPU handles well; a few titles may stutter briefly on
+  first run.
+
 ## Troubleshooting
 
 - **Big Picture is a black or flashing screen.** Steam's CEF needs ~450 MB of

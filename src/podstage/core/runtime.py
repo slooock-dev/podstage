@@ -343,6 +343,9 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     args += [
         "--userns=keep-id",
         "--network", "host",
+        # Follow the host timezone; without this the container runs on UTC
+        # and in-game/Steam clocks are off for non-UTC hosts.
+        "--tz", "local",
         "--shm-size=1g",
         "--device", "/dev/uinput",
         "-v", "/dev/input:/dev/input",

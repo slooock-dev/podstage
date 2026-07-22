@@ -23,7 +23,7 @@ import subprocess
 import time
 
 from .. import config
-from . import provisioner, runtime
+from . import provisioner, runtime, sandbox
 
 
 class Session:
@@ -41,6 +41,14 @@ class Session:
         out = subprocess.run(["pgrep", "-af", "steamwebhelper"],
                              capture_output=True, text=True).stdout
         return any(str(self.home) not in ln for ln in out.splitlines() if ln.strip())
+
+    def _sandbox_steam_running(self) -> bool:
+        """True if the sandbox Steam (the visible login/settings instance)
+        is open on the desktop. Steam is single-instance per HOME, so the
+        container cannot start while it runs."""
+        out = subprocess.run(["pgrep", "-af", "steamwebhelper"],
+                             capture_output=True, text=True).stdout
+        return any(str(self.home) in ln for ln in out.splitlines() if ln.strip())
 
     def close_host_steam(self, timeout: int = 20) -> None:
         """Gracefully shut down the desktop Steam, unless the user disabled it
@@ -110,7 +118,12 @@ class Session:
 
         Uses desktop mode (not Big Picture) so the first-time login and setting
         each game's Proton compatibility tool are easy with keyboard + mouse.
+        Also the way to edit sandbox Steam settings later.
         """
+        if runtime.is_running():
+            raise RuntimeError(
+                "a streaming session is running; stop it before opening the "
+                "sandbox Steam (Steam is single-instance per HOME)")
         self.home.mkdir(parents=True, exist_ok=True)
         self.close_host_steam()
         env = dict(os.environ, HOME=str(self.home))
@@ -152,6 +165,17 @@ class Session:
         if not self.is_bootstrapped():
             raise RuntimeError(
                 f"Session '{self.cfg.name}' not set up — run 'podstage session setup {self.cfg.name}' first"
+            )
+        if not sandbox.steam_logged_in(self.home):
+            raise RuntimeError(
+                f"Session '{self.cfg.name}' has no Steam login yet: run "
+                f"'podstage session setup {self.cfg.name}' (or the GUI's Steam "
+                f"login) and log in first"
+            )
+        if self._sandbox_steam_running():
+            raise RuntimeError(
+                "the sandbox Steam is still open on the desktop; close it "
+                "before starting the stream"
             )
         opts = self._options(resolution, app=app, attach=attach, mode=mode)
         self.close_host_steam()

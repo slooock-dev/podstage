@@ -26,6 +26,17 @@ def test_paired_clients_missing_state(tmp_path: Path):
     assert sandbox.paired_clients(tmp_path) == []
 
 
+def test_steam_logged_in(tmp_path: Path):
+    # No file (fresh or merely bootstrapped sandbox) → not logged in.
+    assert sandbox.steam_logged_in(tmp_path) is False
+    vdf = tmp_path / sandbox.LOGINUSERS
+    vdf.parent.mkdir(parents=True)
+    vdf.write_text('"users"\n{\n}\n')  # Steam wrote it, but no account
+    assert sandbox.steam_logged_in(tmp_path) is False
+    vdf.write_text('"users"\n{\n\t"123"\n\t{\n\t\t"AccountName"\t\t"alice"\n\t}\n}\n')
+    assert sandbox.steam_logged_in(tmp_path) is True
+
+
 def test_delete_guard_refuses_outside_root(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(config, "SESSIONS_HOME_ROOT", tmp_path / "homes")
     with pytest.raises(ValueError):

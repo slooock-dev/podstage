@@ -530,6 +530,10 @@ class SessionPage(QWidget):
             self._last_error = tr("'{name}' is not set up. Start the Steam "
                                   "login on the 'Sandboxes' page.", name=sc.name)
             return
+        if not sandbox.steam_logged_in(session.home):
+            self._last_error = tr("'{name}' has no Steam login yet. Log in via "
+                                  "the 'Sandboxes' page first.", name=sc.name)
+            return
         resolution = None
         if sc.is_dynamic():
             resolution = self._ask_resolution(sc.name)

@@ -6,8 +6,19 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The Sandboxes login button reads "Open sandbox Steam" once a sandbox is
+  logged in; it doubles as the way to edit sandbox Steam settings on the
+  desktop.
+- Starting a session requires an actual Steam login in the sandbox (UI, CLI
+  and core all check), and refuses while the sandbox Steam is still open on
+  the desktop. Opening the sandbox Steam refuses while a session streams.
+
 ### Fixed
 
+- The container follows the host timezone (`--tz local`); it previously ran
+  on UTC.
 - The session preview scales with the window instead of being cropped when
   the window is too small.
 
