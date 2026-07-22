@@ -22,7 +22,7 @@ from ...core import monitor, runtime, sandbox, sunshine_api
 from ...core.session import Session
 from .. import theme
 from ..i18n import tr
-from ..widgets import InfoRow, Meter, card
+from ..widgets import AspectPixmapLabel, InfoRow, Meter, card
 from ..workers import start_action
 
 _NCPU = os.cpu_count() or 1
@@ -215,9 +215,8 @@ class SessionPage(QWidget):
         header.addStretch(1)
         lay.addLayout(header)
 
-        self._thumb = QLabel(tr("Preview appears here while streaming."))
-        self._thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._thumb.setMinimumHeight(60)
+        self._thumb = AspectPixmapLabel()
+        self._thumb.setText(tr("Preview appears here while streaming."))
         self._thumb.setProperty("muted", True)
         self._thumb_pix: QPixmap | None = None
         self._thumb_mtime = 0.0  # skip reloading an unchanged preview each poll
@@ -479,7 +478,7 @@ class SessionPage(QWidget):
         if pix.load(str(path)):
             self._thumb_pix = pix
             self._thumb_mtime = mtime
-            self._render_thumb()
+            self._thumb.set_source(pix)
         else:
             self._show_thumb_placeholder(tr("waiting for preview …"))
 
@@ -487,25 +486,8 @@ class SessionPage(QWidget):
         if self._thumb_pix is None and self._thumb.text() == text:
             return  # already showing this placeholder — avoid a per-poll relayout
         self._thumb_pix = None
-        self._thumb.setMinimumHeight(60)
-        self._thumb.setMaximumHeight(16777215)  # undo a pinned image height
+        self._thumb.set_source(None)
         self._thumb.setText(text)
-
-    def _render_thumb(self) -> None:
-        """Scale the preview to the card width, keeping aspect ratio, and pin
-        the label's height to the scaled image so AlignCenter never clips the
-        top/bottom of the frame."""
-        if self._thumb_pix is None:
-            return
-        avail = self._thumb.width() if self._thumb.width() > 1 else 440
-        scaled = self._thumb_pix.scaledToWidth(
-            min(avail, 480), Qt.TransformationMode.SmoothTransformation)
-        self._thumb.setPixmap(scaled)
-        self._thumb.setFixedHeight(scaled.height())
-
-    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt override)
-        super().resizeEvent(event)
-        self._render_thumb()
 
     def _set_state(self, state: str, text: str) -> None:
         self._state.setText(text)

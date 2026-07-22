@@ -4,7 +4,14 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] — 2026-07-22
+## [Unreleased]
+
+### Fixed
+
+- The session preview scales with the window instead of being cropped when
+  the window is too small.
+
+## [0.1.1] - 2026-07-22
 
 The host Steam libraries can no longer be modified by a streaming session,
 and podstage can now remove itself without residues.
@@ -12,8 +19,8 @@ and podstage can now remove itself without residues.
 ### Added
 
 - **`podstage uninstall`** (CLI) and Setup → *Remove podstage* (GUI):
-  detection-based teardown of everything setup created — udev rules,
-  firewall ports, runtime image, sandboxes, data, configuration — verified
+  detection-based teardown of everything setup created (udev rules,
+  firewall ports, runtime image, sandboxes, data, configuration), verified
   by a re-scan. Shared artifacts (mDNS firewall service, NVIDIA CDI spec)
   are kept unless explicitly included.
 
@@ -34,12 +41,12 @@ and podstage can now remove itself without residues.
 
 ### Removed
 
-- `PS_SHARED_LIBS_RO` — obsolete; the host library is always read-only now.
+- `PS_SHARED_LIBS_RO`: obsolete; the host library is always read-only now.
 - The `Wolf*` udev matches: the bundled Sunshine names its devices
   `Sunshine …` / `… passthrough`; the patterns were a Games-on-Whales
   leftover. Re-running the Setup rules install refreshes them (optional).
 
-## [0.1.0] — 2026-07-21
+## [0.1.0] - 2026-07-21
 
 First public release. End-to-end verified: a game streams to a Steam Deck
 while the host desktop runs undisturbed, with audio, controller input
@@ -70,7 +77,7 @@ Steam Deck.
   Logs: one-click (pkexec) setup fixes, sandbox CRUD with a visible Steam-login
   bootstrap, live CPU/GPU/VRAM/encoder telemetry, a stream preview, PIN
   pairing, and encoder quality settings (persisted per profile, applyable
-  live). The Session page adapts to the host GPU — NVENC controls and
+  live). The Session page adapts to the host GPU: NVENC controls and
   `nvidia-smi` telemetry on NVIDIA, VAAPI controls and amdgpu-sysfs telemetry
   on AMD.
 - **Bilingual UI.** English (default) and German, following the system locale

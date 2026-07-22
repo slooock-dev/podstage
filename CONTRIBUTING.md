@@ -42,9 +42,9 @@ they cannot drift. Change container flags there.
 - **Host libraries are overlay lowerdirs.** Shared libraries mount as podman
   overlay volumes: read-only lower = host library, per-sandbox upper/work
   under `$XDG_DATA_HOME/podstage/overlays/` (`config.overlay_dirs`; not in
-  the HOME volume — writing an active overlay's upper through a second mount
+  the HOME volume; writing an active overlay's upper through a second mount
   is undefined). The provisioner purges an app's upper once the host manifest
-  overtakes the sandbox's — stale uppers shadow the newer library.
+  overtakes the sandbox's, because stale uppers shadow the newer library.
 - **No dedicated runtime user (considered, rejected).** Gaming distros grant
   the desktop user `uinput` anyway (steam-devices uaccess rules), revoking
   ACLs doesn't revoke open fds, and the attacker defended against already

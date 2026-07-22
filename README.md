@@ -62,7 +62,7 @@ host GUI.
   non-Steam launchers aren't wired up.
 - **Shared games, separate prefixes.** Game files are symlinked from your main
   Steam libraries, so nothing is downloaded twice. The libraries are mounted
-  as read-only overlay lowerdirs — a session can never modify host game
+  as read-only overlay lowerdirs: a session can never modify host game
   files; its writes land in per-sandbox overlay storage. Prefixes and saves
   stay per sandbox.
 - **Input isolation.** The client's virtual input devices live on a dedicated
@@ -110,7 +110,7 @@ git clone https://github.com/slooock-dev/podstage && cd podstage
 python3 -m venv .venv && . .venv/bin/activate   # Fedora/Bazzite are PEP 668
 pip install -e '.[ui]'          # core + CLI + management GUI
 
-# 1. Build the runtime image (~2.5 GB, self-contained) — run from the repo root
+# 1. Build the runtime image (~2.5 GB, self-contained), run from the repo root
 podman build -t podstage-runtime:latest containers/runtime/
 
 # 2. Launch the management GUI
@@ -169,8 +169,8 @@ how input hotplug works inside the container is documented in
 Everything runs as your user; after the one-time setup, nothing needs root. The
 container is a compatibility sandbox, not a security boundary: it shares your
 network and the real `/dev/uinput`. Your Steam libraries are read-only overlay
-lowerdirs — a hostile game cannot modify host game files, its writes stay in
-per-sandbox storage — but otherwise treat games with the same trust you would
+lowerdirs, so a hostile game cannot modify host game files and its writes stay
+in per-sandbox storage. Otherwise treat games with the same trust you would
 on the desktop.
 
 Sunshine is reachable on your LAN; its web-UI login is random per install and
@@ -290,7 +290,7 @@ Live container logs: `journalctl -f CONTAINER_NAME=podstage-runtime`.
 `podstage uninstall` (or Setup → *Remove podstage*) detects and removes
 everything setup created: udev rules, firewall ports, the runtime image,
 sandboxes, data and configuration. Shared pieces (the mDNS firewall service,
-the NVIDIA CDI spec) are kept unless `--all` — other software uses them too.
+the NVIDIA CDI spec) are kept unless `--all`, since other software uses them too.
 
 ## Development
 
@@ -306,4 +306,4 @@ engineering decisions, quality assurance, and end-to-end validation are human.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).

@@ -2,10 +2,52 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QRect, QSize, Qt
+from PyQt6.QtGui import QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QProgressBar, QVBoxLayout, QWidget,
 )
+
+
+class AspectPixmapLabel(QLabel):
+    """Label that aspect-fits its pixmap into whatever size the layout
+    grants: a small window scales the image down instead of cropping it.
+    Without a pixmap it behaves like a plain placeholder-text label."""
+
+    MAX_W = 480  # never upscale the preview past its card-width cap
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._source: QPixmap | None = None
+        self.setMinimumHeight(60)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+    def set_source(self, pix: QPixmap | None) -> None:
+        self._source = pix
+        if pix is not None:
+            self.setText("")
+        self.updateGeometry()
+        self.update()
+
+    def sizeHint(self) -> QSize:  # noqa: N802 (Qt override)
+        if self._source is None or self._source.isNull():
+            return super().sizeHint()
+        w = min(self.MAX_W, self._source.width())
+        return QSize(w, round(w * self._source.height() / self._source.width()))
+
+    def paintEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        if self._source is None or self._source.isNull():
+            super().paintEvent(event)
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        area = self.contentsRect()
+        size = self._source.size()
+        size.scale(min(area.width(), self.MAX_W), area.height(),
+                   Qt.AspectRatioMode.KeepAspectRatio)
+        x = area.x() + (area.width() - size.width()) // 2
+        y = area.y() + (area.height() - size.height()) // 2
+        painter.drawPixmap(QRect(x, y, size.width(), size.height()), self._source)
 
 
 class ElideLabel(QLabel):
