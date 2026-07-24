@@ -99,7 +99,8 @@ host GUI.
 > Bazzite-DX 43 (Fedora 43, KDE Plasma, Wayland), Ryzen 7 7800X3D, NVIDIA RTX
 > 4080 SUPER (driver 610.43), streaming to a Steam Deck LCD. The AMD/VAAPI path
 > has additionally been validated end-to-end on a Bazzite-DX laptop with a
-> Rembrandt iGPU (Ryzen 7035 class), also streaming to a Steam Deck. It should
+> Rembrandt iGPU (Ryzen 7035 class), also streaming to a Steam Deck. The Intel
+> path is confirmed working by a community report (Arc B580 on Bazzite). It should
 > work on other Fedora/Bazzite/Arch-based hosts; treat other distros and
 > non-KDE compositors as untested (see [Portability](#portability)). Bug
 > reports from other setups are very welcome.
