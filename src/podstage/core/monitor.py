@@ -82,9 +82,13 @@ def gpu_stats() -> GpuStats | None:
     NVIDIA reads ``nvidia-smi`` (including the NVENC session count). AMD reads
     the amdgpu sysfs (``gpu_busy_percent`` + ``mem_info_vram_*``); the kernel
     exposes no per-encoder session count there, so ``encoder_sessions`` stays
-    None on AMD."""
-    if runtime.gpu_vendor() == "amd":
+    None on AMD. Intel (i915/xe) has no comparable sysfs interface
+    (``intel_gpu_top`` needs perf privileges), so no stats there."""
+    vendor = runtime.gpu_vendor()
+    if vendor == "amd":
         return _amd_gpu_stats()
+    if vendor == "intel":
+        return None
     return _nvidia_gpu_stats()
 
 

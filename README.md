@@ -88,7 +88,8 @@ host GUI.
 - A GPU with hardware video encode: NVIDIA (NVENC, via CDI injection) or AMD
   (VAAPI, via `/dev/dri`). The GUI adapts its encoder controls and telemetry to
   the detected vendor. NVIDIA has the most testing; the AMD path is validated on
-  one iGPU.
+  one iGPU. Intel (VAAPI via `/dev/dri`, Broadwell+) is wired the same way but
+  **experimental and untested on real hardware** — reports welcome.
 - Steam installed on the host; its libraries are shared into the sandboxes.
 - Python ≥ 3.11 for the CLI/core, PyQt6 ≥ 6.6 for the GUI (`./ui.sh` tries to find a suitable interpreter).
 - A Moonlight client with a gamepad (Steam Deck, laptop, phone with
@@ -141,7 +142,7 @@ homes/deck` runs a container directly. See [CLI](#cli).
 
 ```mermaid
 flowchart LR
-    subgraph host["Host · Linux · Wayland · NVIDIA / AMD GPU"]
+    subgraph host["Host · Linux · Wayland · NVIDIA / AMD / Intel GPU"]
         gui["Management GUI (PyQt6)<br/>setup · sandboxes · session · telemetry · logs"]
         libs[("Shared Steam libraries")]
         subgraph container["podstage-runtime container · rootless podman"]
@@ -200,7 +201,7 @@ Qt's plugin path at PyQt6's bundled `Qt6/plugins`, falling back to Homebrew's
 ## Image quality
 
 The encoder controls on the Session page (NVENC preset, two-pass and VBV on
-NVIDIA; the VAAPI quality profile and rate control on AMD) only decide how well
+NVIDIA; the VAAPI quality profile and rate control otherwise) only decide how well
 the encoder spends the bitrate it is given. The bigger wins are on the client
 and the network:
 
@@ -210,7 +211,8 @@ and the network:
   little bitrate.
 - **Prefer HEVC or AV1** over H.264 (Moonlight → Settings → Video codec). At
   the same bitrate HEVC looks noticeably better, AV1 better still. NVIDIA
-  encodes all three; AMD covers H.264 and HEVC, with AV1 on newer GPUs.
+  encodes all three; AMD and Intel cover H.264 and HEVC, with AV1 on newer
+  GPUs.
 - **Match the resolution 1:1.** Set Moonlight to the client's native
   resolution and use a matching podstage profile (e.g. `1280x800` for a Steam
   Deck LCD), so nothing is scaled.
@@ -252,6 +254,12 @@ that:
   (`gpu_busy_percent`, `mem_info_vram_*`) since there is no `nvidia-smi`. This
   path is validated on one AMD Rembrandt iGPU (streamed to a Steam Deck); it has
   had less testing than the NVIDIA path.
+- Intel takes the same `/dev/dri` + VAAPI wiring, with ANV Vulkan and the iHD
+  media driver (Broadwell+) baked into the image. It is **experimental**: no
+  one has run it on real hardware yet, and the GUI shows no GPU load/VRAM
+  telemetry (the i915/xe kernel drivers expose no simple sysfs counters).
+  `PS_GPU_VENDOR=intel` forces the path on hybrid machines. If you try it,
+  please report the outcome either way.
 
 Patches widening distro and GPU support are very welcome.
 

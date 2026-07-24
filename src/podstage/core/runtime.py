@@ -134,19 +134,27 @@ class RuntimeStatus:
 
 
 # PCI vendor IDs in /sys/class/drm/card*/device/vendor
-_PCI_VENDORS = {"0x10de": "nvidia", "0x1002": "amd"}
+_PCI_VENDORS = {"0x10de": "nvidia", "0x1002": "amd", "0x8086": "intel"}
+
+# Vendors that take the Mesa path: plain /dev/dri + VAAPI, userspace baked
+# into the image (RADV/ANV Vulkan, Mesa/iHD VAAPI) — no host-version coupling
+# and no CDI, unlike NVIDIA.
+MESA_VENDORS = ("amd", "intel")
 
 
 def gpu_vendor() -> str:
-    """"nvidia" | "amd" | "unknown" — decides the GPU flag/encoder branch.
+    """"nvidia" | "amd" | "intel" | "unknown" — decides the GPU flag/encoder
+    branch.
 
-    PS_GPU_VENDOR overrides detection (hybrid setups, experiments). With both
-    vendors present, NVIDIA wins — that is the tuned path on this project's
-    reference host. The AMD path (/dev/dri + VAAPI) is validated on a Rembrandt
-    iGPU (Steam Deck client), though it sees far less mileage than NVIDIA.
+    PS_GPU_VENDOR overrides detection (hybrid setups, experiments). With
+    several vendors present, NVIDIA wins over AMD over Intel — NVIDIA is the
+    tuned path on this project's reference host. The AMD path (/dev/dri +
+    VAAPI) is validated on a Rembrandt iGPU (Steam Deck client), though it
+    sees far less mileage than NVIDIA. The Intel path is the same wiring with
+    ANV/iHD userspace, experimental and so far untested on real hardware.
     """
     override = os.environ.get("PS_GPU_VENDOR", "").lower()
-    if override in ("nvidia", "amd"):
+    if override in ("nvidia",) + MESA_VENDORS:
         return override
     found: set[str] = set()
     for vendor_file in glob.glob("/sys/class/drm/card*/device/vendor"):
@@ -154,10 +162,9 @@ def gpu_vendor() -> str:
             found.add(_PCI_VENDORS.get(Path(vendor_file).read_text().strip().lower(), ""))
         except OSError:
             continue
-    if "nvidia" in found:
-        return "nvidia"
-    if "amd" in found:
-        return "amd"
+    for vendor in ("nvidia", "amd", "intel"):
+        if vendor in found:
+            return vendor
     return "unknown"
 
 
@@ -252,8 +259,8 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
         "PS_CSRF_ORIGINS": csrf_origins(opts.web_port),
         "PS_APP": opts.app,
         # Sunshine encoder for the entrypoint's sunshine.conf: NVENC on
-        # NVIDIA, VAAPI on AMD (Mesa/RADV userspace is baked into the image).
-        "PS_ENCODER": "vaapi" if vendor == "amd" else "nvenc",
+        # NVIDIA, VAAPI on AMD/Intel (Mesa userspace is baked into the image).
+        "PS_ENCODER": "vaapi" if vendor in MESA_VENDORS else "nvenc",
         "STEAM_COMPAT_MOUNTS": ":".join(str(p) for p in library_paths),
         # Rootless input: no udev uevents reach the container's user
         # namespace. The seat-shim fakes cage's udev hotplug monitor via
@@ -315,10 +322,10 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     """Devices, isolation and mounts of the rootless runtime container.
     Excludes: container name/detach, the client HOME volume, env, image."""
     vendor = vendor or gpu_vendor()
-    if vendor == "amd":
-        # AMD: plain DRI nodes; Mesa/RADV + VAAPI userspace is baked into the
-        # image (no host-version coupling like NVIDIA). Untested on real
-        # AMD hardware so far — wired for the OSS use case.
+    if vendor in MESA_VENDORS:
+        # AMD/Intel: plain DRI nodes; Mesa Vulkan (RADV/ANV) + VAAPI userspace
+        # is baked into the image (no host-version coupling like NVIDIA). AMD
+        # is validated on a Rembrandt iGPU; Intel is experimental/untested.
         args = [
             "--device", "/dev/dri",
             "--security-opt", "label=disable",
@@ -355,7 +362,7 @@ def container_flags(library_paths: list[Path], home_dir: Path,
         "--tmpfs", "/run:rw,mode=1777",
         "-v", "/run/udev:/run/udev:ro",
     ]
-    if vendor != "amd":
+    if vendor not in MESA_VENDORS:
         args += nvidia_lib32_mounts()
     # Shared host libraries are overlay mounts (:O): read-only lowerdir =
     # host library, per-sandbox upperdir (config.overlay_dirs) for writes.

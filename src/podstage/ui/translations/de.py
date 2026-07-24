@@ -114,7 +114,7 @@ TEXTS: dict[str, str] = {
     "quarter resolution (default)": "Viertel-Auflösung (Standard)",
     "full resolution": "volle Auflösung",
 
-    # -- VAAPI quality (AMD) --------------------------------------------
+    # -- VAAPI quality (AMD/Intel) --------------------------------------
     "VAAPI quality": "VAAPI-Qualität",
     "Rate control": "Ratensteuerung",
     "Strict RC buffer": "Strikter RC-Puffer",
@@ -127,9 +127,9 @@ TEXTS: dict[str, str] = {
     "intelligent constant quality": "intelligente konstante Qualität",
     "quality-defined VBR": "qualitätsdefiniertes VBR",
     "average VBR": "durchschnittliches VBR",
-    "VAAPI quality profile: the AMD encoder's speed/quality tradeoff.":
+    "VAAPI quality profile: the encoder's speed/quality tradeoff.":
         "VAAPI-Qualitätsprofil: Abwägung zwischen Geschwindigkeit und Qualität "
-        "des AMD-Encoders.",
+        "des Encoders.",
     "VAAPI rate-control mode. 'auto' lets the driver choose; not every "
     "mode is supported on every GPU.":
         "VAAPI-Ratensteuerung. »auto« überlässt die Wahl dem Treiber; nicht "
