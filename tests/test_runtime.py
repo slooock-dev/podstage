@@ -101,13 +101,18 @@ def test_gpu_vendor_env_override(monkeypatch):
     assert runtime.gpu_vendor() == "amd"
     monkeypatch.setenv("PS_GPU_VENDOR", "nvidia")
     assert runtime.gpu_vendor() == "nvidia"
+    monkeypatch.setenv("PS_GPU_VENDOR", "intel")
+    assert runtime.gpu_vendor() == "intel"
 
 
-def test_amd_flags_use_dri_without_nvidia_bits():
-    flags = " ".join(runtime.container_flags(LIBS, Path("/tmp/home-x"), vendor="amd"))
-    assert "--device /dev/dri" in flags
-    assert "nvidia" not in flags
-    assert "/usr/lib32" not in flags
+def test_mesa_flags_use_dri_without_nvidia_bits():
+    # AMD and Intel (experimental) share the Mesa path: /dev/dri, no CDI,
+    # no host NVIDIA lib mounts.
+    for vendor in runtime.MESA_VENDORS:
+        flags = " ".join(runtime.container_flags(LIBS, Path("/tmp/home-x"), vendor=vendor))
+        assert "--device /dev/dri" in flags
+        assert "nvidia" not in flags
+        assert "/usr/lib32" not in flags
 
 
 def test_nvidia_flags_keep_cdi_and_modeset():
@@ -118,6 +123,7 @@ def test_nvidia_flags_keep_cdi_and_modeset():
 
 def test_encoder_env_follows_vendor():
     assert runtime.container_env(_opts(), LIBS, vendor="amd")["PS_ENCODER"] == "vaapi"
+    assert runtime.container_env(_opts(), LIBS, vendor="intel")["PS_ENCODER"] == "vaapi"
     assert runtime.container_env(_opts(), LIBS, vendor="nvidia")["PS_ENCODER"] == "nvenc"
 
 

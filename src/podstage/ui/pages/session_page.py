@@ -134,7 +134,7 @@ class SessionPage(QWidget):
         self._last_error = ""
         # GPU vendor decides which encoder-tuning panel and telemetry rows the
         # page shows (NVENC vs VAAPI). Resolved once; PS_GPU_VENDOR overrides.
-        self._nvidia = runtime.gpu_vendor() != "amd"
+        self._nvidia = runtime.gpu_vendor() not in runtime.MESA_VENDORS
         self._build()
         ctx.config_changed.connect(self._reload_profiles)
         self._reload_profiles()
@@ -232,8 +232,9 @@ class SessionPage(QWidget):
         self._vram = Meter("VRAM")
         rows = [self._cpu, self._ram, self._gpu, self._vram]
         # The NVENC session count is an NVIDIA-only signal (nvidia-smi); the
-        # amdgpu kernel interface exposes no per-encoder counter, so drop the
-        # row on AMD rather than show a permanently empty one.
+        # amdgpu kernel interface exposes no per-encoder counter (and Intel
+        # none at all), so drop the row rather than show a permanently empty
+        # one.
         self._nvenc = InfoRow("NVENC") if self._nvidia else None
         if self._nvenc is not None:
             rows.append(self._nvenc)
@@ -245,8 +246,8 @@ class SessionPage(QWidget):
         frame, lay = card(tr("Stream quality"))
         row = QHBoxLayout()
         row.setSpacing(8)
-        # NVENC (NVIDIA) and VAAPI (AMD) expose different encoder knobs; the
-        # runtime already picks the matching Sunshine encoder by GPU vendor.
+        # NVENC (NVIDIA) and VAAPI (AMD/Intel) expose different encoder knobs;
+        # the runtime already picks the matching Sunshine encoder by GPU vendor.
         if self._nvidia:
             self._build_nvenc_row(row)
         else:
@@ -306,7 +307,7 @@ class SessionPage(QWidget):
         for value in ("auto", "speed", "balanced", "quality"):
             self._vaapi_quality.addItem(_VAAPI_QUALITY_LABELS[value](), value)
         self._vaapi_quality.setToolTip(tr(
-            "VAAPI quality profile: the AMD encoder's speed/quality tradeoff."))
+            "VAAPI quality profile: the encoder's speed/quality tradeoff."))
         self._vaapi_rc = QComboBox()
         for value in ("auto", "vbr", "cbr", "cqp", "icq", "qvbr", "avbr"):
             self._vaapi_rc.addItem(_VAAPI_RC_LABELS[value](), value)

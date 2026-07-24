@@ -6,6 +6,15 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Experimental Intel GPU support**: Intel is detected (PCI `0x8086`) and
+  takes the same `/dev/dri` + VAAPI path as AMD; the image bakes in ANV
+  Vulkan ICDs and the iHD media driver (`intel-media-driver`, Broadwell+).
+  `PS_GPU_VENDOR=intel` forces the path on hybrid machines. Untested on real
+  hardware so far; no GPU load/VRAM telemetry (i915/xe expose no sysfs
+  counters). Requires an image rebuild.
+
 ### Changed
 
 - If the sandbox Steam is open when a stream is started, the GUI offers to
