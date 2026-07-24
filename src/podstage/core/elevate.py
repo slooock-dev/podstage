@@ -33,7 +33,7 @@ def run_root(shell: str, timeout: int = 600) -> tuple[int, str]:
     try:
         p = subprocess.run(
             ["pkexec", "/bin/sh", "-c", shell],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True, text=True, timeout=timeout, check=False,
         )
         out = (p.stdout + p.stderr).strip()
         if p.returncode == PKEXEC_DISMISSED:

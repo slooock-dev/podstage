@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 from podstage import config
 from podstage.core import runtime
 
@@ -10,7 +9,7 @@ LIBS = [Path("/tmp/lib-a/steamapps"), Path("/tmp/lib-b/steamapps")]
 
 
 def _opts(**kw):
-    defaults = dict(home_dir=Path("/tmp/home-x"), client="deck")
+    defaults = {"home_dir": Path("/tmp/home-x"), "client": "deck"}
     defaults.update(kw)
     return runtime.RuntimeOptions(**defaults)
 

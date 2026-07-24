@@ -39,7 +39,7 @@ class Session:
     def _host_steam_running(self) -> bool:
         """True if a Steam is running under a HOME other than this session's."""
         out = subprocess.run(["pgrep", "-af", "steamwebhelper"],
-                             capture_output=True, text=True).stdout
+                             capture_output=True, text=True, check=False).stdout
         return any(str(self.home) not in ln for ln in out.splitlines() if ln.strip())
 
     def sandbox_steam_running(self) -> bool:
@@ -47,7 +47,7 @@ class Session:
         is open on the desktop. Steam is single-instance per HOME, so the
         container cannot start while it runs."""
         out = subprocess.run(["pgrep", "-af", "steamwebhelper"],
-                             capture_output=True, text=True).stdout
+                             capture_output=True, text=True, check=False).stdout
         return any(str(self.home) in ln for ln in out.splitlines() if ln.strip())
 
     def close_sandbox_steam(self, timeout: int = 30) -> bool:
@@ -59,7 +59,7 @@ class Session:
             return False
         subprocess.run(["steam", "-shutdown"],
                        env=dict(os.environ, HOME=str(self.home)),
-                       capture_output=True)
+                       capture_output=True, check=False)
         for _ in range(timeout):
             if not self.sandbox_steam_running():
                 return True
@@ -75,7 +75,7 @@ class Session:
         if shutil.which("steam") is None or not self._host_steam_running():
             return
         print("Closing desktop Steam (games can only run from one Steam instance at a time)…")
-        subprocess.run(["steam", "-shutdown"], capture_output=True)
+        subprocess.run(["steam", "-shutdown"], capture_output=True, check=False)
         for _ in range(timeout):
             if not self._host_steam_running():
                 return
@@ -158,7 +158,7 @@ class Session:
             print("Just log in and close Steam — games get provisioned automatically.")
 
         print(f"Launching isolated Steam under HOME={self.home} …")
-        rc = subprocess.run(["steam"], env=env).returncode
+        rc = subprocess.run(["steam"], env=env, check=False).returncode
 
         # After first-run login the library dir now exists → provision for next time.
         if self.is_bootstrapped():

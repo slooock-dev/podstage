@@ -388,7 +388,7 @@ def start_publisher(name: str = "podstage", port: int = DEFAULT_SUNSHINE_PORT) -
     """
     if shutil.which("avahi-publish-service") is None:
         return None
-    proc = subprocess.Popen(  # noqa: S603
+    proc = subprocess.Popen(
         ["avahi-publish-service", name, "_nvstream._tcp", str(port)],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         start_new_session=True,
@@ -409,7 +409,8 @@ def _kill_pid(pid: int | None) -> None:
 
 def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str]:
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                           check=False)
         return p.returncode, (p.stdout + p.stderr).strip()
     except (OSError, subprocess.SubprocessError) as e:
         return 127, str(e)
@@ -483,7 +484,7 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     save_state(opts, publisher_pid)
     try:
         if opts.attach:
-            rc = subprocess.call(argv)  # noqa: S603  (blocks until exit)
+            rc = subprocess.call(argv)
             clear_state()
             if rc != 0:
                 raise RuntimeError(f"container exited with status {rc}")

@@ -48,7 +48,7 @@ def _request(path: str, web_port: int, payload: dict | None = None,
         data=json.dumps(payload).encode() if payload is not None else None,
         method="POST" if payload is not None else "GET",
     )
-    ctx = ssl._create_unverified_context()  # noqa: S323 — self-signed local cert
+    ctx = ssl._create_unverified_context()
     try:
         with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
             body = resp.read().decode()

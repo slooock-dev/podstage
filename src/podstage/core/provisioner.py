@@ -26,7 +26,7 @@ from pathlib import Path
 from .. import config
 from . import steam
 
-_KEY_RE = lambda key: re.compile(rf'"{key}"\s+"([^"]+)"')  # noqa: E731
+_KEY_RE = lambda key: re.compile(rf'"{key}"\s+"([^"]+)"')
 
 
 @dataclass

@@ -8,7 +8,12 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QProcess
 from PyQt6.QtWidgets import (
-    QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ...core import runtime
