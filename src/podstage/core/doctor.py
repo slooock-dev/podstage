@@ -46,7 +46,8 @@ class CheckResult:
 
 def _run(cmd: list[str], timeout: int = 10) -> tuple[int, str]:
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                           check=False)
         return p.returncode, (p.stdout + p.stderr).strip()
     except (OSError, subprocess.SubprocessError) as e:
         return 127, str(e)

@@ -5,7 +5,12 @@ from __future__ import annotations
 from PyQt6.QtCore import QRect, QSize, Qt
 from PyQt6.QtGui import QPainter, QPixmap
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QProgressBar, QVBoxLayout, QWidget,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -29,13 +34,13 @@ class AspectPixmapLabel(QLabel):
         self.updateGeometry()
         self.update()
 
-    def sizeHint(self) -> QSize:  # noqa: N802 (Qt override)
+    def sizeHint(self) -> QSize:
         if self._source is None or self._source.isNull():
             return super().sizeHint()
         w = min(self.MAX_W, self._source.width())
         return QSize(w, round(w * self._source.height() / self._source.width()))
 
-    def paintEvent(self, event) -> None:  # noqa: N802 (Qt override)
+    def paintEvent(self, event) -> None:
         if self._source is None or self._source.isNull():
             super().paintEvent(event)
             return
@@ -65,7 +70,7 @@ class ElideLabel(QLabel):
         self.setToolTip(text)
         self._refresh()
 
-    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt override)
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._refresh()
 

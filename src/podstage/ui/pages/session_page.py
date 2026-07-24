@@ -13,9 +13,20 @@ import time
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QGuiApplication, QPixmap
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox,
-    QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ... import config
@@ -337,7 +348,7 @@ class SessionPage(QWidget):
         self._client.addItems([s.name for s in self._ctx.config.sessions])
         if current:
             idx = self._client.findText(current)
-            self._client.setCurrentIndex(idx if idx >= 0 else 0)
+            self._client.setCurrentIndex(max(idx, 0))
         self._client.blockSignals(False)
         self._on_profile_selected()
 

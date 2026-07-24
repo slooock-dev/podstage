@@ -78,7 +78,7 @@ def size_bytes(home: Path) -> int | None:
     a populated sandbox, call off the UI thread."""
     try:
         p = subprocess.run(["du", "-sb", str(home)], capture_output=True,
-                           text=True, timeout=120)
+                           text=True, timeout=120, check=False)
         return int(p.stdout.split()[0]) if p.returncode == 0 else None
     except (OSError, subprocess.SubprocessError, ValueError, IndexError):
         return None

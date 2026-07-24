@@ -31,7 +31,8 @@ _APPID_RE = re.compile(r"SteamLaunch AppId=(\d+)")
 
 def _run(cmd: list[str], timeout: int = 5) -> tuple[int, str]:
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                           check=False)
         return p.returncode, (p.stdout + p.stderr).strip()
     except (OSError, subprocess.SubprocessError):
         return 127, ""

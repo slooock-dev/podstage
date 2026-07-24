@@ -22,8 +22,16 @@ try:
     from PyQt6.QtCore import QObject, pyqtSignal
     from PyQt6.QtGui import QIcon
     from PyQt6.QtWidgets import (
-        QApplication, QFrame, QHBoxLayout, QLabel, QListWidget, QMainWindow,
-        QMessageBox, QStackedWidget, QVBoxLayout, QWidget,
+        QApplication,
+        QFrame,
+        QHBoxLayout,
+        QLabel,
+        QListWidget,
+        QMainWindow,
+        QMessageBox,
+        QStackedWidget,
+        QVBoxLayout,
+        QWidget,
     )
 except ImportError:
     print("PyQt6 is not installed. Run via ./ui.sh (brew's python3), or: "
@@ -143,7 +151,7 @@ class MainWindow(QMainWindow):
         theme.repolish(self._global_state)
 
     # -- lifecycle -------------------------------------------------------
-    def closeEvent(self, event) -> None:  # noqa: N802 (Qt override)
+    def closeEvent(self, event) -> None:
         # A running session is stopped on a worker so the window stays
         # responsive during ``podman stop``; the window closes once it finishes.
         if self._quitting:

@@ -16,8 +16,17 @@ import subprocess
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ... import config
@@ -34,7 +43,8 @@ _GLYPH = {doctor.Status.OK: ("●", "ok"),
 def _build_image() -> str:
     p = subprocess.run(
         ["podman", "build", "-t", runtime.DEFAULT_IMAGE, "containers/runtime/"],
-        cwd=doctor.REPO_ROOT, capture_output=True, text=True, timeout=3600)
+        cwd=doctor.REPO_ROOT, capture_output=True, text=True, timeout=3600,
+        check=False)
     if p.returncode != 0:
         tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-8:])
         raise RuntimeError(tr("podman build failed:\n{tail}", tail=tail))
@@ -84,7 +94,7 @@ def _run_fix(fix: str) -> str:
         rc, out = elevate.run_root(shell)
     else:
         p = subprocess.run(["/bin/sh", "-c", shell], capture_output=True,
-                           text=True, timeout=600)
+                           text=True, timeout=600, check=False)
         rc, out = p.returncode, (p.stdout + p.stderr).strip()
     if rc != 0:
         raise RuntimeError(out or tr("Exit code {rc}", rc=rc))
@@ -187,7 +197,7 @@ class SetupPage(QWidget):
                             ("English", "en"), ("Deutsch", "de")):
             self._lang.addItem(label, code)
         idx = self._lang.findData(self._ctx.config.language)
-        self._lang.setCurrentIndex(idx if idx >= 0 else 0)
+        self._lang.setCurrentIndex(max(idx, 0))
         self._lang.currentIndexChanged.connect(self._on_language_changed)
         lhint = QLabel(tr("Applies after restarting the GUI."))
         lhint.setProperty("muted", True)
