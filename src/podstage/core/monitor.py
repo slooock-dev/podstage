@@ -16,8 +16,6 @@ complexity without real value. The NVENC session count in the GPU stats is
 the honest "something is encoding" signal.
 """
 
-from __future__ import annotations
-
 import re
 import subprocess
 import time

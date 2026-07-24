@@ -8,8 +8,6 @@ The model is intentionally small in v0.1 — it grows with the session manager
 (milestone 4). ``doctor`` (milestone 1) does not require any of it to exist.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import os
@@ -209,7 +207,7 @@ class AppConfig:
     close_desktop_steam: bool = True
 
     @classmethod
-    def load(cls, path: Path = CONFIG_FILE) -> AppConfig:
+    def load(cls, path: Path = CONFIG_FILE) -> "AppConfig":
         if not path.exists():
             return cls()
         data = tomllib.loads(path.read_text())
@@ -224,7 +222,7 @@ class AppConfig:
                    close_desktop_steam=data.get("close_desktop_steam", True))
 
     @classmethod
-    def load_or_seed(cls, path: Path = CONFIG_FILE) -> AppConfig:
+    def load_or_seed(cls, path: Path = CONFIG_FILE) -> "AppConfig":
         """Load the config, seeding the two bring-up profiles on first use:
         'deck' (fixed Deck resolution) and 'laptop' (resolution chosen at start)."""
         cfg = cls.load(path)

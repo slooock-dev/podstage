@@ -6,8 +6,6 @@ workers in a list (``start_action``) so Qt does not garbage-collect a running
 thread.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 from PyQt6.QtCore import QThread, pyqtSignal

@@ -6,7 +6,6 @@ Login, Pause, Backend …) the English fallback already yields correct German.
 Referenced page/button names use »…« guillemets, matching the code style.
 """
 
-from __future__ import annotations
 
 TEXTS: dict[str, str] = {
     # -- app shell / global state ----------------------------------------

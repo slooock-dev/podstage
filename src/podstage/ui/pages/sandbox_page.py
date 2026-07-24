@@ -5,8 +5,6 @@ isolated Steam visibly for first-time login, and show per-sandbox state:
 logged in, paired Moonlight clients, disk usage.
 """
 
-from __future__ import annotations
-
 import re
 
 from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt

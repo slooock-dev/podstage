@@ -14,8 +14,6 @@ go through pkexec — the GUI never needs a terminal.
 Run under the Qt-capable Python (brew's, with PyQt6) via ``ui.sh``.
 """
 
-from __future__ import annotations
-
 import sys
 
 try:

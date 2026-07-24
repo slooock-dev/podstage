@@ -4,8 +4,6 @@ Used by ``doctor`` (validation) and later by the provisioner (to symlink shared
 game files into an isolated streaming library).
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from pathlib import Path

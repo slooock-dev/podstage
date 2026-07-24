@@ -27,8 +27,6 @@ Steam Input works because Steam creates and feeds its virtual X360 pad on the
 REAL /dev/uinput — there is no proxy layer in between.
 """
 
-from __future__ import annotations
-
 import glob
 import json
 import os

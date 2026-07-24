@@ -11,8 +11,6 @@ files pointing at ``ui.sh``:
 Toggled from the GUI's setup page.
 """
 
-from __future__ import annotations
-
 import shutil
 import subprocess
 from pathlib import Path

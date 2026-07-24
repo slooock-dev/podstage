@@ -5,8 +5,6 @@ stopping…, plus an error state with the failure message. Start/stop run on
 worker threads; telemetry snapshots arrive from the app-owned PollWorker.
 """
 
-from __future__ import annotations
-
 import os
 import time
 

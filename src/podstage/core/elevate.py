@@ -10,8 +10,6 @@ Nothing here elevates silently: every call pops the dialog (or fails), and the
 exact shell that will run as root is always available for display beforehand.
 """
 
-from __future__ import annotations
-
 import shutil
 import subprocess
 

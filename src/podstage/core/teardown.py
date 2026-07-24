@@ -7,8 +7,6 @@ Shared artifacts (the mDNS firewall service, the NVIDIA CDI spec) are other
 software's infrastructure too — listed, but only removed on request.
 """
 
-from __future__ import annotations
-
 import shutil
 import subprocess
 from dataclasses import dataclass

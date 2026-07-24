@@ -5,8 +5,6 @@ depth, one accent, monospace for data. Spacing on a 4px grid, radius system
 6/8px, four-level contrast hierarchy.
 """
 
-from __future__ import annotations
-
 from PyQt6.QtWidgets import QWidget
 
 # -- palette ----------------------------------------------------------------

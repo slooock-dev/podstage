@@ -15,8 +15,6 @@ Proton / Steam Linux Runtime compat tools are shared the same way so the
 streaming instance need not re-download them.
 """
 
-from __future__ import annotations
-
 import os
 import re
 import shutil

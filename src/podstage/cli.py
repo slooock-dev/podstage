@@ -5,8 +5,6 @@ Milestone 1 ships ``doctor`` (environment validation). ``session`` and
 a clear "not yet implemented" notice so the surface is discoverable.
 """
 
-from __future__ import annotations
-
 import argparse
 import os
 import sys

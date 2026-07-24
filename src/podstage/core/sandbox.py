@@ -7,8 +7,6 @@ foreign-owned files (e.g. files a container process wrote as its own root,
 which land on the host under a mapped sub-UID).
 """
 
-from __future__ import annotations
-
 import json
 import shlex
 import shutil

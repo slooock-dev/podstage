@@ -17,8 +17,6 @@ only root interaction podstage ever needs — day-to-day start/stop is a plain
 rootless ``podman run``.
 """
 
-from __future__ import annotations
-
 import getpass
 import shlex
 from pathlib import Path

@@ -10,8 +10,6 @@ lives in the persistent state dir). Persistent quality settings additionally
 go through the profile's ``sunshine_extra`` → ``PS_SUNSHINE_EXTRA``.
 """
 
-from __future__ import annotations
-
 import base64
 import json
 import os

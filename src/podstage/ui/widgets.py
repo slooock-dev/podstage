@@ -1,7 +1,5 @@
 """Small shared building blocks: cards, meters, key-value rows."""
 
-from __future__ import annotations
-
 from PyQt6.QtCore import QRect, QSize, Qt
 from PyQt6.QtGui import QPainter, QPixmap
 from PyQt6.QtWidgets import (

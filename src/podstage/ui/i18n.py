@@ -22,8 +22,6 @@ choice once at startup and applies a new one on the next launch. That keeps
 :func:`tr` a trivial dict lookup and avoids re-translating a live widget tree.
 """
 
-from __future__ import annotations
-
 import os
 
 from .translations import TABLES

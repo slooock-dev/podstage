@@ -4,8 +4,6 @@ Rootless podman logs to journald; ``journalctl CONTAINER_NAME=podstage-runtime``
 tails it as the user. The follow process runs detached via QProcess.
 """
 
-from __future__ import annotations
-
 from PyQt6.QtCore import QProcess
 from PyQt6.QtWidgets import (
     QHBoxLayout,

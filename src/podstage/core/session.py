@@ -15,8 +15,6 @@ Only ONE session can run at a time: games can only run from one Steam
 instance at a time — runtime.start() enforces it.
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 import subprocess

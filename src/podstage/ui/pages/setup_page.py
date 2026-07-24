@@ -10,8 +10,6 @@ Doctor check names and details are shown verbatim: they are English technical
 diagnostics shared with the CLI and are intentionally not translated.
 """
 
-from __future__ import annotations
-
 import subprocess
 
 from PyQt6.QtCore import Qt

@@ -7,8 +7,6 @@ setup`` aggregates those into a guided one-shot script. Host-side gamescope/
 cage/Sunshine are NOT checked anymore: they live inside the runtime image.
 """
 
-from __future__ import annotations
-
 import getpass
 import glob
 import os
