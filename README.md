@@ -88,8 +88,8 @@ host GUI.
 - A GPU with hardware video encode: NVIDIA (NVENC, via CDI injection) or AMD
   (VAAPI, via `/dev/dri`). The GUI adapts its encoder controls and telemetry to
   the detected vendor. NVIDIA has the most testing; the AMD path is validated on
-  one iGPU. Intel (VAAPI via `/dev/dri`, Broadwell+) is wired the same way but
-  **experimental and untested on real hardware** — reports welcome.
+  one iGPU. Intel (VAAPI via `/dev/dri`, Broadwell+) is wired the same way and
+  confirmed working by a community report (Arc B580).
 - Steam installed on the host; its libraries are shared into the sandboxes.
 - Python ≥ 3.11 for the CLI/core, PyQt6 ≥ 6.6 for the GUI (`./ui.sh` tries to find a suitable interpreter).
 - A Moonlight client with a gamepad (Steam Deck, laptop, phone with
@@ -255,11 +255,10 @@ that:
   path is validated on one AMD Rembrandt iGPU (streamed to a Steam Deck); it has
   had less testing than the NVIDIA path.
 - Intel takes the same `/dev/dri` + VAAPI wiring, with ANV Vulkan and the iHD
-  media driver (Broadwell+) baked into the image. It is **experimental**: no
-  one has run it on real hardware yet, and the GUI shows no GPU load/VRAM
+  media driver (Broadwell+) baked into the image. A community report confirms
+  it working out of the box on an Arc B580. The GUI shows no GPU load/VRAM
   telemetry (the i915/xe kernel drivers expose no simple sysfs counters).
-  `PS_GPU_VENDOR=intel` forces the path on hybrid machines. If you try it,
-  please report the outcome either way.
+  `PS_GPU_VENDOR=intel` forces the path on hybrid machines.
 
 Patches widening distro and GPU support are very welcome.
 

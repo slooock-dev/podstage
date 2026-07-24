@@ -238,15 +238,15 @@ def check_gpu() -> CheckResult:
     if vendor == "amd":
         if glob.glob("/dev/dri/renderD*"):
             return CheckResult("gpu/encoder", Status.OK,
-                               "AMD GPU — VAAPI encoder (validated on a Rembrandt iGPU)")
+                               "AMD GPU: VAAPI encoder (validated on a Rembrandt iGPU)")
         return CheckResult("gpu/encoder", Status.FAIL,
                            "AMD GPU detected but no /dev/dri render node")
     if vendor == "intel":
         if glob.glob("/dev/dri/renderD*"):
             return CheckResult(
-                "gpu/encoder", Status.WARN,
-                "Intel GPU — VAAPI encoder via iHD (EXPERIMENTAL, untested on "
-                "real hardware; needs Broadwell+ for intel-media-driver)")
+                "gpu/encoder", Status.OK,
+                "Intel GPU: VAAPI encoder via iHD (confirmed on an Arc B580; "
+                "needs Broadwell+ for intel-media-driver)")
         return CheckResult("gpu/encoder", Status.FAIL,
                            "Intel GPU detected but no /dev/dri render node")
     if not shutil.which("nvidia-smi"):

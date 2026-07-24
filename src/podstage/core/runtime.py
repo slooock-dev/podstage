@@ -149,7 +149,7 @@ def gpu_vendor() -> str:
     tuned path on this project's reference host. The AMD path (/dev/dri +
     VAAPI) is validated on a Rembrandt iGPU (Steam Deck client), though it
     sees far less mileage than NVIDIA. The Intel path is the same wiring with
-    ANV/iHD userspace, experimental and so far untested on real hardware.
+    ANV/iHD userspace, confirmed on an Arc B580.
     """
     override = os.environ.get("PS_GPU_VENDOR", "").lower()
     if override in ("nvidia",) + MESA_VENDORS:
@@ -323,7 +323,7 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     if vendor in MESA_VENDORS:
         # AMD/Intel: plain DRI nodes; Mesa Vulkan (RADV/ANV) + VAAPI userspace
         # is baked into the image (no host-version coupling like NVIDIA). AMD
-        # is validated on a Rembrandt iGPU; Intel is experimental/untested.
+        # is validated on a Rembrandt iGPU; Intel on an Arc B580.
         args = [
             "--device", "/dev/dri",
             "--security-opt", "label=disable",
