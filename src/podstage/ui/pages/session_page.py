@@ -631,11 +631,13 @@ class SessionPage(QWidget):
         pin = dlg.pin.text().strip()
         name = dlg.name.text().strip() or sc.name
         web_port = sc.sunshine_port_base + 1
+        home = sc.home_dir()
         self._pair_btn.setEnabled(False)
 
         def _pair() -> str:
-            if not sunshine_api.pair(pin, name, web_port):
-                raise RuntimeError(tr("Sunshine rejected the PIN. Reconnect in "
+            if not sunshine_api.pair_verified(pin, name, home, web_port):
+                raise RuntimeError(tr("The PIN was submitted but no pairing "
+                                      "completed. Restart the pairing in "
                                       "Moonlight and enter the new PIN."))
             return tr("Client '{name}' paired. Moonlight can stream now.", name=name)
 

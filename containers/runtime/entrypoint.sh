@@ -8,9 +8,8 @@
 # Env:
 #   PS_RESOLUTION   WxH@R              client resolution           (default 1280x800@60)
 #   PS_MODE         pipeline|desktop|shell|probe|steam  what to run (default pipeline)
-#       desktop (experimental): no gamescope — the target runs directly under
-#       cage with pointer input + cursor enabled (keyboard/mouse streaming)
-#   PS_DESKTOP_CMD  desktop-mode launch target                     (default: steam desktop UI)
+#       desktop (experimental): no gamescope, target runs under cage, pointer on
+#   PS_DESKTOP_CMD  desktop-mode launch target          (default: steam desktop UI)
 #   PS_POINTER_ACCEL  flat → seat-shim forces flat (1:1) libinput accel on
 #       pointers (desktop-mode default; anything else keeps libinput defaults)
 #   PS_SUNSHINE_PORT  base port                                    (default 47989)
@@ -19,10 +18,8 @@
 #        to a random per-sandbox password persisted in the mounted HOME —
 #        there is deliberately no fixed default credential)
 #   PS_CSRF_ORIGINS   comma-sep allowed web-UI origins             (default: auto-detected LAN IPs)
-#   PS_DYNAMIC_RES  enabled (default) → the pipeline launches on the FIRST
-#       client connect and renders at that client's resolution + refresh rate
-#       (locked until the container restarts; other clients get scaled).
-#       disabled → immediate start at the fixed PS_RESOLUTION.
+#   PS_DYNAMIC_RES  enabled (default): pipeline starts on first connect at that
+#       client's WxH@R, locked until restart. disabled: fixed PS_RESOLUTION.
 #   PS_HDR            enabled → gamescope HDR output + DXVK_HDR (experimental)
 #   PS_FAKE_UDEV      1 → seat-shim fakes the udev hotplug monitor for cage
 #       (required rootless: the kernel delivers no uevents into a user
@@ -204,8 +201,8 @@ JSON
     # when mouse is off). Pointer input is cut by decision: motion reaches
     # cage (cursor visibly moves), but gamescope/Steam -gamepadui never react
     # to clicks — and gamescope's Wayland backend has no wl_touch at all, so
-    # native touch dies even earlier. Gamepad input is the supported path;
-    # PS_MOUSE_INPUT=enabled re-enables the pointer for experiments.
+    # native touch dies even earlier. Gamepad is the default path; the
+    # mouse_input feature sets PS_MOUSE_INPUT=enabled.
     # native_pen_touch stays disabled so any re-enabled pointer arrives as
     # mouse events (the only kind gamescope's Wayland backend understands).
     # desktop mode has no gamescope in the chain, so none of that applies —
@@ -234,14 +231,11 @@ CONF
         printf '%s\n' "$PS_SUNSHINE_EXTRA" | tr ';' '\n' \
             >> "$SUN_CONF_DIR/sunshine.conf"
     fi
-    # Experimental dynamic resolution, two parts wired via a Sunshine
-    # prep-cmd (it inherits cage's WAYLAND_DISPLAY):
-    #  * every stream start resizes cage's output (the canvas) to the client's
-    #    WxH; undo restores the profile size when the stream ends.
-    #  * the pipeline (gamescope+Steam) launches lazily on the FIRST connect,
-    #    with -W/-H/-r taken from that client — games then really render at
-    #    the client resolution. gamescope cannot change its render size at
-    #    runtime, so later clients with a different resolution get scaled.
+    # Dynamic resolution via Sunshine prep-cmd (inherits cage's
+    # WAYLAND_DISPLAY): each stream start resizes cage's output to the client;
+    # the first connect additionally wakes the runner (fifo), which launches
+    # gamescope at that client's WxH@R. gamescope can't resize its render
+    # target later — other resolutions get scaled.
     if [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
         MODE_FIFO="$SUN_CONF_DIR/client-mode.fifo"
         mkfifo "$MODE_FIFO"
@@ -305,9 +299,7 @@ EOF
 exec ${STEAM_LAUNCH}
 EOF
     elif [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
-        # Lazy pipeline start: block until the first client connects
-        # (resize.sh writes its mode into the fifo), then render at exactly
-        # that client's resolution and refresh rate.
+        # Block until the first client connects, then render at its WxH@R.
         cat >> "$RUNNER" <<EOF
 echo "[podstage] waiting for the first client (dynamic resolution)" >&2
 read -r CW CH CR < "$SUN_CONF_DIR/client-mode.fifo"
@@ -353,12 +345,9 @@ SHIM=/usr/local/lib/podstage-seat-shim.so
 # desktop mode streams a pointer-driven UI — show the cursor (the shim blanks
 # it by default so Sunshine's dead virtual pointer isn't burned into the
 # gamepad-only capture). PS_SHOW_CURSOR=0 forces it off again.
-# Pointer injected → two shim defaults flip (both overridable):
-#  * flat 1:1 accel — client mouse counts arrive raw, libinput's adaptive
-#    accel on top feels far too fast;
-#  * visible cursor — nested clients (gamescope) delegate cursor drawing to
-#    cage via set_cursor; blanked, the pointer would be invisible. cage still
-#    hides it when the client requests no cursor (games grabbing the mouse).
+# Pointer injected → flat 1:1 accel (client counts arrive raw; adaptive accel
+# on top is far too fast) and visible cursor (nested clients delegate cursor
+# drawing to cage; games hiding the cursor still propagate). Overridable.
 if [ "$PS_MODE" = desktop ] || [ "${PS_MOUSE_INPUT:-}" = enabled ]; then
     export PS_POINTER_ACCEL="${PS_POINTER_ACCEL:-flat}"
     export PS_SHOW_CURSOR="${PS_SHOW_CURSOR:-1}"

@@ -57,7 +57,7 @@ def _ensure_icon() -> None:
 
 def _write(path: Path, *, autostart: bool) -> None:
     if not LAUNCHER.exists():
-        raise RuntimeError(f"Launcher fehlt: {LAUNCHER}")
+        raise RuntimeError(f"launcher missing: {LAUNCHER}")
     _ensure_icon()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(desktop_entry(autostart=autostart))

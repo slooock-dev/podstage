@@ -106,9 +106,7 @@ def sunshine_web_credentials() -> tuple[str, str]:
 # labels live in ui/pages/setup_page.py. Add/remove features HERE.
 EXPERIMENTAL_FEATURES: dict[str, str] = {
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
-    "mouse_input": "PS_MOUSE_INPUT",         # inject the client's mouse (BP is
-                                             # mouse-navigable; keyboard is
-                                             # always injected by Sunshine)
+    "mouse_input": "PS_MOUSE_INPUT",         # inject the client's mouse
 }
 
 
@@ -154,10 +152,9 @@ class SessionConfig:
     resolution:
       * a preset key ("deck", "1080p60", …) or "WxH@R", or
       * "ask" → chosen when you start the session.
-      The streamed session renders at the FIRST connecting client's
-      resolution (locked until the session restarts; other clients get
-      scaled). The profile resolution is the pre-connect canvas and the
-      fallback with PS_DYNAMIC_RES=disabled.
+      The session renders at the FIRST client's resolution (locked until
+      restart); the profile resolution is the pre-connect canvas and the
+      PS_DYNAMIC_RES=disabled fallback.
     app_ids:
       * empty (default) → the *whole* installed library is shared into the sandbox
         (games are picked inside Big Picture), or
@@ -256,9 +253,8 @@ class AppConfig:
 
     @classmethod
     def load_or_seed(cls, path: Path = CONFIG_FILE) -> "AppConfig":
-        """Load the config, seeding one generic bring-up profile on first
-        use. One is enough to get streaming: the session renders at whatever
-        client connects first; more profiles are added in the GUI."""
+        """Load the config, seeding one generic bring-up profile on first use
+        (the session renders at whatever client connects first)."""
         cfg = cls.load(path)
         if not cfg.sessions:
             cfg = cls(sessions=[

@@ -128,9 +128,9 @@ def delete(home: Path) -> None:
     except PermissionError:
         pass  # foreign-owned files (container-written, sub-UID mapped) → elevated fallback
     except OSError as e:
-        raise RuntimeError(f"Löschen fehlgeschlagen: {e}") from e
+        raise RuntimeError(f"deletion failed: {e}") from e
     if not elevate.available():
-        raise RuntimeError("Löschen braucht Root-Rechte, aber pkexec fehlt")
+        raise RuntimeError("deletion needs root, but pkexec is missing")
     rc, out = elevate.run_root(f"rm -rf -- {shlex.quote(str(target))}")
     if rc != 0:
-        raise RuntimeError(f"Löschen (elevated) fehlgeschlagen: {out}")
+        raise RuntimeError(f"elevated deletion failed: {out}")

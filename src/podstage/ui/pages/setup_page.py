@@ -49,9 +49,8 @@ _EXPERIMENTAL_DETAILS = {
         "gamescope advertises an HDR output and games see DXVK_HDR. "
         "Unverified end to end."),
     "mouse_input": lambda: tr(
-        "Streams the client's mouse into the session (Big Picture is "
-        "mouse-navigable). In-game mouse look still stutters: cage lacks "
-        "pointer locking."),
+        "Streams the client's mouse into the session. Big Picture is "
+        "mouse-navigable; games can lock the pointer for mouse look."),
 }
 
 

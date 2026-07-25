@@ -56,10 +56,14 @@ host GUI.
 - **Headless isolated session.** `cage` → `gamescope` (Vulkan) → Steam
   `-gamepadui`, captured by a bundled Sunshine (wlr screencopy, hardware encode
   via NVENC or VAAPI). No window on the host, no DRM output.
-- **Built for Steam, driven by controller.** The streamed session is Big
-  Picture, navigated and played entirely by gamepad; Steam Input works
-  natively. Client keyboard/mouse input is deliberately not injected, and
-  non-Steam launchers aren't wired up.
+- **Built for Steam, gamepad first.** The streamed session is Big Picture;
+  Steam Input works natively. Experimental: keyboard/mouse streaming
+  (`mouse_input`, incl. in-game pointer lock via a patched `cage`) and a
+  desktop mode streaming the Steam desktop UI. Non-Steam launchers aren't
+  wired up.
+- **Resolution follows the client.** The pipeline launches on the first
+  Moonlight connect and renders at that client's resolution and refresh
+  rate (locked until the session restarts; other clients get scaled).
 - **Shared games, separate prefixes.** Game files are symlinked from your main
   Steam libraries, so nothing is downloaded twice. The libraries are mounted
   as read-only overlay lowerdirs: a session can never modify host game
@@ -93,7 +97,8 @@ host GUI.
 - Steam installed on the host; its libraries are shared into the sandboxes.
 - Python ≥ 3.11 for the CLI/core, PyQt6 ≥ 6.6 for the GUI (`./ui.sh` tries to find a suitable interpreter).
 - A Moonlight client with a gamepad (Steam Deck, laptop, phone with
-  controller).
+  controller); keyboard/mouse works via the experimental `mouse_input`
+  toggle.
 
 > **Tested configuration.** Developed and verified end-to-end on Bazzite-DX 43
 > (KDE Plasma, Wayland) with an NVIDIA RTX 4080 SUPER, streaming to a Steam
@@ -179,7 +184,7 @@ streaming needs the Moonlight pairing PIN. The image is built locally
 
 | Page | What it does |
 |------|--------------|
-| **Session** | Start/stop the stream, the active game, CPU/GPU/VRAM/encoder meters, a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
+| **Session** | Start/stop the stream (Big Picture or the experimental desktop mode), the active game, CPU/GPU/VRAM/encoder meters, a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
 | **Sandboxes** | Client profiles, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
 | **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, experimental feature toggles, an on-demand update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
@@ -211,11 +216,9 @@ and the network:
   the same bitrate HEVC looks noticeably better, AV1 better still. NVIDIA
   encodes all three; AMD and Intel cover H.264 and HEVC, with AV1 on newer
   GPUs.
-- **Resolution follows the first client.** The session launches Steam when
-  the first Moonlight client connects and renders at that client's resolution
-  and refresh rate, locked until the session restarts — later clients with a
-  different resolution get scaled. Set Moonlight to the client's native
-  resolution and reconnecting devices stay 1:1.
+- **Resolution follows the first client.** Set Moonlight to the client's
+  native resolution; the session renders at whatever connects first (locked
+  until restart), later clients with a different resolution get scaled.
 - **Prefer a wired host.** High bitrate over Wi-Fi suffers from packet loss.
   Wiring the host, or a clean 5 GHz link, often helps more than any encoder
   setting.
@@ -231,14 +234,20 @@ podstage doctor                    # validate the environment
 podstage setup                     # print guided (sudo) setup commands
 podstage runtime build             # (re)build the runtime image
 podstage runtime start|stop|status # drive the container directly (by HOME dir)
-podstage session list|start|stop|status <name>
+podstage session list
+podstage session add <name> [--resolution R] [--port N] [--apps ID,…]
+podstage session setup|start|stop|status <name>   # start: --mode desktop, --resolution, --app
 podstage session pair <name> <PIN>    # complete a Moonlight pairing
+podstage session remove <name> [--data] | clear-overlay <name>
 podstage experimental [enable|disable <feature>]
 podstage provision <app_id> <session>
 ```
 
 `podstage runtime start --home homes/deck --resolution 1280x800@60` is what
 `containers/runtime/run.sh` wraps.
+
+Everything works headless except the first Steam login (`session setup`
+opens the sandbox Steam visibly on the host desktop).
 
 ## Portability
 

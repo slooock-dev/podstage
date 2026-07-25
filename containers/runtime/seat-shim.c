@@ -10,11 +10,9 @@
  * 2. Blank cursor — no-op the wlroots cursor-image setters so the dead pointer
  *    Sunshine creates isn't burned into the capture (see below).
  *
- * 3. Flat pointer acceleration (PS_POINTER_ACCEL=flat, desktop mode) — the
- *    Moonlight client sends raw mouse counts and libinput's default adaptive
- *    acceleration on Sunshine's virtual mouse amplifies them a second time,
- *    which feels far too fast. Hook the device-attach and force the flat
- *    profile (1:1) on every pointer that offers accel config.
+ * 3. Flat pointer acceleration (PS_POINTER_ACCEL=flat) — client mouse counts
+ *    arrive raw; libinput's adaptive accel on top is far too fast. Hook the
+ *    device-attach, force the flat (1:1) profile on pointers.
  *
  * 4. Fake udev monitor — in a rootless user namespace the kernel does NOT
  *    deliver udev netlink uevents, so libinput's hotplug monitor never sees

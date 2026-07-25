@@ -69,9 +69,10 @@ TEXTS: dict[str, str] = {
     "'{name}' picks its resolution at startup.\nResolution for this session:":
         "'{name}' wählt seine Auflösung beim Start.\nAuflösung für diese "
         "Session:",
-    "Sunshine rejected the PIN. Reconnect in Moonlight and enter the new PIN.":
-        "Sunshine hat die PIN abgelehnt. In Moonlight neu verbinden und die "
-        "neue PIN eintragen.",
+    "The PIN was submitted but no pairing completed. Restart the pairing in "
+    "Moonlight and enter the new PIN.":
+        "Die PIN wurde übermittelt, aber kein Pairing abgeschlossen. Pairing "
+        "in Moonlight neu starten und die neue PIN eintragen.",
     "Client '{name}' paired. Moonlight can stream now.":
         "Client '{name}' gepairt. Moonlight kann jetzt streamen.",
     "Pairing failed: {msg}": "Pairing fehlgeschlagen: {msg}",
@@ -340,12 +341,10 @@ TEXTS: dict[str, str] = {
         "gamescope meldet einen HDR-Output und Spiele sehen DXVK_HDR. "
         "Ende-zu-Ende unverifiziert.",
     "Mouse input": "Maus-Eingabe",
-    "Streams the client's mouse into the session (Big Picture is "
-    "mouse-navigable). In-game mouse look still stutters: cage lacks "
-    "pointer locking.":
-        "Leitet die Maus des Clients in die Session (Big Picture ist "
-        "mausbedienbar). Mouse-Look im Spiel stottert noch: cage fehlt "
-        "Pointer-Locking.",
+    "Streams the client's mouse into the session. Big Picture is "
+    "mouse-navigable; games can lock the pointer for mouse look.":
+        "Leitet die Maus des Clients in die Session. Big Picture ist "
+        "mausbedienbar; Spiele können den Zeiger für Mouse-Look locken.",
     "Experimental features apply from the next session start.":
         "Experimentelle Features gelten ab dem nächsten Session-Start.",
     "Checks the GitHub releases for a newer version — only when you click, "

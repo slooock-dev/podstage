@@ -10,7 +10,7 @@ on Vulkan; there is no virtual DRM display involved.
 
 | Baked into the image (host-independent) | Provided at runtime |
 |---|---|
-| gamescope, cage, wlroots, Vulkan loader (64+32-bit), mesa (RADV/ANV Vulkan, Mesa/iHD VAAPI) | GPU access: NVIDIA userspace via **CDI** (`--device nvidia.com/gpu=all`), matching the host driver; or `/dev/dri` on AMD/Intel |
+| gamescope, cage (built from source with a vendored pointer-constraints patch, see `patches/`), wlroots, Vulkan loader (64+32-bit), mesa (RADV/ANV Vulkan, Mesa/iHD VAAPI) | GPU access: NVIDIA userspace via **CDI** (`--device nvidia.com/gpu=all`), matching the host driver; or `/dev/dri` on AMD/Intel |
 | Steam client, PipeWire stack | **HOME volume** `/home/player`: Steam login, saves, games, downloaded Proton |
 | Sunshine (pinned native Arch package) | |
 
@@ -49,9 +49,8 @@ Examples:
 the GUI's Steam-login bootstrap (or `podstage session setup`).
 
 Dynamic resolution is the default (`PS_DYNAMIC_RES=disabled` opts out): the
-pipeline launches on the first client connect and renders at that client's
-resolution and refresh rate — locked until the container restarts, other
-clients get scaled. Experimental (GUI Setup page, or as env):
+pipeline launches on the first connect at that client's WxH@R, locked until
+restart; other clients get scaled. Experimental (GUI Setup page, or env):
 `PS_MOUSE_INPUT=enabled` injects the client's mouse; `PS_HDR=enabled` adds
 gamescope `--hdr-enabled` plus `DXVK_HDR=1` (unverified end to end).
 

@@ -14,10 +14,13 @@ import base64
 import json
 import os
 import ssl
+import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from .. import config
+from . import sandbox
 
 DEFAULT_WEB_PORT = 47990
 
@@ -51,11 +54,11 @@ def _request(path: str, web_port: int, payload: dict | None = None,
         with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
             body = resp.read().decode()
     except (urllib.error.URLError, OSError, TimeoutError) as e:
-        raise SunshineApiError(f"Sunshine-API nicht erreichbar ({e})") from e
+        raise SunshineApiError(f"Sunshine API unreachable ({e})") from e
     try:
         return json.loads(body) if body.strip() else {}
     except json.JSONDecodeError as e:
-        raise SunshineApiError(f"unerwartete Antwort: {body[:200]}") from e
+        raise SunshineApiError(f"unexpected response: {body[:200]}") from e
 
 
 def get_config(web_port: int = DEFAULT_WEB_PORT) -> dict:
@@ -78,6 +81,24 @@ def pair(pin: str, name: str, web_port: int = DEFAULT_WEB_PORT) -> bool:
     submits it (what the web UI's PIN form does). Sunshine must be running."""
     resp = _request("/api/pin", web_port, payload={"pin": pin, "name": name})
     return str(resp.get("status", "")).lower() == "true"
+
+
+def pair_verified(pin: str, name: str, home: Path,
+                  web_port: int = DEFAULT_WEB_PORT, timeout: float = 10.0) -> bool:
+    """Submit a PIN and wait for a new device in the sandbox pairing state —
+    /api/pin returns true even for a wrong PIN (the handshake fails later on
+    the client). False: never completed. Raises: unreachable / no attempt
+    pending."""
+    before = set(sandbox.paired_clients(home))
+    if not pair(pin, name, web_port):
+        raise SunshineApiError("no pairing attempt pending — start it in "
+                               "Moonlight first")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if set(sandbox.paired_clients(home)) - before:
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def restart(web_port: int = DEFAULT_WEB_PORT) -> None:

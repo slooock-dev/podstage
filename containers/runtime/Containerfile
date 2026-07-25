@@ -86,14 +86,10 @@ RUN pacman -Sy --noconfirm --needed \
     pacman -Scc --noconfirm
 
 # --- patched cage: pointer-constraints support -----------------------------
-# Stock cage (kiosk) implements relative-pointer but NOT pointer-constraints,
-# so games can never lock the mouse: the cursor drifts to the output edge and
-# mouse-look stutters/jumps (Moonlight keyboard/mouse streaming). The vendored
-# patch wires wlroots' zwp_pointer_constraints_v1 into cage: locks activate
-# immediately (single-client kiosk) and freeze the cursor while clients read
-# the relative-pointer stream. Built from the pinned release tarball
-# (sha256-verified like Sunshine); installed to /usr/local/bin, which shadows
-# the Arch package's /usr/bin/cage in PATH (kept for its dependency pull-in).
+# Stock cage lacks zwp_pointer_constraints_v1, so games can't lock the mouse
+# (cursor drifts to the edge, mouse-look stutters). The vendored patch wires
+# wlroots' implementation in; built from the sha256-pinned release tarball
+# into /usr/local/bin (shadows the Arch package binary, kept for its deps).
 ARG CAGE_VERSION=v0.3.1
 ARG CAGE_SHA256=6dc1619665acd367e0174c93b234002549a66f55f1de9197d67f0305415babc8
 COPY patches/cage-pointer-constraints.patch /tmp/

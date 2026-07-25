@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from . import __version__, config
-from .config import AppConfig
+from .config import AppConfig, SessionConfig
 from .core import doctor, provisioner, runtime, sunshine_api
 from .core.session import Session
 
@@ -127,6 +127,87 @@ def cmd_session_list(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_session_add(args: argparse.Namespace) -> int:
+    """Create a client profile headlessly (CLI counterpart of the Sandboxes
+    page dialog)."""
+    cfg = _load_or_seed_config()
+    try:
+        config.validate_client_name(args.name)
+        if args.resolution != "ask":
+            config.parse_dimensions(args.resolution)  # raises on garbage
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 1
+    if cfg.get(args.name) is not None:
+        print(f"session '{args.name}' already exists", file=sys.stderr)
+        return 1
+    used = {s.sunshine_port_base for s in cfg.sessions}
+    port = args.port
+    if port is None:
+        port = 47989
+        while port in used:  # each instance needs its own port block
+            port += 1000
+    elif port in used:
+        print(f"port {port} is already used by another profile", file=sys.stderr)
+        return 1
+    app_ids = [int(a) for a in args.apps.split(",")] if args.apps else []
+    cfg.upsert(SessionConfig(name=args.name, resolution=args.resolution,
+                             sunshine_port_base=port, app_ids=app_ids))
+    cfg.save()
+    print(f"Session '{args.name}' created (resolution={args.resolution}, port={port}).")
+    print(f"Next: podstage session setup {args.name}   (first Steam login)")
+    return 0
+
+
+def cmd_session_remove(args: argparse.Namespace) -> int:
+    from .core import sandbox
+
+    cfg = _load_or_seed_config()
+    sc = cfg.get(args.name)
+    if sc is None:
+        print(f"No session '{args.name}'.", file=sys.stderr)
+        return 1
+    st = runtime.status()
+    if st.running and st.client == args.name:
+        print(f"session '{args.name}' is running — stop it first", file=sys.stderr)
+        return 1
+    if args.data:
+        if not args.yes:
+            answer = input(f"Delete the sandbox HOME of '{args.name}' "
+                           f"(Steam login, saves, overlays)? Type the name to confirm: ")
+            if answer.strip() != args.name:
+                print("aborted")
+                return 1
+        try:
+            sandbox.delete(sc.home_dir())
+        except (RuntimeError, ValueError) as e:
+            print(f"data deletion failed: {e}", file=sys.stderr)
+            return 1
+    cfg.remove(args.name)
+    cfg.save()
+    print(f"Session '{args.name}' removed" + (" (including data)." if args.data else
+                                              " (sandbox HOME kept)."))
+    return 0
+
+
+def cmd_session_clear_overlay(args: argparse.Namespace) -> int:
+    from .core import sandbox
+
+    cfg = _load_or_seed_config()
+    sc = cfg.get(args.name)
+    if sc is None:
+        print(f"No session '{args.name}'.", file=sys.stderr)
+        return 1
+    st = runtime.status()
+    if st.running and st.client == args.name:
+        print(f"session '{args.name}' is running — stop it first", file=sys.stderr)
+        return 1
+    sandbox.clear_overlays(sc.home_dir())
+    print(f"Overlay writes of '{args.name}' cleared; Steam re-applies game "
+          f"updates on the next session.")
+    return 0
+
+
 def cmd_session_setup(args: argparse.Namespace) -> int:
     s = _resolve_session(args.name)
     return s.setup() if s else 1
@@ -152,43 +233,26 @@ def cmd_session_start(args: argparse.Namespace) -> int:
 
 
 def cmd_session_pair(args: argparse.Namespace) -> int:
-    """Complete a Moonlight pairing against the running session's Sunshine.
-
-    /api/pin only reports "PIN accepted into a pending pairing attempt" —
-    a wrong PIN still returns true and the handshake fails afterwards on the
-    client. The real outcome lands in the sandbox's persistent pairing state
-    (state.json named_devices), so watch that for the confirmation.
-    """
-    import time
-
-    from .core import sandbox
-
+    """Complete a Moonlight pairing (verified against the sandbox pairing
+    state — see sunshine_api.pair_verified)."""
     s = _resolve_session(args.name)
     if s is None:
         return 1
     device = args.device or args.name
-    before = set(sandbox.paired_clients(s.home))
     try:
-        ok = sunshine_api.pair(args.pin, device,
-                               web_port=s.cfg.sunshine_port_base + 1)
+        ok = sunshine_api.pair_verified(args.pin, device, s.home,
+                                        web_port=s.cfg.sunshine_port_base + 1)
     except sunshine_api.SunshineApiError as e:
         print(f"pair failed: {e} — is the session running?", file=sys.stderr)
         return 1
     if not ok:
-        print("pair failed: no pairing attempt was pending (start the pairing "
-              "in Moonlight first, then submit its PIN here)", file=sys.stderr)
+        print("PIN submitted, but no new pairing appeared — wrong/expired PIN, "
+              "or a stale pairing attempt swallowed it (Sunshine answers the "
+              "oldest one). Restart pairing in Moonlight and retry; if it "
+              "keeps failing, restart the session.", file=sys.stderr)
         return 1
-    for _ in range(20):  # the client-side handshake finishes within seconds
-        new = set(sandbox.paired_clients(s.home)) - before
-        if new:
-            print(f"Paired '{', '.join(sorted(new))}' with session '{args.name}'.")
-            return 0
-        time.sleep(0.5)
-    print("PIN submitted, but no new pairing appeared — wrong/expired PIN, or "
-          "a stale pairing attempt swallowed it (Sunshine answers the oldest "
-          "one). Restart pairing in Moonlight and retry; if it keeps failing, "
-          "restart the session to clear stale attempts.", file=sys.stderr)
-    return 1
+    print(f"Paired '{device}' with session '{args.name}'.")
+    return 0
 
 
 def cmd_session_stop(args: argparse.Namespace) -> int:
@@ -405,11 +469,14 @@ def build_parser() -> argparse.ArgumentParser:
     sess_sub = sess.add_subparsers(dest="action", required=True)
     sess_sub.add_parser("list").set_defaults(func=cmd_session_list)
     handlers = {
+        "add": cmd_session_add,
+        "remove": cmd_session_remove,
         "setup": cmd_session_setup,
         "start": cmd_session_start,
         "stop": cmd_session_stop,
         "status": cmd_session_status,
         "pair": cmd_session_pair,
+        "clear-overlay": cmd_session_clear_overlay,
     }
     for action, handler in handlers.items():
         sp = sess_sub.add_parser(action)
@@ -428,6 +495,18 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("pin", help="4-digit PIN shown by Moonlight")
             sp.add_argument("--device",
                             help="client name recorded by Sunshine (default: profile name)")
+        if action == "add":
+            sp.add_argument("--resolution", default="1080p60", metavar="PRESET|WxH@R|ask",
+                            help="pre-connect canvas + fallback size (default: 1080p60)")
+            sp.add_argument("--port", type=int,
+                            help="Sunshine base port (default: first free block)")
+            sp.add_argument("--apps", metavar="ID[,ID…]",
+                            help="share only these Steam AppIDs (default: whole library)")
+        if action == "remove":
+            sp.add_argument("--data", action="store_true",
+                            help="also delete the sandbox HOME (Steam login, saves) and overlays")
+            sp.add_argument("--yes", action="store_true",
+                            help="skip the confirmation prompt (with --data)")
         sp.set_defaults(func=handler)
 
     return p

@@ -4,6 +4,30 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Keyboard/mouse streaming** (experimental `mouse_input`): pointer
+  injection into Big Picture; patched `cage` adds pointer-constraints so
+  games can lock the mouse (stutter-free mouse look), flat 1:1 libinput
+  accel, cursor visible in the UI and hidden when a game grabs it.
+- **Desktop mode** (experimental, `--mode desktop` / Session page): streams
+  the Steam desktop UI directly under cage (Steam forces the gamepad UI
+  under gamescope). Known limit: X11 dropdowns position wrong.
+- **CLI**: `session add/remove/clear-overlay` (headless profile management),
+  `session pair` (verified against the sandbox pairing state),
+  `experimental list/enable/disable`.
+
+### Changed
+
+- **Dynamic resolution is the default**: the pipeline launches on the first
+  connect and renders at that client's resolution + refresh rate (locked
+  until restart; other clients get scaled). Previously only the canvas was
+  resized. Opt-out: `PS_DYNAMIC_RES=disabled`; the experimental toggle is
+  gone.
+- First use seeds one generic profile (`sandbox_steam`) instead of two.
+
 ## [0.1.4] - 2026-07-25
 
 ### Added

@@ -78,8 +78,8 @@ def _glxserver() -> Path | None:
     return next((p for p in _GLXSERVER_CANDIDATES if p.exists()), None)
 
 # Environment variables forwarded from the caller into the container (with
-# defaults where the pipeline needs one). PS_MOUSE_INPUT/PS_SHOW_CURSOR exist
-# for pointer experiments only — gamepad is the supported input path.
+# defaults where the pipeline needs one). PS_MOUSE_INPUT is driven by the
+# mouse_input experimental feature; gamepad stays the default input path.
 _FORWARD_ENV: dict[str, str | None] = {
     "PS_STEAM_FLAGS": "-gamepadui",
     "PS_NATIVE_TOUCH": "disabled",
@@ -102,11 +102,9 @@ _FORWARD_ENV: dict[str, str | None] = {
     # In-container thumbnail loop (entrypoint defaults: enabled, every 10s).
     "PS_THUMBNAIL": None,
     "PS_THUMBNAIL_INTERVAL": None,
-    # Dynamic resolution is the entrypoint DEFAULT (render at the first
-    # client's resolution); forwarded only to opt out (=disabled).
+    # Entrypoint default enabled; forwarded only to opt out (=disabled).
     "PS_DYNAMIC_RES": None,
-    # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each —
-    # see the entrypoint.
+    # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each.
     "PS_HDR": None,
 }
 
@@ -291,9 +289,7 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
     if opts.env.get("PS_GAMESCOPE_WSI", os.environ.get("PS_GAMESCOPE_WSI")) != "enabled":
         env["DISABLE_GAMESCOPE_WSI"] = "1"
     env.update(_forwarded_env(opts))
-    # Desktop mode (experimental) streams a pointer-driven UI without
-    # gamescope — the gamepad-only pointer decision doesn't apply there, so
-    # flip the defaults unless the caller pinned them.
+    # Desktop mode is pointer-driven — flip the defaults unless pinned.
     if opts.mode == "desktop":
         for key, val in (("PS_MOUSE_INPUT", "enabled"), ("PS_SHOW_CURSOR", "1")):
             if key not in opts.env and not os.environ.get(key):
