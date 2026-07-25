@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -314,7 +315,9 @@ class SandboxPage(QWidget):
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setAlternatingRowColors(True)
-        self._table.horizontalHeader().setStretchLastSection(True)
+        # All columns share the width evenly and follow window resizes.
+        self._table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
         self._table.setMinimumHeight(160)
         self._table.itemSelectionChanged.connect(self._update_login_btn)
         lay.addWidget(self._table)
@@ -386,10 +389,6 @@ class SandboxPage(QWidget):
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight
                                           | Qt.AlignmentFlag.AlignVCenter)
                 self._table.setItem(row, col, item)
-        self._table.resizeColumnsToContents()
-        for col in range(self._table.columnCount() - 1):
-            # the stylesheet's item padding is not part of the size hint
-            self._table.setColumnWidth(col, self._table.columnWidth(col) + 20)
         if 0 <= selected < len(sessions):
             self._table.selectRow(selected)
         self._update_login_btn()
