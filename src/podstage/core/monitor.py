@@ -7,8 +7,7 @@ Everything here is readable as the plain user (the container is rootless):
     process.
   * GPU/NVENC come from ``nvidia-smi`` on NVIDIA, the amdgpu sysfs
     (``gpu_busy_percent`` + ``mem_info_vram_*``) on AMD, or one
-    ``intel_gpu_top -J`` sample on Intel (works only where the GPU PMU is
-    readable; on failure there simply are no stats).
+    ``intel_gpu_top -J`` sample on Intel (needs a readable GPU PMU).
   * The active game from the running ``SteamLaunch AppId=`` process.
 
 There is deliberately NO connected-client detection: Sunshine's media path is
@@ -165,10 +164,8 @@ def _amd_gpu_stats() -> GpuStats | None:
 
 
 def _parse_intel_gpu_top(out: str) -> GpuStats | None:
-    """The LAST complete top-level JSON object from ``intel_gpu_top -J``
-    streaming output (the first sample right after startup is often zero).
-    Busy % comes from the Render/3D engine; i915/xe expose no VRAM counters,
-    so the memory fields stay None."""
+    """Last complete JSON object from the ``-J`` stream (the first sample is
+    often zero). Busy % = Render/3D engine; no VRAM counters on i915/xe."""
     samples = []
     depth, start = 0, None
     for i, ch in enumerate(out):
@@ -198,9 +195,8 @@ def _parse_intel_gpu_top(out: str) -> GpuStats | None:
 
 
 def _intel_gpu_stats() -> GpuStats | None:
-    """One short ``intel_gpu_top -J`` sample. Reading the GPU PMU needs
-    CAP_PERFMON or a relaxed perf_event_paranoid — if the tool is missing or
-    unreadable this returns None and the GUI shows no GPU load."""
+    """One short ``intel_gpu_top -J`` sample; needs CAP_PERFMON or a relaxed
+    perf_event_paranoid, else None (no GPU load shown)."""
     if shutil.which("intel_gpu_top") is None:
         return None
     try:

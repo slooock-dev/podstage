@@ -75,9 +75,8 @@ def check_image() -> CheckResult:
             fix="podstage runtime build",
         )
     _, img_id = _run(["podman", "image", "inspect", "--format", "{{.Id}}", runtime.DEFAULT_IMAGE])
-    # The build stamps a hash of containers/runtime/ into the image; a
-    # mismatch means the sources changed after the build (a plain
-    # `podman build` without the label counts as stale too).
+    # Hash label vs. current sources; unlabeled (plain podman build) counts
+    # as stale too.
     if runtime.image_is_stale():
         return CheckResult(
             "image", Status.WARN,

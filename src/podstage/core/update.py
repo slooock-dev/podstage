@@ -1,8 +1,6 @@
-"""Release update check against the public GitHub repository.
+"""Release update check against the GitHub releases API.
 
-Strictly on demand: nothing here runs unless the user clicks the check button
-(GUI Setup page) — podstage never phones home on its own. One anonymous GET
-against the GitHub releases API, no telemetry attached.
+On demand only (Setup-page button): one anonymous GET, no telemetry.
 """
 
 import json
@@ -34,16 +32,14 @@ def parse_version(tag: str) -> tuple[int, ...]:
 
 
 def _mentions_image_rebuild(notes: str) -> bool:
-    """Heuristic: the CHANGELOG notes a required image rebuild explicitly
-    (e.g. "Requires an image rebuild")."""
+    """Heuristic for "Requires an image rebuild" in the release notes."""
     text = notes.lower()
     return "rebuild" in text and "image" in text
 
 
 def check_latest(timeout: float = 8.0) -> UpdateInfo:
-    """Fetch the latest release and compare it against the running version.
-    Raises RuntimeError on network/API failure (offline is a normal case the
-    caller reports, not a crash)."""
+    """Latest release vs. the running version. Raises RuntimeError on
+    network/API failure (offline is a reportable case, not a crash)."""
     req = urllib.request.Request(RELEASES_API, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": f"podstage/{__version__}",

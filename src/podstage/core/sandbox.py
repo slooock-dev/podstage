@@ -87,9 +87,8 @@ def size_bytes(home: Path) -> int | None:
 
 
 def overlay_size_bytes(home: Path) -> int | None:
-    """Disk usage of the sandbox's overlay uppers — its writes (game updates,
-    redistributables) onto the shared host libraries. 0 before the first
-    session write."""
+    """Disk usage of the sandbox's overlay writes onto the shared libraries
+    (0 before the first session write)."""
     root = config.overlay_root(home)
     if not root.exists():
         return 0
@@ -97,10 +96,9 @@ def overlay_size_bytes(home: Path) -> int | None:
 
 
 def clear_overlays(home: Path) -> None:
-    """Drop the sandbox's overlay storage. Safe by design: the host libraries
-    are read-only lowerdirs, so this only discards the sandbox's own writes —
-    Steam re-applies pending updates in the next session. The caller must
-    ensure no session is running on this sandbox."""
+    """Drop the sandbox's overlay writes; the read-only host libraries stay
+    untouched, Steam re-applies updates next session. The caller must ensure
+    no session is running on this sandbox."""
     shutil.rmtree(config.overlay_root(home), ignore_errors=True)
 
 

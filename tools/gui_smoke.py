@@ -1,14 +1,8 @@
-"""Offscreen GUI smoke test — catches what pytest structurally cannot.
-
-The test suite runs under a Python without PyQt6, so ``src/podstage/ui``
-widget modules are never imported there; a syntax or runtime error in them
-stays green. This script builds the real main window offscreen, visits every
-page and renders one frame. Run it as::
+"""Offscreen GUI smoke test: builds the real main window, visits every page,
+renders one frame. Covers what pytest cannot — the suite runs without PyQt6,
+so errors in ui/ stay green there.
 
     QT_QPA_PLATFORM=offscreen python tools/gui_smoke.py
-
-CI runs it in a dedicated job with PyQt6 installed; locally ``ui.sh`` knows
-where the Qt-capable Python lives.
 """
 
 import os
@@ -29,8 +23,7 @@ def main() -> int:
         win._nav.setCurrentRow(row)
         app.processEvents()
 
-    # Let the page workers (doctor checks, du sizes) finish before teardown —
-    # destroying a QThread that still runs would abort the interpreter.
+    # Wait for page workers — destroying a running QThread aborts the process.
     for pool in (win._session_page._pool, win._sandbox_page._pool,
                  win._setup_page._pool):
         for worker in list(pool):

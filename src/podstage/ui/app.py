@@ -208,11 +208,9 @@ def _app_icon() -> QIcon:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # ui.sh hands the Qt plugin dir over in PS_QT_PLUGIN_PATH instead of
-    # QT_PLUGIN_PATH: the env var would be inherited by every child process,
-    # and Qt-based host tools (xdg-open → kde-open) abort on ABI-foreign
-    # plugins — the "open in browser" buttons then silently did nothing.
-    # popped so not even the private variable leaks into children.
+    # Qt plugin dir from ui.sh — deliberately not QT_PLUGIN_PATH: children
+    # (xdg-open → kde-open, a host Qt app) would inherit that and abort on
+    # the ABI-foreign plugins.
     plugin_path = os.environ.pop("PS_QT_PLUGIN_PATH", "")
     if plugin_path:
         QCoreApplication.addLibraryPath(plugin_path)

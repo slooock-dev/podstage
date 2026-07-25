@@ -14,10 +14,8 @@
 #        to a random per-sandbox password persisted in the mounted HOME —
 #        there is deliberately no fixed default credential)
 #   PS_CSRF_ORIGINS   comma-sep allowed web-UI origins             (default: auto-detected LAN IPs)
-#   PS_DYNAMIC_RES    enabled → a Sunshine prep-cmd resizes the output to the
-#       connecting client's resolution (experimental)
-#   PS_HDR            enabled → gamescope advertises an HDR output, games see
-#       DXVK_HDR (experimental, unverified end to end)
+#   PS_DYNAMIC_RES    enabled → prep-cmd resizes output to the client (experimental)
+#   PS_HDR            enabled → gamescope HDR output + DXVK_HDR (experimental)
 #   PS_FAKE_UDEV      1 → seat-shim fakes the udev hotplug monitor for cage
 #       (required rootless: the kernel delivers no uevents into a user
 #        namespace; the host runtime always sets it)
@@ -141,9 +139,8 @@ for _ in \$(seq 1 20); do wlr-randr >/dev/null 2>&1 && break; sleep 0.2; done
 wlr-randr --output HEADLESS-1 --custom-mode ${PS_W}x${PS_H} >/dev/null 2>&1 || true
 EOF
 
-# Experimental HDR: gamescope advertises an HDR output to its clients and
-# games see DXVK_HDR. Whether the stream actually carries HDR further depends
-# on Sunshine's capture path and the Moonlight client — hence opt-in.
+# Experimental HDR: gamescope advertises an HDR output, games see DXVK_HDR.
+# Whether the stream carries HDR depends on Sunshine and the client.
 GS_HDR_FLAGS=""
 if [ "${PS_HDR:-}" = enabled ]; then
     GS_HDR_FLAGS="--hdr-enabled"
@@ -216,12 +213,9 @@ CONF
         printf '%s\n' "$PS_SUNSHINE_EXTRA" | tr ';' '\n' \
             >> "$SUN_CONF_DIR/sunshine.conf"
     fi
-    # Follow the connecting client's resolution (experimental): a Sunshine
-    # prep-cmd resizes cage's headless output to the client's WxH before the
-    # capture starts; gamescope tracks the resize (nested wayland client), so
-    # Steam can then offer the larger display resolution. undo restores the
-    # profile resolution when the stream ends. The prep-cmd inherits cage's
-    # WAYLAND_DISPLAY through Sunshine, so wlr-randr just works.
+    # Experimental: a Sunshine prep-cmd resizes cage's output to the client's
+    # WxH (it inherits cage's WAYLAND_DISPLAY); gamescope tracks the resize,
+    # undo restores the profile resolution when the stream ends.
     if [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
         RESIZE="$SUN_CONF_DIR/resize.sh"
         cat > "$RESIZE" <<RESIZE_EOF

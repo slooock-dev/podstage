@@ -28,9 +28,8 @@ jobs:
       - name: Test
         run: pytest -q
 
-  # The test job never imports src/podstage/ui (no PyQt6 by design), so an
-  # error there would stay green. This job byte-compiles the GUI modules and
-  # boots the real main window offscreen once.
+  # pytest runs without PyQt6, so ui/ errors stay green there — byte-compile
+  # the GUI modules and boot the window offscreen once.
   gui-smoke:
     runs-on: ubuntu-latest
     steps:
