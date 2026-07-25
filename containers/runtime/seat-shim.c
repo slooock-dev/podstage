@@ -1,4 +1,4 @@
-/* LD_PRELOAD shim for cage (wlroots): three jobs, all cage-only.
+/* LD_PRELOAD shim for cage (wlroots): four jobs, all cage-only.
  *
  * 1. Seat name — report the STREAMING seat instead of seatd's hardcoded
  *    "seat0". wlroots passes libseat_seat_name() to
@@ -10,7 +10,13 @@
  * 2. Blank cursor — no-op the wlroots cursor-image setters so the dead pointer
  *    Sunshine creates isn't burned into the capture (see below).
  *
- * 3. Fake udev monitor — in a rootless user namespace the kernel does NOT
+ * 3. Flat pointer acceleration (PS_POINTER_ACCEL=flat, desktop mode) — the
+ *    Moonlight client sends raw mouse counts and libinput's default adaptive
+ *    acceleration on Sunshine's virtual mouse amplifies them a second time,
+ *    which feels far too fast. Hook the device-attach and force the flat
+ *    profile (1:1) on every pointer that offers accel config.
+ *
+ * 4. Fake udev monitor — in a rootless user namespace the kernel does NOT
  *    deliver udev netlink uevents, so libinput's hotplug monitor never sees
  *    the devices Sunshine creates mid-session. Enumerate still works (the
  *    udev DB is visible via the bind-mounted /run/udev), so we fake ONLY the
@@ -206,5 +212,32 @@ void wlr_cursor_set_surface(void *cur, void *surface, int32_t hx, int32_t hy) {
     if (show_cursor()) {
         void (*real)(void *, void *, int32_t, int32_t) = dlsym(RTLD_NEXT, "wlr_cursor_set_surface");
         if (real) real(cur, surface, hx, hy);
+    }
+}
+
+/* ---- flat pointer acceleration ------------------------------------------ */
+
+/* cage attaches every new input device to its wlr_cursor; that is the one
+ * spot where the underlying libinput device is reachable. All symbols come
+ * from cage's own wlroots/libinput via RTLD_NEXT — no link-time deps.
+ * libinput enum value: LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT = (1 << 0). */
+void wlr_cursor_attach_input_device(void *cur, void *dev) {
+    void (*real)(void *, void *) = dlsym(RTLD_NEXT, "wlr_cursor_attach_input_device");
+    if (!real) return;
+    real(cur, dev);
+
+    const char *mode = getenv("PS_POINTER_ACCEL");
+    if (!mode || strcmp(mode, "flat") != 0) return;
+    int (*is_libinput)(void *) = dlsym(RTLD_NEXT, "wlr_input_device_is_libinput");
+    void *(*handle)(void *) = dlsym(RTLD_NEXT, "wlr_libinput_get_device_handle");
+    int (*avail)(void *) = dlsym(RTLD_NEXT, "libinput_device_config_accel_is_available");
+    int (*set_profile)(void *, int) = dlsym(RTLD_NEXT, "libinput_device_config_accel_set_profile");
+    int (*set_speed)(void *, double) = dlsym(RTLD_NEXT, "libinput_device_config_accel_set_speed");
+    if (!is_libinput || !handle || !avail || !set_profile || !set_speed) return;
+    if (!is_libinput(dev)) return;
+    void *li = handle(dev);
+    if (li && avail(li)) {
+        set_profile(li, 1 /* LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT */);
+        set_speed(li, 0.0);
     }
 }

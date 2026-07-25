@@ -11,6 +11,8 @@
 #       desktop (experimental): no gamescope — the target runs directly under
 #       cage with pointer input + cursor enabled (keyboard/mouse streaming)
 #   PS_DESKTOP_CMD  desktop-mode launch target                     (default: steam desktop UI)
+#   PS_POINTER_ACCEL  flat → seat-shim forces flat (1:1) libinput accel on
+#       pointers (desktop-mode default; anything else keeps libinput defaults)
 #   PS_SUNSHINE_PORT  base port                                    (default 47989)
 #   PS_WEB_USER / PS_WEB_PASS   Sunshine web-manager login
 #       (normally passed in by the host runtime; unset PS_WEB_PASS falls back
@@ -325,6 +327,9 @@ SHIM=/usr/local/lib/podstage-seat-shim.so
 # gamepad-only capture). PS_SHOW_CURSOR=0 forces it off again.
 if [ "$PS_MODE" = desktop ]; then
     export PS_SHOW_CURSOR="${PS_SHOW_CURSOR:-1}"
+    # Client mouse counts arrive raw; libinput's adaptive accel on top feels
+    # far too fast — default to flat 1:1 (shim hook), overridable.
+    export PS_POINTER_ACCEL="${PS_POINTER_ACCEL:-flat}"
     log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → ${STEAM_LAUNCH} ${PS_W}x${PS_H}  [mode=desktop]"
 else
     log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → gamescope ${PS_W}x${PS_H}@${PS_R} → steam  [mode=$PS_MODE]"

@@ -87,6 +87,9 @@ _FORWARD_ENV: dict[str, str | None] = {
     "PS_SHOW_CURSOR": "",
     # Desktop-mode launch target (entrypoint default: Steam desktop UI).
     "PS_DESKTOP_CMD": None,
+    # Pointer accel profile for the seat-shim ("flat" is the desktop-mode
+    # entrypoint default; only forwarded when the caller pins it).
+    "PS_POINTER_ACCEL": None,
     # Web-UI login: no fixed default — container_env() fills these from the
     # per-install random credentials (config.sunshine_web_credentials) unless
     # the caller/environment sets them explicitly.
