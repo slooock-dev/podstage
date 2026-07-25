@@ -85,11 +85,11 @@ host GUI.
 - Linux with a Wayland desktop. Developed on Bazzite-DX (Fedora-based, KDE
   Plasma); other modern distros should work.
 - podman
-- A GPU with hardware video encode: NVIDIA (NVENC, via CDI injection) or AMD
-  (VAAPI, via `/dev/dri`). The GUI adapts its encoder controls and telemetry to
-  the detected vendor. NVIDIA has the most testing; the AMD path is validated on
-  one iGPU. Intel (VAAPI via `/dev/dri`, Broadwell+) is wired the same way and
-  confirmed working by a community report (Arc B580).
+- A GPU with hardware video encode: NVIDIA (NVENC, via CDI injection), AMD or
+  Intel (both VAAPI, via `/dev/dri`; Intel needs Broadwell+ for the iHD
+  driver). The GUI adapts its encoder controls and telemetry to the detected
+  vendor. NVIDIA has the most testing, AMD is validated on one iGPU, Intel is
+  confirmed by a community report (Arc B580).
 - Steam installed on the host; its libraries are shared into the sandboxes.
 - Python ≥ 3.11 for the CLI/core, PyQt6 ≥ 6.6 for the GUI (`./ui.sh` tries to find a suitable interpreter).
 - A Moonlight client with a gamepad (Steam Deck, laptop, phone with
@@ -220,7 +220,7 @@ and the network:
 
 After that, tune the encoder on the Session page: on NVIDIA, max the preset
 (P7) and two-pass (full res), and raise VBV if fast motion still shows
-artifacts; on AMD, raise the VAAPI quality profile.
+artifacts; on AMD and Intel, raise the VAAPI quality profile.
 
 ## CLI
 
@@ -255,7 +255,8 @@ that:
   had less testing than the NVIDIA path.
 - Intel takes the same `/dev/dri` + VAAPI wiring, with ANV Vulkan and the iHD
   media driver (Broadwell+) baked into the image. A community report confirms
-  it working out of the box on an Arc B580. GPU load shows up in the GUI when
+  it working out of the box on an Arc B580; Intel iGPUs and pre-Broadwell
+  parts are untested so far. GPU load shows up in the GUI when
   `intel_gpu_top` is installed and the GPU PMU is readable; VRAM stays
   unavailable (the i915/xe kernel drivers expose no sysfs counters).
   `PS_GPU_VENDOR=intel` forces the path on hybrid machines.
@@ -292,6 +293,9 @@ Patches widening distro and GPU support are very welcome.
 - **NVIDIA `vulkan_make_output failed` on start.** The CDI spec doesn't inject
   `/dev/nvidia-modeset`; the runtime adds it explicitly. Regenerating CDI
   (`nvidia-ctk cdi generate`) also fixes it.
+- **No GPU load shown on Intel.** The meter samples `intel_gpu_top`; install
+  it (igt-gpu-tools) and make the GPU PMU readable (CAP_PERFMON or a relaxed
+  `perf_event_paranoid`). VRAM stays unavailable on i915/xe.
 - **The preview stays blank.** The in-container capture only produces a frame
   while the picture is actually changing; the placeholder shows until the
   session's first frame arrives. After that the last frame stays visible

@@ -10,7 +10,7 @@ on Vulkan; there is no virtual DRM display involved.
 
 | Baked into the image (host-independent) | Provided at runtime |
 |---|---|
-| gamescope, cage, wlroots, Vulkan loader (64+32-bit), mesa | GPU access: NVIDIA userspace via **CDI** (`--device nvidia.com/gpu=all`), matching the host driver; or `/dev/dri` on AMD |
+| gamescope, cage, wlroots, Vulkan loader (64+32-bit), mesa (RADV/ANV Vulkan, Mesa/iHD VAAPI) | GPU access: NVIDIA userspace via **CDI** (`--device nvidia.com/gpu=all`), matching the host driver; or `/dev/dri` on AMD/Intel |
 | Steam client, PipeWire stack | **HOME volume** `/home/player`: Steam login, saves, games, downloaded Proton |
 | Sunshine (pinned native Arch package) | |
 
@@ -57,7 +57,7 @@ end to end).
 The container is rootless (`--userns=keep-id`): no sudo, no extra capabilities.
 
 - `--device nvidia.com/gpu=all`: CDI GPU injection (64-bit NVIDIA userspace).
-  On AMD, `--device /dev/dri` is used instead and the next two NVIDIA-only
+  On AMD and Intel, `--device /dev/dri` is used instead and the NVIDIA-only
   flags do not apply.
 - `--device /dev/nvidia-modeset`: not in the CDI spec, but the NVIDIA Vulkan
   wayland-WSI present path needs it. Without it gamescope aborts at
@@ -91,7 +91,7 @@ The container is rootless (`--userns=keep-id`): no sudo, no extra capabilities.
 
 The full stack runs self-contained: cage → gamescope (Vulkan) → Steam
 `-gamepadui`, plus Sunshine with wlr screencopy capture and hardware encode
-(NVENC on NVIDIA, VAAPI on AMD) on 47984/47989/47990/48010. Pair from Moonlight,
+(NVENC on NVIDIA, VAAPI on AMD/Intel) on 47984/47989/47990/48010. Pair from Moonlight,
 or the web UI at `https://<host>:47990`. End-to-end streaming is verified: a
 game on a Steam Deck with controller and audio, the host desktop left
 undisturbed.
@@ -117,5 +117,5 @@ undisturbed.
 - **32-bit NVIDIA (NVIDIA only).** CDI injects only the 64-bit NVIDIA
   userspace, so the runtime also bind-mounts the host's 32-bit NVIDIA GL
   libraries (and `libglxserver_nvidia`). Without them Steam's 32-bit client UI
-  falls back to llvmpipe (64-bit games still render on the GPU). AMD needs none
-  of this: the image ships 32-bit Mesa.
+  falls back to llvmpipe (64-bit games still render on the GPU). AMD and Intel
+  need none of this: the image ships 32-bit Mesa.
