@@ -112,6 +112,15 @@ def test_sunshine_extra_roundtrip(tmp_path: Path):
         "nvenc_preset": "4", "nvenc_twopass": "full_res"}
 
 
+def test_preview_keep_last_roundtrip(tmp_path: Path):
+    assert AppConfig().preview_keep_last is True
+    path = tmp_path / "config.toml"
+    AppConfig(sessions=[SessionConfig(name="s")]).save(path)
+    assert "preview_keep_last" not in path.read_text()  # default not written
+    AppConfig(sessions=[SessionConfig(name="s")], preview_keep_last=False).save(path)
+    assert AppConfig.load(path).preview_keep_last is False
+
+
 def test_experimental_roundtrip_and_env(tmp_path: Path):
     path = tmp_path / "config.toml"
     AppConfig(sessions=[SessionConfig(name="s")],

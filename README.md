@@ -293,7 +293,9 @@ Patches widening distro and GPU support are very welcome.
   `/dev/nvidia-modeset`; the runtime adds it explicitly. Regenerating CDI
   (`nvidia-ctk cdi generate`) also fixes it.
 - **The preview stays blank.** The in-container capture only produces a frame
-  while the Big Picture UI is actually animating.
+  while the picture is actually changing; the placeholder shows until the
+  session's first frame arrives. After that the last frame stays visible
+  through static scenes (Setup → Streaming turns that off).
 - **A game re-downloads the same update in every session.** Sandbox-side
   updates live in per-sandbox overlay storage
   (`~/.local/share/podstage/overlays/`) and are purged once the host updates

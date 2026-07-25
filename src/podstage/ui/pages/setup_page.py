@@ -198,6 +198,14 @@ class SetupPage(QWidget):
         cshint.setWordWrap(True)
         slay.addWidget(self._close_steam)
         slay.addWidget(cshint)
+        self._keep_preview = QCheckBox(
+            tr("Keep the last preview frame during static scenes"))
+        self._keep_preview.setToolTip(tr(
+            "The capture only delivers frames while the picture changes. Off "
+            "hides the preview 45 s after the last new frame."))
+        self._keep_preview.setChecked(self._ctx.config.preview_keep_last)
+        self._keep_preview.toggled.connect(self._on_keep_preview_toggled)
+        slay.addWidget(self._keep_preview)
         root.addWidget(sframe)
 
         eframe, elay = card(tr("Experimental features"))
@@ -377,6 +385,10 @@ class SetupPage(QWidget):
 
     def _on_close_steam_toggled(self, enabled: bool) -> None:
         self._ctx.config.close_desktop_steam = enabled
+        self._ctx.save()
+
+    def _on_keep_preview_toggled(self, enabled: bool) -> None:
+        self._ctx.config.preview_keep_last = enabled
         self._ctx.save()
 
     def _on_experimental_toggled(self, key: str, enabled: bool) -> None:

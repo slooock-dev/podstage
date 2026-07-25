@@ -214,6 +214,9 @@ class AppConfig:
     # (different) Steam account run the stream while the desktop Steam keeps
     # running its own.
     close_desktop_steam: bool = True
+    # Keep the last preview frame during static scenes (wlr-screencopy only
+    # delivers frames while the picture changes). Off hides it after ~45 s.
+    preview_keep_last: bool = True
     # Enabled experimental features (keys from EXPERIMENTAL_FEATURES),
     # toggled on the Setup page, applied at the next session start.
     experimental: dict[str, bool] = field(default_factory=dict)
@@ -242,6 +245,7 @@ class AppConfig:
         return cls(sessions=sessions, language=data.get("language", "auto"),
                    sessions_home_root=data.get("sessions_home_root", ""),
                    close_desktop_steam=data.get("close_desktop_steam", True),
+                   preview_keep_last=data.get("preview_keep_last", True),
                    experimental=experimental)
 
     @classmethod
@@ -274,6 +278,8 @@ class AppConfig:
             data["sessions_home_root"] = self.sessions_home_root
         if not self.close_desktop_steam:
             data["close_desktop_steam"] = False
+        if not self.preview_keep_last:
+            data["preview_keep_last"] = False
         enabled = {k: True for k, v in self.experimental.items() if v}
         if enabled:
             data["experimental"] = enabled

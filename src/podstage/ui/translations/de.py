@@ -318,6 +318,12 @@ TEXTS: dict[str, str] = {
     "{label} running …": "{label} läuft …",
     "Exit code {rc}": "Exit-Code {rc}",
     "Image built.": "Image gebaut.",
+    "Keep the last preview frame during static scenes":
+        "Bei statischem Bild das letzte Vorschaubild behalten",
+    "The capture only delivers frames while the picture changes. Off hides "
+    "the preview 45 s after the last new frame.":
+        "Die Aufnahme liefert nur Frames, solange sich das Bild ändert. Aus "
+        "blendet die Vorschau 45 s nach dem letzten neuen Frame aus.",
     "Experimental features": "Experimentelle Features",
     "Global switches, applied at the next session start. Container-side "
     "features need a current runtime image.":

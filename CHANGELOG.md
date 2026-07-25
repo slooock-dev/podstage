@@ -42,6 +42,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The session preview no longer disappears during static scenes. The capture
+  (wlr-screencopy) only delivers frames while the picture changes, and the
+  GUI hid the last frame after 45 s without a new one; it now keeps it for
+  the rest of the session (frames from a previous session stay excluded). A
+  Setup → Streaming toggle restores the strict hiding.
 - The GUI's "open in browser" buttons (Sunshine web UI, release page) did
   nothing on KDE: `ui.sh` exported `QT_PLUGIN_PATH`, the spawned
   `xdg-open`/`kde-open` inherited it and aborted on the ABI-foreign Qt
