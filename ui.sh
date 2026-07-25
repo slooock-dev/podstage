@@ -29,8 +29,13 @@ if [ -z "$PY" ] || ! "$PY" -c "import PyQt6" 2>/dev/null; then
 fi
 
 # Qt plugin path: prefer PyQt6's bundled plugins, fall back to brew's qtbase.
-if [ -z "${QT_PLUGIN_PATH:-}" ]; then
-    QT_PLUGIN_PATH=$("$PY" - <<'PY'
+# Handed over privately as PS_QT_PLUGIN_PATH (app.py consumes it via
+# addLibraryPath before the QApplication exists) — NOT exported as
+# QT_PLUGIN_PATH: every child of the GUI would inherit that, and Qt-based
+# host tools crash on the ABI-foreign plugins (xdg-open → kde-open dies
+# before it can open a browser). A caller-set QT_PLUGIN_PATH still wins.
+if [ -z "${QT_PLUGIN_PATH:-}" ] && [ -z "${PS_QT_PLUGIN_PATH:-}" ]; then
+    PS_QT_PLUGIN_PATH=$("$PY" - <<'PY'
 import os, glob, PyQt6
 bundled = os.path.join(os.path.dirname(PyQt6.__file__), "Qt6", "plugins")
 if os.path.isdir(os.path.join(bundled, "platforms")):
@@ -40,7 +45,7 @@ else:
     print(cand[-1] if cand else "")
 PY
 )
-    export QT_PLUGIN_PATH
+    export PS_QT_PLUGIN_PATH
 fi
 
 exec env PYTHONPATH="$SCRIPT_DIR/src${PYTHONPATH:+:$PYTHONPATH}" \

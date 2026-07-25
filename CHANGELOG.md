@@ -38,6 +38,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The GUI's "open in browser" buttons (Sunshine web UI, release page) did
+  nothing on KDE: `ui.sh` exported `QT_PLUGIN_PATH`, the spawned
+  `xdg-open`/`kde-open` inherited it and aborted on the ABI-foreign Qt
+  plugins before a browser could open. The plugin dir is now handed over
+  privately (`PS_QT_PLUGIN_PATH`) and consumed in-process, so children keep
+  a clean environment.
 - Editing a profile no longer resets its preview interval to the default.
 
 ## [0.1.3] - 2026-07-24

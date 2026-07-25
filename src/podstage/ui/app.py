@@ -14,10 +14,11 @@ go through pkexec — the GUI never needs a terminal.
 Run under the Qt-capable Python (brew's, with PyQt6) via ``ui.sh``.
 """
 
+import os
 import sys
 
 try:
-    from PyQt6.QtCore import QObject, pyqtSignal
+    from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
     from PyQt6.QtGui import QIcon
     from PyQt6.QtWidgets import (
         QApplication,
@@ -207,6 +208,14 @@ def _app_icon() -> QIcon:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # ui.sh hands the Qt plugin dir over in PS_QT_PLUGIN_PATH instead of
+    # QT_PLUGIN_PATH: the env var would be inherited by every child process,
+    # and Qt-based host tools (xdg-open → kde-open) abort on ABI-foreign
+    # plugins — the "open in browser" buttons then silently did nothing.
+    # popped so not even the private variable leaks into children.
+    plugin_path = os.environ.pop("PS_QT_PLUGIN_PATH", "")
+    if plugin_path:
+        QCoreApplication.addLibraryPath(plugin_path)
     app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName("podstage")
     app.setDesktopFileName("podstage")  # Wayland maps the window to the .desktop icon
