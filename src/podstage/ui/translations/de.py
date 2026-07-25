@@ -201,13 +201,6 @@ TEXTS: dict[str, str] = {
     "Port in use": "Port belegt",
     "Port {port} is already used by profile '{name}'.":
         "Port {port} nutzt bereits das Profil '{name}'.",
-    "Follow the client's resolution (experimental)":
-        "Der Auflösung des Clients folgen (experimentell)",
-    "Resizes the stream output to the connecting Moonlight client's "
-    "resolution; the resolution above is the startup/fallback size.":
-        "Passt die Stream-Ausgabe an die Auflösung des verbindenden "
-        "Moonlight-Clients an; die Auflösung oben ist Start- und "
-        "Rückfallgröße.",
 
     # -- sandbox page: delete dialog ------------------------------------
     "Delete '{name}'": "'{name}' löschen",
@@ -325,6 +318,24 @@ TEXTS: dict[str, str] = {
     "{label} running …": "{label} läuft …",
     "Exit code {rc}": "Exit-Code {rc}",
     "Image built.": "Image gebaut.",
+    "Experimental features": "Experimentelle Features",
+    "Global switches, applied at the next session start. Container-side "
+    "features need a current runtime image.":
+        "Globale Schalter, gelten ab dem nächsten Session-Start. "
+        "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
+    "Follow the client's resolution": "Der Auflösung des Clients folgen",
+    "Resizes the stream output to the connecting Moonlight client's "
+    "resolution; the profile resolution is the startup and fallback size.":
+        "Passt die Stream-Ausgabe an die Auflösung des verbindenden "
+        "Moonlight-Clients an; die Profilauflösung ist Start- und "
+        "Rückfallgröße.",
+    "HDR stream": "HDR-Stream",
+    "gamescope advertises an HDR output and games see DXVK_HDR. Unverified "
+    "end to end.":
+        "gamescope meldet einen HDR-Output und Spiele sehen DXVK_HDR. "
+        "Ende-zu-Ende unverifiziert.",
+    "Experimental features apply from the next session start.":
+        "Experimentelle Features gelten ab dem nächsten Session-Start.",
     "Checks the GitHub releases for a newer version — only when you click, "
     "podstage never phones home on its own.":
         "Prüft die GitHub-Releases auf eine neuere Version, aber nur per "

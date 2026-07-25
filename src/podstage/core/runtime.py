@@ -97,12 +97,9 @@ _FORWARD_ENV: dict[str, str | None] = {
     # In-container thumbnail loop (entrypoint defaults: enabled, every 10s).
     "PS_THUMBNAIL": None,
     "PS_THUMBNAIL_INTERVAL": None,
-    # "enabled" → a Sunshine prep-cmd resizes the output to the connecting
-    # client's resolution (experimental; set from the profile's
-    # follow_client_resolution).
+    # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each:
+    # client-resolution follow and gamescope HDR — see the entrypoint.
     "PS_DYNAMIC_RES": None,
-    # "enabled" → gamescope advertises an HDR output and games see DXVK_HDR
-    # (experimental, unverified end to end).
     "PS_HDR": None,
 }
 
@@ -384,10 +381,8 @@ def container_flags(library_paths: list[Path], home_dir: Path,
 
 # -- image build + staleness ------------------------------------------------
 
-# Label carrying the sha256 of containers/runtime/ at build time. doctor and
-# start() compare it against the current sources, so a forgotten rebuild after
-# a containers/runtime/ change surfaces as a warning instead of as subtle
-# in-container misbehavior.
+# sha256 of containers/runtime/ baked in at build time; doctor and start()
+# compare it against the sources to flag a forgotten rebuild.
 SRC_HASH_LABEL = "io.podstage.src-hash"
 RUNTIME_SRC_SUBDIR = "containers/runtime"
 
@@ -410,8 +405,7 @@ def runtime_src_hash() -> str | None:
 
 
 def image_src_hash(image: str = DEFAULT_IMAGE) -> str | None:
-    """The source hash baked into the image at build time (None if the image
-    is missing or was built without the label, e.g. by plain podman build)."""
+    """The image's source-hash label (None: no image or unlabeled build)."""
     rc, out = _run(["podman", "image", "inspect", "--format",
                     f'{{{{index .Config.Labels "{SRC_HASH_LABEL}"}}}}', image])
     if rc != 0:
@@ -421,9 +415,8 @@ def image_src_hash(image: str = DEFAULT_IMAGE) -> str | None:
 
 
 def image_is_stale(image: str = DEFAULT_IMAGE) -> bool | None:
-    """True if the image predates the current containers/runtime/ sources (or
-    carries no source label); False if it matches; None if there is nothing to
-    compare (no checkout, or the image does not exist)."""
+    """True: image older than the sources (or unlabeled). False: matches.
+    None: nothing to compare (no checkout or no image)."""
     current = runtime_src_hash()
     if current is None:
         return None
@@ -434,9 +427,8 @@ def image_is_stale(image: str = DEFAULT_IMAGE) -> bool | None:
 
 
 def build_image(image: str = DEFAULT_IMAGE, *, quiet: bool = True) -> str:
-    """Build the runtime image with the source hash as a label (the CLI's
-    ``runtime build`` and the GUI's build button both come through here).
-    ``quiet=False`` streams podman's output to the terminal."""
+    """Build the runtime image with the source-hash label (CLI and GUI both
+    come through here). ``quiet=False`` streams podman's output."""
     src = runtime_src_dir()
     if not src.is_dir():
         raise RuntimeError(f"{src} not found — building needs a source checkout")

@@ -112,12 +112,23 @@ def test_sunshine_extra_roundtrip(tmp_path: Path):
         "nvenc_preset": "4", "nvenc_twopass": "full_res"}
 
 
-def test_follow_client_resolution_roundtrip(tmp_path: Path):
-    assert SessionConfig(name="x").follow_client_resolution is False
+def test_experimental_roundtrip_and_env(tmp_path: Path):
     path = tmp_path / "config.toml"
-    AppConfig(sessions=[SessionConfig(name="deck",
-                                      follow_client_resolution=True)]).save(path)
-    assert AppConfig.load(path).get("deck").follow_client_resolution is True
+    AppConfig(sessions=[SessionConfig(name="s")],
+              experimental={"hdr": True, "dynamic_resolution": False}).save(path)
+    loaded = AppConfig.load(path)
+    assert loaded.experimental == {"hdr": True}  # only enabled keys persist
+    assert loaded.experimental_env() == {"PS_HDR": "enabled"}
+    # nothing enabled → key absent from the file
+    AppConfig(sessions=[SessionConfig(name="s")]).save(path)
+    assert "experimental" not in path.read_text()
+    assert AppConfig.load(path).experimental_env() == {}
+
+
+def test_experimental_unknown_keys_dropped(tmp_path: Path):
+    path = tmp_path / "config.toml"
+    path.write_text('[experimental]\nhdr = true\nremoved_feature = true\n')
+    assert AppConfig.load(path).experimental == {"hdr": True}
 
 
 def test_preview_interval_roundtrip(tmp_path: Path):

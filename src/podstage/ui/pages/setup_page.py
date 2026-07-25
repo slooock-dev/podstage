@@ -38,6 +38,21 @@ _GLYPH = {doctor.Status.OK: ("●", "ok"),
           doctor.Status.WARN: ("▲", "warn"),
           doctor.Status.FAIL: ("✖", "fail")}
 
+# Labels/tooltips for config.EXPERIMENTAL_FEATURES — one entry per key, the
+# card build fails loudly on a missing one (gui-smoke catches it).
+_EXPERIMENTAL_LABELS = {
+    "dynamic_resolution": lambda: tr("Follow the client's resolution"),
+    "hdr": lambda: tr("HDR stream"),
+}
+_EXPERIMENTAL_DETAILS = {
+    "dynamic_resolution": lambda: tr(
+        "Resizes the stream output to the connecting Moonlight client's "
+        "resolution; the profile resolution is the startup and fallback size."),
+    "hdr": lambda: tr(
+        "gamescope advertises an HDR output and games see DXVK_HDR. "
+        "Unverified end to end."),
+}
+
 
 def _build_image() -> str:
     # runtime.build_image stamps the source hash label doctor compares against.
@@ -184,6 +199,22 @@ class SetupPage(QWidget):
         slay.addWidget(self._close_steam)
         slay.addWidget(cshint)
         root.addWidget(sframe)
+
+        eframe, elay = card(tr("Experimental features"))
+        eexpl = QLabel(tr(
+            "Global switches, applied at the next session start. "
+            "Container-side features need a current runtime image."))
+        eexpl.setProperty("muted", True)
+        eexpl.setWordWrap(True)
+        elay.addWidget(eexpl)
+        for key in config.EXPERIMENTAL_FEATURES:
+            box = QCheckBox(_EXPERIMENTAL_LABELS[key]())
+            box.setToolTip(_EXPERIMENTAL_DETAILS[key]())
+            box.setChecked(self._ctx.config.experimental.get(key, False))
+            box.toggled.connect(
+                lambda on, k=key: self._on_experimental_toggled(k, on))
+            elay.addWidget(box)
+        root.addWidget(eframe)
 
         lframe, llay = card(tr("Language"))
         lrow = QHBoxLayout()
@@ -347,6 +378,12 @@ class SetupPage(QWidget):
     def _on_close_steam_toggled(self, enabled: bool) -> None:
         self._ctx.config.close_desktop_steam = enabled
         self._ctx.save()
+
+    def _on_experimental_toggled(self, key: str, enabled: bool) -> None:
+        self._ctx.config.experimental[key] = enabled
+        self._ctx.save()
+        self._action_status.setText(
+            tr("Experimental features apply from the next session start."))
 
     def _on_change_home_root(self) -> None:
         chosen = QFileDialog.getExistingDirectory(

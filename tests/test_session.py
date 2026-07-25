@@ -1,4 +1,4 @@
-from podstage.config import SessionConfig
+from podstage.config import AppConfig, SessionConfig
 from podstage.core.session import Session
 
 
@@ -20,10 +20,14 @@ def test_options_forward_sunshine_extra_env():
     assert "nvenc_preset = 4" in env["PS_SUNSHINE_EXTRA"]
 
 
-def test_options_forward_dynamic_resolution_env():
-    sc = SessionConfig(name="deck", follow_client_resolution=True)
-    assert Session(sc)._options().env["PS_DYNAMIC_RES"] == "enabled"
-    assert "PS_DYNAMIC_RES" not in Session(SessionConfig(name="deck"))._options().env
+def test_options_forward_experimental_env():
+    sc = SessionConfig(name="deck")
+    on = AppConfig(experimental={"dynamic_resolution": True, "hdr": True})
+    env = Session(sc, app_config=on)._options().env
+    assert env["PS_DYNAMIC_RES"] == "enabled"
+    assert env["PS_HDR"] == "enabled"
+    off = Session(sc, app_config=AppConfig())._options().env
+    assert "PS_DYNAMIC_RES" not in off and "PS_HDR" not in off
 
 
 def test_start_requires_steam_login(monkeypatch):

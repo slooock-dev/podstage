@@ -20,14 +20,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sandbox's overlay size (its writes onto the shared libraries) next to the
   HOME size; "Clear overlay" discards them after confirmation. Host libraries
   and the sandbox HOME stay untouched.
-- **Follow client resolution (experimental)**: per-profile toggle. A Sunshine
-  prep-cmd resizes the output to the connecting Moonlight client's resolution
-  (`wlr-randr` inside the container) and restores the profile resolution when
-  the stream ends. Requires an image rebuild.
-- **HDR (experimental, unverified)**: `PS_HDR=enabled` starts gamescope with
-  `--hdr-enabled` and exports `DXVK_HDR=1`. Whether the stream actually
-  carries HDR depends on Sunshine's capture path and the Moonlight client.
-  Requires an image rebuild.
+- **Experimental features card**: every experimental switch lives on the
+  Setup page (persisted under `[experimental]` in config.toml, applied at the
+  next session start). Current entries:
+  - *Follow client resolution*: a Sunshine prep-cmd resizes the output to
+    the connecting Moonlight client's resolution (`wlr-randr` inside the
+    container) and restores the profile resolution when the stream ends.
+  - *HDR stream* (unverified): gamescope gets `--hdr-enabled`, games see
+    `DXVK_HDR=1`; whether the stream carries HDR depends on Sunshine's
+    capture path and the client.
+
+  Both need a current runtime image (`PS_DYNAMIC_RES`/`PS_HDR` also work as
+  plain env overrides).
 - **Intel GPU load telemetry**: on Intel the Session page now shows GPU busy
   percent from one `intel_gpu_top -J` sample, when the tool is installed and
   the GPU PMU is readable (i915/xe expose no sysfs counters; VRAM stays

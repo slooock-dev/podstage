@@ -536,7 +536,7 @@ class SessionPage(QWidget):
         sc = self._profile()
         if sc is None:
             return
-        session = Session(sc)
+        session = Session(sc, app_config=self._ctx.config)
         if not sandbox.is_bootstrapped(session.home):
             self._last_error = tr("'{name}' is not set up. Start the Steam "
                                   "login on the 'Sandboxes' page.", name=sc.name)

@@ -101,6 +101,15 @@ def sunshine_web_credentials() -> tuple[str, str]:
     return creds["user"], creds["password"]
 
 
+# Experimental features: key → container env var (set to "enabled" at session
+# start). Single registry — the Setup page renders its card from this, the
+# labels live in ui/pages/setup_page.py. Add/remove features HERE.
+EXPERIMENTAL_FEATURES: dict[str, str] = {
+    "dynamic_resolution": "PS_DYNAMIC_RES",  # follow the client's resolution
+    "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
+}
+
+
 # Common client resolution presets (output size of the virtual gamescope display).
 RESOLUTION_PRESETS: dict[str, tuple[int, int, int]] = {
     "deck": (1280, 800, 60),        # Steam Deck native (LCD; OLED can do 90)
@@ -163,10 +172,6 @@ class SessionConfig:
     # Seconds between in-container preview-thumbnail captures; 0 disables the
     # preview. Applied at container start via PS_THUMBNAIL(_INTERVAL).
     preview_interval_s: int = 10
-    # Experimental: resize the stream output to the connecting Moonlight
-    # client's resolution (Sunshine prep-cmd → wlr-randr in the container).
-    # The profile resolution stays the startup/fallback size.
-    follow_client_resolution: bool = False
 
     def is_dynamic(self) -> bool:
         """True for an "ask" profile (resolution chosen at start, not fixed)."""
@@ -209,6 +214,15 @@ class AppConfig:
     # (different) Steam account run the stream while the desktop Steam keeps
     # running its own.
     close_desktop_steam: bool = True
+    # Enabled experimental features (keys from EXPERIMENTAL_FEATURES),
+    # toggled on the Setup page, applied at the next session start.
+    experimental: dict[str, bool] = field(default_factory=dict)
+
+    def experimental_env(self) -> dict[str, str]:
+        """Container env for the enabled experimental features."""
+        return {EXPERIMENTAL_FEATURES[key]: "enabled"
+                for key, on in self.experimental.items()
+                if on and key in EXPERIMENTAL_FEATURES}
 
     @classmethod
     def load(cls, path: Path = CONFIG_FILE) -> "AppConfig":
@@ -221,9 +235,14 @@ class AppConfig:
         known = {f.name for f in fields(SessionConfig)}
         sessions = [SessionConfig(**{k: v for k, v in s.items() if k in known})
                     for s in data.get("sessions", [])]
+        # Unknown experimental keys (older/newer podstage) are dropped too.
+        experimental = {k: bool(v)
+                        for k, v in data.get("experimental", {}).items()
+                        if k in EXPERIMENTAL_FEATURES}
         return cls(sessions=sessions, language=data.get("language", "auto"),
                    sessions_home_root=data.get("sessions_home_root", ""),
-                   close_desktop_steam=data.get("close_desktop_steam", True))
+                   close_desktop_steam=data.get("close_desktop_steam", True),
+                   experimental=experimental)
 
     @classmethod
     def load_or_seed(cls, path: Path = CONFIG_FILE) -> "AppConfig":
@@ -255,6 +274,9 @@ class AppConfig:
             data["sessions_home_root"] = self.sessions_home_root
         if not self.close_desktop_steam:
             data["close_desktop_steam"] = False
+        enabled = {k: True for k, v in self.experimental.items() if v}
+        if enabled:
+            data["experimental"] = enabled
         data["sessions"] = [asdict(s) for s in self.sessions]
         path.write_text(tomli_w.dumps(data))
 

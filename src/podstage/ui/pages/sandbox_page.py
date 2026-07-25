@@ -88,15 +88,6 @@ class ProfileDialog(QDialog):
         form.addRow("", self._custom)
         self._sync_custom(self._resolution.currentText())
 
-        self._follow_client = QCheckBox(
-            tr("Follow the client's resolution (experimental)"))
-        self._follow_client.setToolTip(tr(
-            "Resizes the stream output to the connecting Moonlight client's "
-            "resolution; the resolution above is the startup/fallback size."))
-        self._follow_client.setChecked(
-            existing.follow_client_resolution if existing else False)
-        form.addRow("", self._follow_client)
-
         self._port = QSpinBox()
         self._port.setRange(1024, 64000)
         self._port.setValue(existing.sunshine_port_base if existing else 47989)
@@ -243,7 +234,6 @@ class ProfileDialog(QDialog):
             sunshine_port_base=port, home=base.home,
             sunshine_extra=dict(base.sunshine_extra),
             preview_interval_s=base.preview_interval_s,
-            follow_client_resolution=self._follow_client.isChecked(),
         )
         self.accept()
 

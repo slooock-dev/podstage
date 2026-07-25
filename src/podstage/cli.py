@@ -108,12 +108,13 @@ def _load_or_seed_config() -> AppConfig:
 
 
 def _resolve_session(name: str) -> Session | None:
-    sc = _load_or_seed_config().get(name)
+    cfg = _load_or_seed_config()
+    sc = cfg.get(name)
     if sc is None:
         print(f"No session '{name}'. Known: "
-              f"{', '.join(s.name for s in _load_or_seed_config().sessions)}", file=sys.stderr)
+              f"{', '.join(s.name for s in cfg.sessions)}", file=sys.stderr)
         return None
-    return Session(sc)
+    return Session(sc, app_config=cfg)
 
 
 def cmd_session_list(_args: argparse.Namespace) -> int:
@@ -198,8 +199,7 @@ def cmd_runtime_start(args: argparse.Namespace) -> int:
 
 
 def cmd_runtime_build(_args: argparse.Namespace) -> int:
-    """Build the runtime image with the source hash label (doctor flags a
-    stale image after containers/runtime/ changes)."""
+    """Build the runtime image with the source-hash label doctor checks."""
     try:
         print(runtime.build_image(quiet=False))
     except RuntimeError as e:
