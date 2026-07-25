@@ -250,13 +250,14 @@ class AppConfig:
 
     @classmethod
     def load_or_seed(cls, path: Path = CONFIG_FILE) -> "AppConfig":
-        """Load the config, seeding the two bring-up profiles on first use:
-        'deck' (fixed Deck resolution) and 'laptop' (resolution chosen at start)."""
+        """Load the config, seeding one bring-up profile ('deck', fixed Deck
+        resolution) on first use. One is enough to get streaming: further
+        clients are added in the GUI, and the dynamic-resolution feature
+        adapts a profile to whatever client connects."""
         cfg = cls.load(path)
         if not cfg.sessions:
             cfg = cls(sessions=[
                 SessionConfig(name="deck", resolution="deck", sunshine_port_base=47989),
-                SessionConfig(name="laptop", resolution="ask", sunshine_port_base=48989),
             ])
             cfg.save(path)
         return cfg

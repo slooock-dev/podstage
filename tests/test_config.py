@@ -205,12 +205,12 @@ def test_set_sessions_home_root_moves(tmp_path: Path, monkeypatch):
     assert AppConfig.load(tmp_path / "config.toml").sessions_home_root == str(new.resolve())
 
 
-def test_load_or_seed_creates_defaults(tmp_path: Path):
+def test_load_or_seed_creates_default(tmp_path: Path):
     path = tmp_path / "config.toml"
     cfg = AppConfig.load_or_seed(path)
-    assert {s.name for s in cfg.sessions} == {"deck", "laptop"}
+    assert [s.name for s in cfg.sessions] == ["deck"]
     assert path.exists()
     # second load returns the saved config, not a fresh seed
-    cfg.remove("laptop")
+    cfg.sessions[0].resolution = "1080p60"
     cfg.save(path)
-    assert [s.name for s in AppConfig.load_or_seed(path).sessions] == ["deck"]
+    assert [s.resolution for s in AppConfig.load_or_seed(path).sessions] == ["1080p60"]
