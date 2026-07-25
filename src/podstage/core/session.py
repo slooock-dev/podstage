@@ -113,6 +113,8 @@ class Session:
             env["PS_THUMBNAIL"] = "disabled"
         else:
             env["PS_THUMBNAIL_INTERVAL"] = str(self.cfg.preview_interval_s)
+        if self.cfg.follow_client_resolution:
+            env["PS_DYNAMIC_RES"] = "enabled"
         return runtime.RuntimeOptions(
             home_dir=self.home,
             resolution=self._resolution_str(resolution),

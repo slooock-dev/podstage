@@ -197,6 +197,17 @@ def cmd_runtime_start(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_runtime_build(_args: argparse.Namespace) -> int:
+    """Build the runtime image with the source hash label (doctor flags a
+    stale image after containers/runtime/ changes)."""
+    try:
+        print(runtime.build_image(quiet=False))
+    except RuntimeError as e:
+        print(f"build failed: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_runtime_stop(_args: argparse.Namespace) -> int:
     try:
         print("stopped" if runtime.stop() else "was not running")
@@ -310,6 +321,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="skip game/library provisioning (HOME not bootstrapped yet)")
     rs.add_argument("--client", help="profile name to record as the session owner")
     rs.set_defaults(func=cmd_runtime_start)
+    rt_sub.add_parser(
+        "build", help="(re)build the runtime image from containers/runtime/"
+    ).set_defaults(func=cmd_runtime_build)
     rt_sub.add_parser("stop", help="stop the runtime container").set_defaults(func=cmd_runtime_stop)
     rt_sub.add_parser("status", help="show runtime container status").set_defaults(func=cmd_runtime_status)
 

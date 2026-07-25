@@ -27,3 +27,25 @@ jobs:
       # installed, mirroring the local system-Python test run).
       - name: Test
         run: pytest -q
+
+  # The test job never imports src/podstage/ui (no PyQt6 by design), so an
+  # error there would stay green. This job byte-compiles the GUI modules and
+  # boots the real main window offscreen once.
+  gui-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Qt runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libglib2.0-0 libfontconfig1 libxkbcommon0 libdbus-1-3
+      - name: Install (core + GUI)
+        run: pip install -e '.[ui]'
+      - name: Byte-compile GUI modules
+        run: python -m compileall -q src/podstage/ui
+      - name: Offscreen smoke test
+        run: QT_QPA_PLATFORM=offscreen python tools/gui_smoke.py

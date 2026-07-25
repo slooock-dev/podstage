@@ -108,8 +108,8 @@ git clone https://github.com/slooock-dev/podstage && cd podstage
 python3 -m venv .venv && . .venv/bin/activate   # Fedora/Bazzite are PEP 668
 pip install -e '.[ui]'          # core + CLI + management GUI
 
-# 1. Build the runtime image (~2.5 GB, self-contained), run from the repo root
-podman build -t podstage-runtime:latest containers/runtime/
+# 1. Build the runtime image (~2.5 GB, self-contained)
+podstage runtime build
 
 # 2. Launch the management GUI
 ./ui.sh
@@ -253,8 +253,9 @@ that:
   had less testing than the NVIDIA path.
 - Intel takes the same `/dev/dri` + VAAPI wiring, with ANV Vulkan and the iHD
   media driver (Broadwell+) baked into the image. A community report confirms
-  it working out of the box on an Arc B580. The GUI shows no GPU load/VRAM
-  telemetry (the i915/xe kernel drivers expose no simple sysfs counters).
+  it working out of the box on an Arc B580. GPU load shows up in the GUI when
+  `intel_gpu_top` is installed and the GPU PMU is readable; VRAM stays
+  unavailable (the i915/xe kernel drivers expose no sysfs counters).
   `PS_GPU_VENDOR=intel` forces the path on hybrid machines.
 
 Patches widening distro and GPU support are very welcome.

@@ -146,6 +146,22 @@ TEXTS: dict[str, str] = {
     "Edit …": "Bearbeiten …",
     "Delete …": "Löschen …",
     "Start Steam login": "Steam-Login starten",
+    "Clear overlay …": "Overlay leeren …",
+    "Discards this sandbox's writes onto the shared game libraries (game "
+    "updates re-apply in the next session). Host libraries and the sandbox "
+    "HOME are untouched.":
+        "Verwirft die Schreibzugriffe dieser Sandbox auf die geteilten "
+        "Spiele-Bibliotheken (Spiel-Updates werden in der nächsten Session neu "
+        "angewendet). Host-Bibliotheken und Sandbox-HOME bleiben unberührt.",
+    "Clear overlay?": "Overlay leeren?",
+    "Discard '{name}'s writes onto the shared game libraries ({size})? Game "
+    "updates applied in a session are lost and re-apply next time; the host "
+    "libraries and the sandbox HOME are untouched.":
+        "Die Schreibzugriffe von '{name}' auf die geteilten "
+        "Spiele-Bibliotheken verwerfen ({size})? In einer Session angewendete "
+        "Spiel-Updates gehen verloren und werden beim nächsten Mal neu "
+        "angewendet; Host-Bibliotheken und Sandbox-HOME bleiben unberührt.",
+    "Overlay of '{name}' cleared.": "Overlay von '{name}' geleert.",
     "Pick at startup": "Beim Start wählen",
     "✓ logged in": "✓ eingeloggt",
     "— empty": "— leer",
@@ -185,6 +201,13 @@ TEXTS: dict[str, str] = {
     "Port in use": "Port belegt",
     "Port {port} is already used by profile '{name}'.":
         "Port {port} nutzt bereits das Profil '{name}'.",
+    "Follow the client's resolution (experimental)":
+        "Der Auflösung des Clients folgen (experimentell)",
+    "Resizes the stream output to the connecting Moonlight client's "
+    "resolution; the resolution above is the startup/fallback size.":
+        "Passt die Stream-Ausgabe an die Auflösung des verbindenden "
+        "Moonlight-Clients an; die Auflösung oben ist Start- und "
+        "Rückfallgröße.",
 
     # -- sandbox page: delete dialog ------------------------------------
     "Delete '{name}'": "'{name}' löschen",
@@ -302,12 +325,24 @@ TEXTS: dict[str, str] = {
     "{label} running …": "{label} läuft …",
     "Exit code {rc}": "Exit-Code {rc}",
     "Image built.": "Image gebaut.",
+    "Checks the GitHub releases for a newer version — only when you click, "
+    "podstage never phones home on its own.":
+        "Prüft die GitHub-Releases auf eine neuere Version, aber nur per "
+        "Klick; podstage telefoniert nie von selbst nach Hause.",
+    "Installed: {current}": "Installiert: {current}",
+    "Check for updates": "Auf Updates prüfen",
+    "Open release page": "Release-Seite öffnen",
+    "podstage {current} is up to date.": "podstage {current} ist aktuell.",
+    "Version {latest} is available (installed: {current}).":
+        "Version {latest} ist verfügbar (installiert: {current}).",
+    "The release notes mention an image rebuild.":
+        "Die Release-Notes erwähnen einen Image-Rebuild.",
+    "Update check failed: {msg}": "Update-Prüfung fehlgeschlagen: {msg}",
     "udev rules installed. Input isolation and device access "
     "are set up.":
         "udev-Regeln installiert. Eingabe-Isolation und Gerätezugriff "
         "sind eingerichtet.",
     "Done.": "Erledigt.",
-    "podman build failed:\n{tail}": "podman build fehlgeschlagen:\n{tail}",
 
     # -- setup page: uninstall --------------------------------------------
     "Remove podstage": "podstage entfernen",

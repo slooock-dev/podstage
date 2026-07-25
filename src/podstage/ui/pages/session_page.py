@@ -241,9 +241,9 @@ class SessionPage(QWidget):
         self._vram = Meter("VRAM")
         rows = [self._cpu, self._ram, self._gpu, self._vram]
         # The NVENC session count is an NVIDIA-only signal (nvidia-smi); the
-        # amdgpu kernel interface exposes no per-encoder counter (and Intel
-        # none at all), so drop the row rather than show a permanently empty
-        # one.
+        # amdgpu kernel interface exposes no per-encoder counter (Intel gets
+        # only a busy % via intel_gpu_top), so drop the row rather than show a
+        # permanently empty one.
         self._nvenc = InfoRow("NVENC") if self._nvidia else None
         if self._nvenc is not None:
             rows.append(self._nvenc)

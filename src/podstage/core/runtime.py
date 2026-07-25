@@ -28,6 +28,7 @@ REAL /dev/uinput — there is no proxy layer in between.
 """
 
 import glob
+import hashlib
 import json
 import os
 import shutil
@@ -37,7 +38,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import config
-from . import provisioner, steam
+from . import provisioner, steam, udev
 
 CONTAINER_NAME = "podstage-runtime"
 DEFAULT_IMAGE = "podstage-runtime:latest"
@@ -96,6 +97,13 @@ _FORWARD_ENV: dict[str, str | None] = {
     # In-container thumbnail loop (entrypoint defaults: enabled, every 10s).
     "PS_THUMBNAIL": None,
     "PS_THUMBNAIL_INTERVAL": None,
+    # "enabled" → a Sunshine prep-cmd resizes the output to the connecting
+    # client's resolution (experimental; set from the profile's
+    # follow_client_resolution).
+    "PS_DYNAMIC_RES": None,
+    # "enabled" → gamescope advertises an HDR output and games see DXVK_HDR
+    # (experimental, unverified end to end).
+    "PS_HDR": None,
 }
 
 
@@ -374,6 +382,82 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     return args
 
 
+# -- image build + staleness ------------------------------------------------
+
+# Label carrying the sha256 of containers/runtime/ at build time. doctor and
+# start() compare it against the current sources, so a forgotten rebuild after
+# a containers/runtime/ change surfaces as a warning instead of as subtle
+# in-container misbehavior.
+SRC_HASH_LABEL = "io.podstage.src-hash"
+RUNTIME_SRC_SUBDIR = "containers/runtime"
+
+
+def runtime_src_dir() -> Path:
+    return udev.REPO_ROOT / RUNTIME_SRC_SUBDIR
+
+
+def runtime_src_hash() -> str | None:
+    """sha256 over containers/runtime/ (relative names + contents) — the
+    identity of the image sources. None without a source checkout."""
+    src = runtime_src_dir()
+    if not src.is_dir():
+        return None
+    h = hashlib.sha256()
+    for p in sorted(src.rglob("*")):
+        if p.is_file():
+            h.update(str(p.relative_to(src)).encode() + b"\0" + p.read_bytes())
+    return h.hexdigest()
+
+
+def image_src_hash(image: str = DEFAULT_IMAGE) -> str | None:
+    """The source hash baked into the image at build time (None if the image
+    is missing or was built without the label, e.g. by plain podman build)."""
+    rc, out = _run(["podman", "image", "inspect", "--format",
+                    f'{{{{index .Config.Labels "{SRC_HASH_LABEL}"}}}}', image])
+    if rc != 0:
+        return None
+    out = out.strip()
+    return out if out and out != "<no value>" else None
+
+
+def image_is_stale(image: str = DEFAULT_IMAGE) -> bool | None:
+    """True if the image predates the current containers/runtime/ sources (or
+    carries no source label); False if it matches; None if there is nothing to
+    compare (no checkout, or the image does not exist)."""
+    current = runtime_src_hash()
+    if current is None:
+        return None
+    rc, _ = _run(["podman", "image", "exists", image])
+    if rc != 0:
+        return None
+    return image_src_hash(image) != current
+
+
+def build_image(image: str = DEFAULT_IMAGE, *, quiet: bool = True) -> str:
+    """Build the runtime image with the source hash as a label (the CLI's
+    ``runtime build`` and the GUI's build button both come through here).
+    ``quiet=False`` streams podman's output to the terminal."""
+    src = runtime_src_dir()
+    if not src.is_dir():
+        raise RuntimeError(f"{src} not found — building needs a source checkout")
+    cmd = ["podman", "build", "-t", image]
+    src_hash = runtime_src_hash()
+    if src_hash:
+        cmd += ["--label", f"{SRC_HASH_LABEL}={src_hash}"]
+    cmd.append(str(src))
+    if quiet:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
+                           check=False)
+        if p.returncode != 0:
+            tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-8:])
+            raise RuntimeError(f"podman build failed:\n{tail}")
+    else:
+        rc = subprocess.call(cmd)
+        if rc != 0:
+            raise RuntimeError(f"podman build failed (exit {rc})")
+    return f"{image} built"
+
+
 # -- mDNS discovery ---------------------------------------------------------
 
 def start_publisher(name: str = "podstage", port: int = DEFAULT_SUNSHINE_PORT) -> int | None:
@@ -469,6 +553,10 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     if st.running:
         who = f" (client '{st.client}')" if st.client else ""
         raise RuntimeError(f"a podstage session is already running{who} — stop it first")
+
+    if image_is_stale(opts.image):
+        print("[podstage] runtime image is stale — containers/runtime/ changed "
+              "since it was built; rebuild with: podstage runtime build")
 
     # Provision here (the one place with the side effect), then hand the
     # discovered libraries to the pure args builder.

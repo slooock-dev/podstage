@@ -14,6 +14,10 @@
 #        to a random per-sandbox password persisted in the mounted HOME —
 #        there is deliberately no fixed default credential)
 #   PS_CSRF_ORIGINS   comma-sep allowed web-UI origins             (default: auto-detected LAN IPs)
+#   PS_DYNAMIC_RES    enabled → a Sunshine prep-cmd resizes the output to the
+#       connecting client's resolution (experimental)
+#   PS_HDR            enabled → gamescope advertises an HDR output, games see
+#       DXVK_HDR (experimental, unverified end to end)
 #   PS_FAKE_UDEV      1 → seat-shim fakes the udev hotplug monitor for cage
 #       (required rootless: the kernel delivers no uevents into a user
 #        namespace; the host runtime always sets it)
@@ -137,6 +141,15 @@ for _ in \$(seq 1 20); do wlr-randr >/dev/null 2>&1 && break; sleep 0.2; done
 wlr-randr --output HEADLESS-1 --custom-mode ${PS_W}x${PS_H} >/dev/null 2>&1 || true
 EOF
 
+# Experimental HDR: gamescope advertises an HDR output to its clients and
+# games see DXVK_HDR. Whether the stream actually carries HDR further depends
+# on Sunshine's capture path and the Moonlight client — hence opt-in.
+GS_HDR_FLAGS=""
+if [ "${PS_HDR:-}" = enabled ]; then
+    GS_HDR_FLAGS="--hdr-enabled"
+    echo 'export DXVK_HDR=1' >> "$RUNNER"
+fi
+
 if [ "$PS_MODE" = pipeline ]; then
     # Sunshine config (per-run), then background it so it inherits cage's
     # WAYLAND_DISPLAY and captures the cage output via wlr.
@@ -203,6 +216,26 @@ CONF
         printf '%s\n' "$PS_SUNSHINE_EXTRA" | tr ';' '\n' \
             >> "$SUN_CONF_DIR/sunshine.conf"
     fi
+    # Follow the connecting client's resolution (experimental): a Sunshine
+    # prep-cmd resizes cage's headless output to the client's WxH before the
+    # capture starts; gamescope tracks the resize (nested wayland client), so
+    # Steam can then offer the larger display resolution. undo restores the
+    # profile resolution when the stream ends. The prep-cmd inherits cage's
+    # WAYLAND_DISPLAY through Sunshine, so wlr-randr just works.
+    if [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
+        RESIZE="$SUN_CONF_DIR/resize.sh"
+        cat > "$RESIZE" <<RESIZE_EOF
+#!/usr/bin/env bash
+# do: client resolution from Sunshine; "reset": back to the profile size.
+W=\${SUNSHINE_CLIENT_WIDTH:-}; H=\${SUNSHINE_CLIENT_HEIGHT:-}
+[ "\${1:-}" = reset ] && { W=${PS_W}; H=${PS_H}; }
+[ -n "\$W" ] && [ -n "\$H" ] && \
+    wlr-randr --output HEADLESS-1 --custom-mode "\${W%%.*}x\${H%%.*}" || true
+RESIZE_EOF
+        chmod +x "$RESIZE"
+        printf 'global_prep_cmd = [{"do":"%s","undo":"%s reset"}]\n' \
+            "$RESIZE" "$RESIZE" >> "$SUN_CONF_DIR/sunshine.conf"
+    fi
     # Seed a default web-manager login headlessly so no first-run setup is needed.
     log "setting Sunshine web login ($PS_WEB_USER) + CSRF origins"
     /usr/bin/sunshine "$SUN_CONF_DIR/sunshine.conf" \
@@ -238,13 +271,13 @@ EOF
     fi
     cat >> "$RUNNER" <<EOF
 exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
-     --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
 elif [ "$PS_MODE" = steam ]; then
     # No Sunshine — just render Steam in the nested compositor (boot smoke test).
     cat >> "$RUNNER" <<EOF
 exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
-     --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
 fi
 chmod +x "$RUNNER"

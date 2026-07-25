@@ -112,6 +112,14 @@ def test_sunshine_extra_roundtrip(tmp_path: Path):
         "nvenc_preset": "4", "nvenc_twopass": "full_res"}
 
 
+def test_follow_client_resolution_roundtrip(tmp_path: Path):
+    assert SessionConfig(name="x").follow_client_resolution is False
+    path = tmp_path / "config.toml"
+    AppConfig(sessions=[SessionConfig(name="deck",
+                                      follow_client_resolution=True)]).save(path)
+    assert AppConfig.load(path).get("deck").follow_client_resolution is True
+
+
 def test_preview_interval_roundtrip(tmp_path: Path):
     cfg = AppConfig(sessions=[SessionConfig(name="deck", preview_interval_s=25)])
     path = tmp_path / "config.toml"

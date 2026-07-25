@@ -5,8 +5,10 @@ Everything here is readable as the plain user (the container is rootless):
   * CPU/RAM come from the container's cgroup v2 files (``cpu.stat`` /
     ``memory.current``), located via the world-readable cmdline of the cage
     process.
-  * GPU/NVENC come from ``nvidia-smi`` on NVIDIA, or the amdgpu sysfs
-    (``gpu_busy_percent`` + ``mem_info_vram_*``) on AMD — both unprivileged.
+  * GPU/NVENC come from ``nvidia-smi`` on NVIDIA, the amdgpu sysfs
+    (``gpu_busy_percent`` + ``mem_info_vram_*``) on AMD, or one
+    ``intel_gpu_top -J`` sample on Intel (works only where the GPU PMU is
+    readable; on failure there simply are no stats).
   * The active game from the running ``SteamLaunch AppId=`` process.
 
 There is deliberately NO connected-client detection: Sunshine's media path is
@@ -16,7 +18,9 @@ complexity without real value. The NVENC session count in the GPU stats is
 the honest "something is encoding" signal.
 """
 
+import json
 import re
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -80,13 +84,13 @@ def gpu_stats() -> GpuStats | None:
     NVIDIA reads ``nvidia-smi`` (including the NVENC session count). AMD reads
     the amdgpu sysfs (``gpu_busy_percent`` + ``mem_info_vram_*``); the kernel
     exposes no per-encoder session count there, so ``encoder_sessions`` stays
-    None on AMD. Intel (i915/xe) has no comparable sysfs interface
-    (``intel_gpu_top`` needs perf privileges), so no stats there."""
+    None on AMD. Intel (i915/xe) has no sysfs interface at all — the busy
+    percentage comes from one ``intel_gpu_top`` sample where available."""
     vendor = runtime.gpu_vendor()
     if vendor == "amd":
         return _amd_gpu_stats()
     if vendor == "intel":
-        return None
+        return _intel_gpu_stats()
     return _nvidia_gpu_stats()
 
 
@@ -158,6 +162,60 @@ def _amd_gpu_stats() -> GpuStats | None:
         mem_total_mb=total // (1 << 20) if total is not None else None,
         encoder_sessions=None,
     )
+
+
+def _parse_intel_gpu_top(out: str) -> GpuStats | None:
+    """The LAST complete top-level JSON object from ``intel_gpu_top -J``
+    streaming output (the first sample right after startup is often zero).
+    Busy % comes from the Render/3D engine; i915/xe expose no VRAM counters,
+    so the memory fields stay None."""
+    samples = []
+    depth, start = 0, None
+    for i, ch in enumerate(out):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start is not None:
+                try:
+                    samples.append(json.loads(out[start:i + 1]))
+                except json.JSONDecodeError:
+                    pass
+                start = None
+    for data in reversed(samples):
+        engines = data.get("engines") or {}
+        for name, vals in engines.items():
+            if not name.lower().startswith("render"):
+                continue
+            try:
+                busy = round(float(vals.get("busy")))
+            except (TypeError, ValueError):
+                continue
+            return GpuStats(name="Intel GPU", util_pct=busy)
+    return None
+
+
+def _intel_gpu_stats() -> GpuStats | None:
+    """One short ``intel_gpu_top -J`` sample. Reading the GPU PMU needs
+    CAP_PERFMON or a relaxed perf_event_paranoid — if the tool is missing or
+    unreadable this returns None and the GUI shows no GPU load."""
+    if shutil.which("intel_gpu_top") is None:
+        return None
+    try:
+        p = subprocess.run(["intel_gpu_top", "-J", "-s", "300"],
+                           capture_output=True, text=True, timeout=1.2,
+                           check=False)
+        out = p.stdout or ""
+    except subprocess.TimeoutExpired as e:
+        # -J streams until killed; the timeout IS the normal exit path.
+        out = e.stdout or ""
+        if isinstance(out, bytes):
+            out = out.decode(errors="replace")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return _parse_intel_gpu_top(out)
 
 
 # -- container CPU / RAM via cgroup v2 --------------------------------------

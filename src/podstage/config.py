@@ -163,6 +163,10 @@ class SessionConfig:
     # Seconds between in-container preview-thumbnail captures; 0 disables the
     # preview. Applied at container start via PS_THUMBNAIL(_INTERVAL).
     preview_interval_s: int = 10
+    # Experimental: resize the stream output to the connecting Moonlight
+    # client's resolution (Sunshine prep-cmd → wlr-randr in the container).
+    # The profile resolution stays the startup/fallback size.
+    follow_client_resolution: bool = False
 
     def is_dynamic(self) -> bool:
         """True for an "ask" profile (resolution chosen at start, not fixed)."""
