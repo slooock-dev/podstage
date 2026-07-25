@@ -180,8 +180,8 @@ streaming needs the Moonlight pairing PIN. The image is built locally
 | Page | What it does |
 |------|--------------|
 | **Session** | Start/stop the stream, the active game, CPU/GPU/VRAM/encoder meters, a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
-| **Sandboxes** | Client profiles, per-sandbox status (login, paired clients, disk size), the visible Steam-login bootstrap. |
-| **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, UI language. |
+| **Sandboxes** | Client profiles, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
+| **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, experimental feature toggles, an on-demand update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
 
 <p align="center">
@@ -191,9 +191,10 @@ streaming needs the Moonlight pairing PIN. The image is built locally
 
 The GUI needs PyQt6; everything else runs under any Python ≥ 3.11. `./ui.sh`
 selects the interpreter (`$PS_QT_PYTHON` if set, otherwise the first of
-`python3`, `python`, Homebrew's `python3` that can `import PyQt6`) and points
-Qt's plugin path at PyQt6's bundled `Qt6/plugins`, falling back to Homebrew's
-`qtbase` plugins (`$QT_PLUGIN_PATH` overrides).
+`python3`, `python`, Homebrew's `python3` that can `import PyQt6`) and hands
+Qt's plugin path (PyQt6's bundled `Qt6/plugins`, else Homebrew's `qtbase`
+plugins) to the app, which applies it in-process, so child processes keep a
+clean environment. A caller-set `$QT_PLUGIN_PATH` overrides.
 
 ## Image quality
 
@@ -226,6 +227,7 @@ artifacts; on AMD, raise the VAAPI quality profile.
 ```
 podstage doctor                    # validate the environment
 podstage setup                     # print guided (sudo) setup commands
+podstage runtime build             # (re)build the runtime image
 podstage runtime start|stop|status # drive the container directly (by HOME dir)
 podstage session list|start|stop|status <name>
 podstage provision <app_id> <session>

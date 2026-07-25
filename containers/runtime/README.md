@@ -17,8 +17,11 @@ on Vulkan; there is no virtual DRM display involved.
 ## Build
 
 ```bash
-podman build -t podstage-runtime:latest -f Containerfile .
+podstage runtime build    # from the repo root; stamps the source-hash label
 ```
+
+A plain `podman build -t podstage-runtime:latest .` works too, but lacks the
+label, so `doctor` reports the image as stale.
 
 ## Run
 
@@ -43,6 +46,11 @@ Examples:
 
 `homes/deck` is an isolated, already-logged-in Steam sandbox HOME as created by
 the GUI's Steam-login bootstrap (or `podstage session setup`).
+
+Experimental (toggled on the GUI's Setup page, or as env): `PS_DYNAMIC_RES=enabled`
+resizes the output to the connecting client via a Sunshine prep-cmd;
+`PS_HDR=enabled` adds gamescope `--hdr-enabled` plus `DXVK_HDR=1` (unverified
+end to end).
 
 ## Required run flags (why)
 

@@ -16,8 +16,12 @@ pytest
 The runtime is a container. Build it once to exercise the full pipeline:
 
 ```bash
-podman build -t podstage-runtime:latest containers/runtime/
+podstage runtime build
 ```
+
+This stamps a hash of `containers/runtime/` into the image; `doctor` flags an
+image whose sources changed since the build (a plain `podman build` counts as
+stale because it lacks the label).
 
 ## Architecture at a glance
 
@@ -70,13 +74,14 @@ modules (no PyQt6 under the system Python), so a syntax error there stays green 
 pytest. When you touch `src/podstage/ui/`, also run:
 
 ```bash
-ruff check src/ tests/                                    # lint (must be clean)
-python -m compileall src/podstage/ui                    # or: ast.parse each file
-QT_QPA_PLATFORM=offscreen PS_QT_PYTHON=<qt-python> ./ui.sh # offscreen smoke test
+ruff check src/ tests/                                     # lint (must be clean)
+python -m compileall src/podstage/ui                       # catches syntax errors
+QT_QPA_PLATFORM=offscreen <qt-python> tools/gui_smoke.py   # boots the window, visits every page
 ```
 
-An offscreen `win.grab().save("out.png")` is a reliable way to verify a page
-renders without a display.
+CI runs the same two steps in its `gui-smoke` job. For interactive poking,
+`QT_QPA_PLATFORM=offscreen PS_QT_PYTHON=<qt-python> ./ui.sh` plus an offscreen
+`win.grab().save("out.png")` verifies a page renders without a display.
 
 ## Translations (i18n)
 
@@ -99,8 +104,13 @@ Language selection: `config.language` (`auto`/`en`/`de`, set in the Setup panel)
 - Add checks to `core/doctor.py` whenever a new external dependency is introduced.
   Doctor detail strings are English technical diagnostics (shared with the CLI)
   and are intentionally not translated.
+- Experimental features live in exactly one place: the `EXPERIMENTAL_FEATURES`
+  registry in `config.py` (key → container env) plus labels/tooltips in
+  `ui/pages/setup_page.py` (Setup → *Experimental features*). Add new switches
+  there, drop the entry when a feature stabilizes or dies; no experimental
+  toggles anywhere else.
 - Run `pytest` and `ruff check` before opening a PR; touch the GUI → also do the
   offscreen smoke test above.
 - After changing `containers/runtime/`, rebuild the image (Setup → *Build
-  image* or `podman build -t podstage-runtime:latest containers/runtime/`);
-  the next start picks it up directly from your user's image store.
+  image* or `podstage runtime build`); the next start picks it up directly
+  from your user's image store. `doctor` warns while the image is stale.
