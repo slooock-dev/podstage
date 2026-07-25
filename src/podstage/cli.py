@@ -12,7 +12,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import AppConfig
-from .core import doctor, provisioner, runtime
+from .core import doctor, provisioner, runtime, sunshine_api
 from .core.session import Session
 
 # ANSI colours; disabled when stdout is not a TTY.
@@ -146,7 +146,29 @@ def cmd_session_start(args: argparse.Namespace) -> int:
         port = s.cfg.sunshine_port_base
         print(f"Session '{args.name}' started (container podstage-runtime).")
         print(f"  Pair once at https://localhost:{port + 1}  (Sunshine web UI)")
+        print(f"  or: podstage session pair {args.name} <PIN>  (PIN shown by Moonlight)")
         print("  Logs: journalctl -f CONTAINER_NAME=podstage-runtime")
+    return 0
+
+
+def cmd_session_pair(args: argparse.Namespace) -> int:
+    """Complete a Moonlight pairing against the running session's Sunshine."""
+    s = _resolve_session(args.name)
+    if s is None:
+        return 1
+    device = args.device or args.name
+    try:
+        ok = sunshine_api.pair(args.pin, device,
+                               web_port=s.cfg.sunshine_port_base + 1)
+    except sunshine_api.SunshineApiError as e:
+        print(f"pair failed: {e} — is the session running?", file=sys.stderr)
+        return 1
+    if not ok:
+        print("pair failed: Sunshine rejected the PIN — start the pairing in "
+              "Moonlight first, then submit its PIN here before it expires",
+              file=sys.stderr)
+        return 1
+    print(f"Paired '{device}' with session '{args.name}'.")
     return 0
 
 
@@ -340,6 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
         "start": cmd_session_start,
         "stop": cmd_session_stop,
         "status": cmd_session_status,
+        "pair": cmd_session_pair,
     }
     for action, handler in handlers.items():
         sp = sess_sub.add_parser(action)
@@ -354,6 +377,10 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--mode", default="pipeline",
                             choices=["pipeline", "desktop", "steam", "probe", "shell"],
                             help="container mode (default: pipeline)")
+        if action == "pair":
+            sp.add_argument("pin", help="4-digit PIN shown by Moonlight")
+            sp.add_argument("--device",
+                            help="client name recorded by Sunshine (default: profile name)")
         sp.set_defaults(func=handler)
 
     return p
