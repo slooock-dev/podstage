@@ -152,11 +152,22 @@ def cmd_session_start(args: argparse.Namespace) -> int:
 
 
 def cmd_session_pair(args: argparse.Namespace) -> int:
-    """Complete a Moonlight pairing against the running session's Sunshine."""
+    """Complete a Moonlight pairing against the running session's Sunshine.
+
+    /api/pin only reports "PIN accepted into a pending pairing attempt" —
+    a wrong PIN still returns true and the handshake fails afterwards on the
+    client. The real outcome lands in the sandbox's persistent pairing state
+    (state.json named_devices), so watch that for the confirmation.
+    """
+    import time
+
+    from .core import sandbox
+
     s = _resolve_session(args.name)
     if s is None:
         return 1
     device = args.device or args.name
+    before = set(sandbox.paired_clients(s.home))
     try:
         ok = sunshine_api.pair(args.pin, device,
                                web_port=s.cfg.sunshine_port_base + 1)
@@ -164,12 +175,20 @@ def cmd_session_pair(args: argparse.Namespace) -> int:
         print(f"pair failed: {e} — is the session running?", file=sys.stderr)
         return 1
     if not ok:
-        print("pair failed: Sunshine rejected the PIN — start the pairing in "
-              "Moonlight first, then submit its PIN here before it expires",
-              file=sys.stderr)
+        print("pair failed: no pairing attempt was pending (start the pairing "
+              "in Moonlight first, then submit its PIN here)", file=sys.stderr)
         return 1
-    print(f"Paired '{device}' with session '{args.name}'.")
-    return 0
+    for _ in range(20):  # the client-side handshake finishes within seconds
+        new = set(sandbox.paired_clients(s.home)) - before
+        if new:
+            print(f"Paired '{', '.join(sorted(new))}' with session '{args.name}'.")
+            return 0
+        time.sleep(0.5)
+    print("PIN submitted, but no new pairing appeared — wrong/expired PIN, or "
+          "a stale pairing attempt swallowed it (Sunshine answers the oldest "
+          "one). Restart pairing in Moonlight and retry; if it keeps failing, "
+          "restart the session to clear stale attempts.", file=sys.stderr)
+    return 1
 
 
 def cmd_session_stop(args: argparse.Namespace) -> int:
