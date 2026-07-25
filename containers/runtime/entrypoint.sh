@@ -7,7 +7,10 @@
 #
 # Env:
 #   PS_RESOLUTION   WxH@R              client resolution           (default 1280x800@60)
-#   PS_MODE         pipeline|shell|probe|steam  what to run        (default pipeline)
+#   PS_MODE         pipeline|desktop|shell|probe|steam  what to run (default pipeline)
+#       desktop (experimental): no gamescope — the target runs directly under
+#       cage with pointer input + cursor enabled (keyboard/mouse streaming)
+#   PS_DESKTOP_CMD  desktop-mode launch target                     (default: steam desktop UI)
 #   PS_SUNSHINE_PORT  base port                                    (default 47989)
 #   PS_WEB_USER / PS_WEB_PASS   Sunshine web-manager login
 #       (normally passed in by the host runtime; unset PS_WEB_PASS falls back
@@ -40,6 +43,12 @@ if [ -n "$PS_APP" ]; then
     STEAM_LAUNCH="steam $PS_STEAM_FLAGS steam://rungameid/$PS_APP"
 else
     STEAM_LAUNCH="steam $PS_STEAM_FLAGS"
+fi
+# desktop mode: no gamescope — cage runs the target itself (cage is built with
+# Xwayland, so the X11 Steam desktop UI works). Default is Steam's desktop UI.
+if [ "$PS_MODE" = desktop ]; then
+    STEAM_LAUNCH="${PS_DESKTOP_CMD:-steam}"
+    [ -n "$PS_APP" ] && STEAM_LAUNCH="$STEAM_LAUNCH steam://rungameid/$PS_APP"
 fi
 
 # Steam/gamescope env cribbed from games-on-whales (their Steam UI renders on
@@ -147,7 +156,7 @@ if [ "${PS_HDR:-}" = enabled ]; then
     echo 'export DXVK_HDR=1' >> "$RUNNER"
 fi
 
-if [ "$PS_MODE" = pipeline ]; then
+if [ "$PS_MODE" = pipeline ] || [ "$PS_MODE" = desktop ]; then
     # Sunshine config (per-run), then background it so it inherits cage's
     # WAYLAND_DISPLAY and captures the cage output via wlr.
     SUN_CONF_DIR="$XDG_RUNTIME_DIR/sunshine"
@@ -180,8 +189,10 @@ if [ "$PS_MODE" = pipeline ]; then
             case "$ip" in *.*.*.*) PS_CSRF_ORIGINS="$PS_CSRF_ORIGINS,https://${ip}:${web_port}";; esac
         done
     fi
+    APP_NAME="Steam Big Picture"
+    [ "$PS_MODE" = desktop ] && APP_NAME="Desktop"
     cat > "$SUN_CONF_DIR/apps.json" <<JSON
-{"env":{},"apps":[{"name":"Steam Big Picture","image-path":""}]}
+{"env":{},"apps":[{"name":"$APP_NAME","image-path":""}]}
 JSON
     # mouse = disabled kills mouse AND touch injection (Sunshine drops touch
     # when mouse is off). Pointer input is cut by decision: motion reaches
@@ -191,12 +202,16 @@ JSON
     # PS_MOUSE_INPUT=enabled re-enables the pointer for experiments.
     # native_pen_touch stays disabled so any re-enabled pointer arrives as
     # mouse events (the only kind gamescope's Wayland backend understands).
+    # desktop mode has no gamescope in the chain, so none of that applies —
+    # the pointer default flips to enabled there.
+    MOUSE_DEFAULT=disabled
+    [ "$PS_MODE" = desktop ] && MOUSE_DEFAULT=enabled
     cat > "$SUN_CONF_DIR/sunshine.conf" <<CONF
 sunshine_name = podstage
 port = $PS_SUNSHINE_PORT
 encoder = ${PS_ENCODER:-nvenc}
 capture = wlr
-mouse = ${PS_MOUSE_INPUT:-disabled}
+mouse = ${PS_MOUSE_INPUT:-$MOUSE_DEFAULT}
 native_pen_touch = ${PS_NATIVE_TOUCH:-disabled}
 origin_web_ui_allowed = lan
 csrf_allowed_origins = $PS_CSRF_ORIGINS
@@ -263,10 +278,18 @@ EOF
 ) >/dev/null 2>&1 &
 EOF
     fi
-    cat >> "$RUNNER" <<EOF
+    if [ "$PS_MODE" = desktop ]; then
+        # No gamescope: cage displays the target directly (and provides
+        # Xwayland for it); pointer/keyboard events go straight to the app.
+        cat >> "$RUNNER" <<EOF
+exec ${STEAM_LAUNCH}
+EOF
+    else
+        cat >> "$RUNNER" <<EOF
 exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
      ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
+    fi
 elif [ "$PS_MODE" = steam ]; then
     # No Sunshine — just render Steam in the nested compositor (boot smoke test).
     cat >> "$RUNNER" <<EOF
@@ -297,5 +320,13 @@ export WLR_LIBINPUT_NO_DEVICES=1
 SHIM=/usr/local/lib/podstage-seat-shim.so
 [ -e "$SHIM" ] && export LD_PRELOAD="$SHIM" || log "(warning) seat shim missing — cage will use seat0 (desktop input leaks!)"
 
-log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → gamescope ${PS_W}x${PS_H}@${PS_R} → steam  [mode=$PS_MODE]"
+# desktop mode streams a pointer-driven UI — show the cursor (the shim blanks
+# it by default so Sunshine's dead virtual pointer isn't burned into the
+# gamepad-only capture). PS_SHOW_CURSOR=0 forces it off again.
+if [ "$PS_MODE" = desktop ]; then
+    export PS_SHOW_CURSOR="${PS_SHOW_CURSOR:-1}"
+    log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → ${STEAM_LAUNCH} ${PS_W}x${PS_H}  [mode=desktop]"
+else
+    log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → gamescope ${PS_W}x${PS_H}@${PS_R} → steam  [mode=$PS_MODE]"
+fi
 exec cage -d -- "$RUNNER"

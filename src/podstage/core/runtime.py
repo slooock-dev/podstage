@@ -85,6 +85,8 @@ _FORWARD_ENV: dict[str, str | None] = {
     "PS_NATIVE_TOUCH": "disabled",
     "PS_MOUSE_INPUT": "disabled",
     "PS_SHOW_CURSOR": "",
+    # Desktop-mode launch target (entrypoint default: Steam desktop UI).
+    "PS_DESKTOP_CMD": None,
     # Web-UI login: no fixed default — container_env() fills these from the
     # per-install random credentials (config.sunshine_web_credentials) unless
     # the caller/environment sets them explicitly.
@@ -114,7 +116,7 @@ class RuntimeOptions:
 
     home_dir: Path
     resolution: str = "1280x800@60"
-    mode: str = "pipeline"  # pipeline|steam|probe|shell
+    mode: str = "pipeline"  # pipeline|desktop|steam|probe|shell
     app: str = ""  # Steam AppID → boot straight into the game
     image: str = DEFAULT_IMAGE
     sunshine_port: int = DEFAULT_SUNSHINE_PORT
@@ -284,6 +286,13 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
     if opts.env.get("PS_GAMESCOPE_WSI", os.environ.get("PS_GAMESCOPE_WSI")) != "enabled":
         env["DISABLE_GAMESCOPE_WSI"] = "1"
     env.update(_forwarded_env(opts))
+    # Desktop mode (experimental) streams a pointer-driven UI without
+    # gamescope — the gamepad-only pointer decision doesn't apply there, so
+    # flip the defaults unless the caller pinned them.
+    if opts.mode == "desktop":
+        for key, val in (("PS_MOUSE_INPUT", "enabled"), ("PS_SHOW_CURSOR", "1")):
+            if key not in opts.env and not os.environ.get(key):
+                env[key] = val
     if "PS_WEB_USER" not in env or "PS_WEB_PASS" not in env:
         user, password = config.sunshine_web_credentials()
         env.setdefault("PS_WEB_USER", user)
@@ -557,7 +566,7 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     ensure_overlay_dirs(opts.home_dir, library_paths)
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)
     publisher_pid = None
-    if opts.mode == "pipeline":
+    if opts.mode in ("pipeline", "desktop"):
         publisher_pid = start_publisher(port=opts.sunshine_port)
     save_state(opts, publisher_pid)
     try:

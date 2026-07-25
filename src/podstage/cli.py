@@ -314,7 +314,7 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--home", required=True, help="host dir holding the isolated Steam HOME")
     rs.add_argument("--resolution", default="1280x800@60", metavar="WxH@R")
     rs.add_argument("--mode", default="pipeline",
-                    choices=["pipeline", "steam", "probe", "shell"])
+                    choices=["pipeline", "desktop", "steam", "probe", "shell"])
     rs.add_argument("--app", metavar="APPID", help="Steam AppID — boot straight into the game")
     rs.add_argument("--attach", action="store_true", help="stay attached in the foreground")
     rs.add_argument("--no-provision", action="store_true",
@@ -352,7 +352,7 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--attach", action="store_true",
                             help="stay attached in the foreground instead of detaching")
             sp.add_argument("--mode", default="pipeline",
-                            choices=["pipeline", "steam", "probe", "shell"],
+                            choices=["pipeline", "desktop", "steam", "probe", "shell"],
                             help="container mode (default: pipeline)")
         sp.set_defaults(func=handler)
 

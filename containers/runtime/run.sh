@@ -6,7 +6,7 @@
 # This script keeps the historical interface:
 #
 #   ./run.sh [MODE] [HOME_DIR] [RESOLUTION] [APPID]
-#     MODE        pipeline|steam|probe|shell   (default pipeline)
+#     MODE        pipeline|desktop|steam|probe|shell   (default pipeline)
 #     HOME_DIR    host dir for the Steam HOME  (default <repo>/homes/deck)
 #     RESOLUTION  WxH@R                         (default 1280x800@60)
 #     APPID       Steam AppID → boot straight into the game (or PS_APP)
