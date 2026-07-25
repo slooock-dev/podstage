@@ -171,6 +171,14 @@ if [ "${PS_HDR:-}" = enabled ]; then
     echo 'export DXVK_HDR=1' >> "$RUNNER"
 fi
 
+# gamescope's built-in default cursor is composited into the frame from boot
+# (a stray glyph for gamepad-only clients) — hand it a transparent one. The
+# app cursor (Steam/game via the cursor theme) takes over on real mouse use.
+BLANK_CURSOR=/tmp/blank-cursor.png
+printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAABAAAAAQBPJcTWAAAAK0lEQVR4nO3OMQ0AAAwDoDWZf82V0QcUkBt7AQEBAQEBAQEBAQEBAQGBdaAIPAB+tRv9/AAAAABJRU5ErkJggg==' \
+    | base64 -d > "$BLANK_CURSOR"
+GS_CURSOR_FLAGS="--cursor $BLANK_CURSOR"
+
 if [ "$PS_MODE" = pipeline ] || [ "$PS_MODE" = desktop ]; then
     # Sunshine config (per-run), then background it so it inherits cage's
     # WAYLAND_DISPLAY and captures the cage output via wlr.
@@ -316,19 +324,19 @@ EOF
 echo "[podstage] waiting for the first client (dynamic resolution)" >&2
 read -r CW CH CR < "$SUN_CONF_DIR/client-mode.fifo"
 exec gamescope --backend wayland -W "\$CW" -H "\$CH" -w "\$CW" -h "\$CH" -r "\$CR" \\
-     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+     ${GS_CURSOR_FLAGS} ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
     else
         cat >> "$RUNNER" <<EOF
 exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
-     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+     ${GS_CURSOR_FLAGS} ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
     fi
 elif [ "$PS_MODE" = steam ]; then
     # No Sunshine — just render Steam in the nested compositor (boot smoke test).
     cat >> "$RUNNER" <<EOF
 exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
-     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+     ${GS_CURSOR_FLAGS} ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
 fi
 chmod +x "$RUNNER"
