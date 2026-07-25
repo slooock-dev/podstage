@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import __version__
+from . import __version__, config
 from .config import AppConfig
 from .core import doctor, provisioner, runtime, sunshine_api
 from .core.session import Session
@@ -211,6 +211,26 @@ def cmd_session_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_experimental(args: argparse.Namespace) -> int:
+    """List or toggle the experimental features (config.EXPERIMENTAL_FEATURES).
+    Same store as the GUI's Setup card; changes apply at the next session
+    start."""
+    cfg = _load_or_seed_config()
+    if args.action in ("enable", "disable"):
+        if not args.feature or args.feature not in config.EXPERIMENTAL_FEATURES:
+            print(f"unknown feature {args.feature!r} — known: "
+                  f"{', '.join(config.EXPERIMENTAL_FEATURES)}", file=sys.stderr)
+            return 1
+        cfg.experimental[args.feature] = args.action == "enable"
+        cfg.save()
+        print(f"{args.feature} {args.action}d (applies at the next session start)")
+        return 0
+    for key, env_var in config.EXPERIMENTAL_FEATURES.items():
+        state = "enabled " if cfg.experimental.get(key) else "disabled"
+        print(f"  {key:20} {state}  ({env_var})")
+    return 0
+
+
 def cmd_runtime_start(args: argparse.Namespace) -> int:
     """Profile-less container start (what run.sh wraps): takes a HOME dir
     directly instead of resolving a configured session profile."""
@@ -367,6 +387,14 @@ def build_parser() -> argparse.ArgumentParser:
     ).set_defaults(func=cmd_runtime_build)
     rt_sub.add_parser("stop", help="stop the runtime container").set_defaults(func=cmd_runtime_stop)
     rt_sub.add_parser("status", help="show runtime container status").set_defaults(func=cmd_runtime_status)
+
+    ex = sub.add_parser("experimental",
+                        help="list or toggle experimental features (Setup-card equivalent)")
+    ex.add_argument("action", nargs="?", default="list",
+                    choices=["list", "enable", "disable"])
+    ex.add_argument("feature", nargs="?",
+                    help="feature key, e.g. dynamic_resolution (see 'list')")
+    ex.set_defaults(func=cmd_experimental)
 
     prov = sub.add_parser("provision", help="make a Steam app available in a streaming session")
     prov.add_argument("app_id", type=int)
