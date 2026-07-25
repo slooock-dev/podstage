@@ -54,6 +54,18 @@ if [ "$PS_MODE" = desktop ]; then
     [ -n "$PS_APP" ] && STEAM_LAUNCH="$STEAM_LAUNCH steam://rungameid/$PS_APP"
 fi
 
+# Cursor theme: without one, Steam's by-name cursor lookups fall back to raw
+# X core-font glyphs (a "sizing" box burned into the frame). Steam/CEF reads
+# the GTK setting, not XCURSOR_* (same fix as SteamOS/ChimeraOS sessions).
+export XCURSOR_THEME=Adwaita
+GTK_INI="$HOME/.config/gtk-3.0/settings.ini"
+mkdir -p "${GTK_INI%/*}"
+if [ ! -s "$GTK_INI" ]; then
+    printf '[Settings]\ngtk-cursor-theme-name=Adwaita\n' > "$GTK_INI"
+elif ! grep -q '^gtk-cursor-theme-name' "$GTK_INI"; then
+    printf 'gtk-cursor-theme-name=Adwaita\n' >> "$GTK_INI"
+fi
+
 # Steam/gamescope env cribbed from games-on-whales (their Steam UI renders on
 # NVIDIA in a container with this same gamescope+Xwayland stack).
 export SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0

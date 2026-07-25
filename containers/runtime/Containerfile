@@ -82,7 +82,8 @@ RUN pacman -Sy --noconfirm --needed \
         wf-recorder ffmpeg \
         vulkan-radeon lib32-vulkan-radeon \
         vulkan-intel lib32-vulkan-intel intel-media-driver \
-        libva-mesa-driver lib32-libva-mesa-driver libva-utils && \
+        libva-mesa-driver lib32-libva-mesa-driver libva-utils \
+        adwaita-cursors && \
     pacman -Scc --noconfirm
 
 # --- patched cage: pointer-constraints support -----------------------------
