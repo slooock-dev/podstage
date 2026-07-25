@@ -340,6 +340,13 @@ TEXTS: dict[str, str] = {
     "end to end.":
         "gamescope meldet einen HDR-Output und Spiele sehen DXVK_HDR. "
         "Ende-zu-Ende unverifiziert.",
+    "Mouse input": "Maus-Eingabe",
+    "Streams the client's mouse into the session (Big Picture is "
+    "mouse-navigable). In-game mouse look still stutters: cage lacks "
+    "pointer locking.":
+        "Leitet die Maus des Clients in die Session (Big Picture ist "
+        "mausbedienbar). Mouse-Look im Spiel stottert noch: cage fehlt "
+        "Pointer-Locking.",
     "Experimental features apply from the next session start.":
         "Experimentelle Features gelten ab dem nächsten Session-Start.",
     "Checks the GitHub releases for a newer version — only when you click, "

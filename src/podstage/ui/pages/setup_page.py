@@ -43,6 +43,7 @@ _GLYPH = {doctor.Status.OK: ("●", "ok"),
 _EXPERIMENTAL_LABELS = {
     "dynamic_resolution": lambda: tr("Follow the client's resolution"),
     "hdr": lambda: tr("HDR stream"),
+    "mouse_input": lambda: tr("Mouse input"),
 }
 _EXPERIMENTAL_DETAILS = {
     "dynamic_resolution": lambda: tr(
@@ -51,6 +52,10 @@ _EXPERIMENTAL_DETAILS = {
     "hdr": lambda: tr(
         "gamescope advertises an HDR output and games see DXVK_HDR. "
         "Unverified end to end."),
+    "mouse_input": lambda: tr(
+        "Streams the client's mouse into the session (Big Picture is "
+        "mouse-navigable). In-game mouse look still stutters: cage lacks "
+        "pointer locking."),
 }
 
 

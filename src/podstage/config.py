@@ -107,6 +107,9 @@ def sunshine_web_credentials() -> tuple[str, str]:
 EXPERIMENTAL_FEATURES: dict[str, str] = {
     "dynamic_resolution": "PS_DYNAMIC_RES",  # follow the client's resolution
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
+    "mouse_input": "PS_MOUSE_INPUT",         # inject the client's mouse (BP is
+                                             # mouse-navigable; keyboard is
+                                             # always injected by Sunshine)
 }
 
 

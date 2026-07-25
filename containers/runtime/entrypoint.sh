@@ -325,11 +325,13 @@ SHIM=/usr/local/lib/podstage-seat-shim.so
 # desktop mode streams a pointer-driven UI — show the cursor (the shim blanks
 # it by default so Sunshine's dead virtual pointer isn't burned into the
 # gamepad-only capture). PS_SHOW_CURSOR=0 forces it off again.
+# Client mouse counts arrive raw; libinput's adaptive accel on top feels far
+# too fast — default to flat 1:1 (shim hook) whenever the pointer is injected.
+if [ "$PS_MODE" = desktop ] || [ "${PS_MOUSE_INPUT:-}" = enabled ]; then
+    export PS_POINTER_ACCEL="${PS_POINTER_ACCEL:-flat}"
+fi
 if [ "$PS_MODE" = desktop ]; then
     export PS_SHOW_CURSOR="${PS_SHOW_CURSOR:-1}"
-    # Client mouse counts arrive raw; libinput's adaptive accel on top feels
-    # far too fast — default to flat 1:1 (shim hook), overridable.
-    export PS_POINTER_ACCEL="${PS_POINTER_ACCEL:-flat}"
     log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → ${STEAM_LAUNCH} ${PS_W}x${PS_H}  [mode=desktop]"
 else
     log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → gamescope ${PS_W}x${PS_H}@${PS_R} → steam  [mode=$PS_MODE]"
