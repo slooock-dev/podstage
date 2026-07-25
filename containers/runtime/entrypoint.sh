@@ -231,8 +231,10 @@ CONF
             >> "$SUN_CONF_DIR/sunshine.conf"
     fi
     # Experimental: a Sunshine prep-cmd resizes cage's output to the client's
-    # WxH (it inherits cage's WAYLAND_DISPLAY); gamescope tracks the resize,
-    # undo restores the profile resolution when the stream ends.
+    # WxH (it inherits cage's WAYLAND_DISPLAY); undo restores the profile
+    # resolution when the stream ends. Canvas only: gamescope keeps its fixed
+    # -W/-H render size and scales into the resized output — native client
+    # resolution needs the profile resolution set to it.
     if [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
         RESIZE="$SUN_CONF_DIR/resize.sh"
         cat > "$RESIZE" <<RESIZE_EOF

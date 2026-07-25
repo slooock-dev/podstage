@@ -47,8 +47,9 @@ _EXPERIMENTAL_LABELS = {
 }
 _EXPERIMENTAL_DETAILS = {
     "dynamic_resolution": lambda: tr(
-        "Resizes the stream output to the connecting Moonlight client's "
-        "resolution; the profile resolution is the startup and fallback size."),
+        "Matches the stream canvas to the connecting Moonlight client's "
+        "resolution. Games still render at the profile resolution and get "
+        "scaled — set the profile resolution for native rendering."),
     "hdr": lambda: tr(
         "gamescope advertises an HDR output and games see DXVK_HDR. "
         "Unverified end to end."),
