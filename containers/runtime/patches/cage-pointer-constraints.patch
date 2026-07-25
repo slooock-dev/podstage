@@ -27,7 +27,7 @@ index f4b661d..48456f5 100644
  	if (!server.foreign_toplevel_manager) {
  		wlr_log(WLR_ERROR, "Unable to create the foreign toplevel manager");
 diff --git a/seat.c b/seat.c
-index 5f659a4..5df82e9 100644
+index 5f659a4..a9a8074 100644
 --- a/seat.c
 +++ b/seat.c
 @@ -23,6 +23,7 @@
@@ -38,7 +38,38 @@ index 5f659a4..5df82e9 100644
  #include <wlr/types/wlr_relative_pointer_v1.h>
  #include <wlr/types/wlr_scene.h>
  #include <wlr/types/wlr_seat.h>
-@@ -647,6 +648,53 @@ process_cursor_motion(struct cg_seat *seat, uint32_t time_msec, double dx, doubl
+@@ -126,8 +127,11 @@ update_capabilities(struct cg_seat *seat)
+ 	}
+ 	wlr_seat_set_capabilities(seat->seat, caps);
+ 
+-	/* Hide cursor if the seat doesn't have pointer capability. */
+-	if ((caps & WL_SEAT_CAPABILITY_POINTER) == 0) {
++	/* Hide cursor if the seat doesn't have pointer capability. A pointer
++	 * DEVICE alone doesn't show it either: Sunshine creates virtual mice
++	 * for every stream, gamepad-only clients included — the cursor (and
++	 * pointer focus, see process_cursor_motion) waits for real motion. */
++	if ((caps & WL_SEAT_CAPABILITY_POINTER) == 0 || !seat->pointer_active) {
+ 		wlr_cursor_unset_image(seat->cursor);
+ 	} else {
+ 		wlr_cursor_set_xcursor(seat->cursor, seat->xcursor_manager, DEFAULT_XCURSOR);
+@@ -625,6 +629,16 @@ process_cursor_motion(struct cg_seat *seat, uint32_t time_msec, double dx, doubl
+ 	struct wlr_seat *wlr_seat = seat->seat;
+ 	struct wlr_surface *surface = NULL;
+ 
++	/* Inert until the first real motion: no pointer focus, no hover, no
++	 * cursor — a parked virtual mouse must not disturb gamepad UI focus. */
++	if (!seat->pointer_active) {
++		if (dx == 0 && dy == 0) {
++			return;
++		}
++		seat->pointer_active = true;
++		wlr_cursor_set_xcursor(seat->cursor, seat->xcursor_manager, DEFAULT_XCURSOR);
++	}
++
+ 	struct cg_view *view = desktop_view_at(seat->server, seat->cursor->x, seat->cursor->y, &surface, &sx, &sy);
+ 	if (!view) {
+ 		wlr_seat_pointer_clear_focus(wlr_seat);
+@@ -647,6 +661,53 @@ process_cursor_motion(struct cg_seat *seat, uint32_t time_msec, double dx, doubl
  	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
  }
  
@@ -92,7 +123,7 @@ index 5f659a4..5df82e9 100644
  static void
  handle_cursor_motion_absolute(struct wl_listener *listener, void *data)
  {
-@@ -659,7 +707,9 @@ handle_cursor_motion_absolute(struct wl_listener *listener, void *data)
+@@ -659,7 +720,9 @@ handle_cursor_motion_absolute(struct wl_listener *listener, void *data)
  	double dx = lx - seat->cursor->x;
  	double dy = ly - seat->cursor->y;
  
@@ -103,7 +134,7 @@ index 5f659a4..5df82e9 100644
  	process_cursor_motion(seat, event->time_msec, dx, dy, dx, dy);
  	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
  }
-@@ -670,7 +720,9 @@ handle_cursor_motion_relative(struct wl_listener *listener, void *data)
+@@ -670,7 +733,9 @@ handle_cursor_motion_relative(struct wl_listener *listener, void *data)
  	struct cg_seat *seat = wl_container_of(listener, seat, cursor_motion_relative);
  	struct wlr_pointer_motion_event *event = data;
  
@@ -115,16 +146,17 @@ index 5f659a4..5df82e9 100644
  			      event->unaccel_dy);
  	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
 diff --git a/seat.h b/seat.h
-index 4b7bfda..5128291 100644
+index 4b7bfda..8780399 100644
 --- a/seat.h
 +++ b/seat.h
-@@ -48,8 +48,13 @@ struct cg_seat {
+@@ -48,8 +48,14 @@ struct cg_seat {
  	struct wl_listener request_set_cursor;
  	struct wl_listener request_set_selection;
  	struct wl_listener request_set_primary_selection;
 +
 +	struct wlr_pointer_constraint_v1 *active_constraint;
 +	struct wl_listener constraint_destroy;
++	bool pointer_active;  /* saw real pointer motion (cursor/hover gate) */
  };
  
 +void handle_pointer_constraint(struct wl_listener *listener, void *data);
