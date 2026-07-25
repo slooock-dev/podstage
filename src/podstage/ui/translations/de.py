@@ -330,12 +330,12 @@ TEXTS: dict[str, str] = {
         "Globale Schalter, gelten ab dem nächsten Session-Start. "
         "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
     "Follow the client's resolution": "Der Auflösung des Clients folgen",
-    "Matches the stream canvas to the connecting Moonlight client's "
-    "resolution. Games still render at the profile resolution and get "
-    "scaled — set the profile resolution for native rendering.":
-        "Passt die Stream-Leinwand an die Auflösung des verbindenden "
-        "Moonlight-Clients an. Spiele rendern weiter in der Profilauflösung "
-        "und werden skaliert; für natives Rendern die Profilauflösung setzen.",
+    "Steam launches when the first Moonlight client connects and renders "
+    "at that client's resolution and refresh rate. Later clients with a "
+    "different resolution get scaled.":
+        "Steam startet, sobald sich der erste Moonlight-Client verbindet, "
+        "und rendert in dessen Auflösung und Bildrate. Spätere Clients mit "
+        "anderer Auflösung werden skaliert.",
     "HDR stream": "HDR-Stream",
     "gamescope advertises an HDR output and games see DXVK_HDR. Unverified "
     "end to end.":

@@ -47,9 +47,9 @@ _EXPERIMENTAL_LABELS = {
 }
 _EXPERIMENTAL_DETAILS = {
     "dynamic_resolution": lambda: tr(
-        "Matches the stream canvas to the connecting Moonlight client's "
-        "resolution. Games still render at the profile resolution and get "
-        "scaled — set the profile resolution for native rendering."),
+        "Steam launches when the first Moonlight client connects and renders "
+        "at that client's resolution and refresh rate. Later clients with a "
+        "different resolution get scaled."),
     "hdr": lambda: tr(
         "gamescope advertises an HDR output and games see DXVK_HDR. "
         "Unverified end to end."),

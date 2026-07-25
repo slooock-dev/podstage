@@ -230,20 +230,32 @@ CONF
         printf '%s\n' "$PS_SUNSHINE_EXTRA" | tr ';' '\n' \
             >> "$SUN_CONF_DIR/sunshine.conf"
     fi
-    # Experimental: a Sunshine prep-cmd resizes cage's output to the client's
-    # WxH (it inherits cage's WAYLAND_DISPLAY); undo restores the profile
-    # resolution when the stream ends. Canvas only: gamescope keeps its fixed
-    # -W/-H render size and scales into the resized output — native client
-    # resolution needs the profile resolution set to it.
+    # Experimental dynamic resolution, two parts wired via a Sunshine
+    # prep-cmd (it inherits cage's WAYLAND_DISPLAY):
+    #  * every stream start resizes cage's output (the canvas) to the client's
+    #    WxH; undo restores the profile size when the stream ends.
+    #  * the pipeline (gamescope+Steam) launches lazily on the FIRST connect,
+    #    with -W/-H/-r taken from that client — games then really render at
+    #    the client resolution. gamescope cannot change its render size at
+    #    runtime, so later clients with a different resolution get scaled.
     if [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
+        MODE_FIFO="$SUN_CONF_DIR/client-mode.fifo"
+        mkfifo "$MODE_FIFO"
         RESIZE="$SUN_CONF_DIR/resize.sh"
         cat > "$RESIZE" <<RESIZE_EOF
 #!/usr/bin/env bash
 # do: client resolution from Sunshine; "reset": back to the profile size.
 W=\${SUNSHINE_CLIENT_WIDTH:-}; H=\${SUNSHINE_CLIENT_HEIGHT:-}
 [ "\${1:-}" = reset ] && { W=${PS_W}; H=${PS_H}; }
-[ -n "\$W" ] && [ -n "\$H" ] && \
-    wlr-randr --output HEADLESS-1 --custom-mode "\${W%%.*}x\${H%%.*}" || true
+[ -n "\$W" ] && [ -n "\$H" ] || exit 0
+wlr-randr --output HEADLESS-1 --custom-mode "\${W%%.*}x\${H%%.*}" || true
+# Wake the runner waiting on the first client (no-op afterwards: without a
+# reader the timeout drops the write).
+if [ "\${1:-}" != reset ] && [ -p "$MODE_FIFO" ]; then
+    FPS=\${SUNSHINE_CLIENT_FPS:-${PS_R}}
+    W2=\${W%%.*}; H2=\${H%%.*}; FPS2=\${FPS%%.*}
+    timeout 1 bash -c "printf '%s %s %s\n' \$W2 \$H2 \$FPS2 > '$MODE_FIFO'" 2>/dev/null || true
+fi
 RESIZE_EOF
         chmod +x "$RESIZE"
         printf 'global_prep_cmd = [{"do":"%s","undo":"%s reset"}]\n' \
@@ -287,6 +299,16 @@ EOF
         # Xwayland for it); pointer/keyboard events go straight to the app.
         cat >> "$RUNNER" <<EOF
 exec ${STEAM_LAUNCH}
+EOF
+    elif [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
+        # Lazy pipeline start: block until the first client connects
+        # (resize.sh writes its mode into the fifo), then render at exactly
+        # that client's resolution and refresh rate.
+        cat >> "$RUNNER" <<EOF
+echo "[podstage] waiting for the first client (dynamic resolution)" >&2
+read -r CW CH CR < "$SUN_CONF_DIR/client-mode.fifo"
+exec gamescope --backend wayland -W "\$CW" -H "\$CH" -w "\$CW" -h "\$CH" -r "\$CR" \\
+     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
     else
         cat >> "$RUNNER" <<EOF
