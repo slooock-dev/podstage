@@ -70,7 +70,7 @@ _VAAPI_RC_LABELS = {
 }
 
 
-THUMB_MAX_AGE_S = 45  # older previews are stale (loop writes every ~10s)
+THUMB_MAX_AGE_S = 45  # strict mode only: older previews count as stale
 
 
 class PairDialog(QDialog):
@@ -241,9 +241,9 @@ class SessionPage(QWidget):
         self._vram = Meter("VRAM")
         rows = [self._cpu, self._ram, self._gpu, self._vram]
         # The NVENC session count is an NVIDIA-only signal (nvidia-smi); the
-        # amdgpu kernel interface exposes no per-encoder counter (and Intel
-        # none at all), so drop the row rather than show a permanently empty
-        # one.
+        # amdgpu kernel interface exposes no per-encoder counter (Intel gets
+        # only a busy % via intel_gpu_top), so drop the row rather than show a
+        # permanently empty one.
         self._nvenc = InfoRow("NVENC") if self._nvidia else None
         if self._nvenc is not None:
             rows.append(self._nvenc)
@@ -472,15 +472,20 @@ class SessionPage(QWidget):
             self._show_thumb_placeholder(tr("Preview is off"))
             return
         path = sc.home_dir() / ".cache/podstage/thumb.png"
-        # A frame is fresh within a few capture cycles; scale the window with the
-        # configured interval so a slow preview isn't judged stale prematurely.
-        max_age = max(THUMB_MAX_AGE_S, interval * 3)
         try:
             mtime = path.stat().st_mtime
         except OSError:
             self._show_thumb_placeholder(tr("waiting for preview …"))
             return
-        if time.time() - mtime >= max_age:
+        if self._ctx.config.preview_keep_last:
+            # wlr-screencopy delivers no frame while the picture is static —
+            # keep the last one, but never a frame from a previous session.
+            stale = mtime < (runtime.load_state() or {}).get("started", 0)
+        else:
+            # Strict mode (Setup toggle): hide a frame once it is older than a
+            # few capture cycles.
+            stale = time.time() - mtime >= max(THUMB_MAX_AGE_S, interval * 3)
+        if stale:
             self._show_thumb_placeholder(tr("waiting for preview …"))
             return
         if self._thumb_pix is not None and mtime == self._thumb_mtime:
@@ -536,7 +541,7 @@ class SessionPage(QWidget):
         sc = self._profile()
         if sc is None:
             return
-        session = Session(sc)
+        session = Session(sc, app_config=self._ctx.config)
         if not sandbox.is_bootstrapped(session.home):
             self._last_error = tr("'{name}' is not set up. Start the Steam "
                                   "login on the 'Sandboxes' page.", name=sc.name)

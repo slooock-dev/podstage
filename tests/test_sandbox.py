@@ -60,3 +60,23 @@ def test_delete_missing_is_noop(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(config, "SESSIONS_HOME_ROOT", tmp_path / "homes")
     (tmp_path / "homes").mkdir()
     sandbox.delete(tmp_path / "homes" / "gone")  # must not raise
+
+
+def test_overlay_size_zero_before_first_write(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    assert sandbox.overlay_size_bytes(tmp_path / "homes" / "deck") == 0
+
+
+def test_clear_overlays_removes_only_overlay_storage(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    home = tmp_path / "homes" / "deck"
+    (home / ".local").mkdir(parents=True)
+    root = config.overlay_root(home)
+    (root / "lib-x" / "upper").mkdir(parents=True)
+    (root / "lib-x" / "upper" / "patched.bin").write_text("x" * 128)
+
+    assert sandbox.overlay_size_bytes(home) >= 128
+    sandbox.clear_overlays(home)
+    assert not root.exists()
+    assert sandbox.overlay_size_bytes(home) == 0
+    assert home.exists()  # the sandbox HOME itself is untouched

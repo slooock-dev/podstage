@@ -12,7 +12,8 @@ diagnostics shared with the CLI and are intentionally not translated.
 
 import subprocess
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -27,8 +28,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ... import config
-from ...core import desktop, doctor, elevate, runtime, teardown, udev
+from ... import __version__, config
+from ...core import desktop, doctor, elevate, runtime, teardown, udev, update
 from ..i18n import tr
 from ..widgets import ElideLabel, card
 from ..workers import start_action
@@ -37,15 +38,25 @@ _GLYPH = {doctor.Status.OK: ("●", "ok"),
           doctor.Status.WARN: ("▲", "warn"),
           doctor.Status.FAIL: ("✖", "fail")}
 
+# Labels/tooltips for config.EXPERIMENTAL_FEATURES — one entry per key, the
+# card build fails loudly on a missing one (gui-smoke catches it).
+_EXPERIMENTAL_LABELS = {
+    "dynamic_resolution": lambda: tr("Follow the client's resolution"),
+    "hdr": lambda: tr("HDR stream"),
+}
+_EXPERIMENTAL_DETAILS = {
+    "dynamic_resolution": lambda: tr(
+        "Resizes the stream output to the connecting Moonlight client's "
+        "resolution; the profile resolution is the startup and fallback size."),
+    "hdr": lambda: tr(
+        "gamescope advertises an HDR output and games see DXVK_HDR. "
+        "Unverified end to end."),
+}
+
 
 def _build_image() -> str:
-    p = subprocess.run(
-        ["podman", "build", "-t", runtime.DEFAULT_IMAGE, "containers/runtime/"],
-        cwd=doctor.REPO_ROOT, capture_output=True, text=True, timeout=3600,
-        check=False)
-    if p.returncode != 0:
-        tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-8:])
-        raise RuntimeError(tr("podman build failed:\n{tail}", tail=tail))
+    # runtime.build_image stamps the source hash label doctor compares against.
+    runtime.build_image()
     return tr("Image built.")
 
 
@@ -106,6 +117,7 @@ class SetupPage(QWidget):
         self._pool: list = []
         self._busy = False
         self._results: list[doctor.CheckResult] = []
+        self._update_info: update.UpdateInfo | None = None
         self._build()
         self.run_checks()
 
@@ -186,7 +198,31 @@ class SetupPage(QWidget):
         cshint.setWordWrap(True)
         slay.addWidget(self._close_steam)
         slay.addWidget(cshint)
+        self._keep_preview = QCheckBox(
+            tr("Keep the last preview frame during static scenes"))
+        self._keep_preview.setToolTip(tr(
+            "The capture only delivers frames while the picture changes. Off "
+            "hides the preview 45 s after the last new frame."))
+        self._keep_preview.setChecked(self._ctx.config.preview_keep_last)
+        self._keep_preview.toggled.connect(self._on_keep_preview_toggled)
+        slay.addWidget(self._keep_preview)
         root.addWidget(sframe)
+
+        eframe, elay = card(tr("Experimental features"))
+        eexpl = QLabel(tr(
+            "Global switches, applied at the next session start. "
+            "Container-side features need a current runtime image."))
+        eexpl.setProperty("muted", True)
+        eexpl.setWordWrap(True)
+        elay.addWidget(eexpl)
+        for key in config.EXPERIMENTAL_FEATURES:
+            box = QCheckBox(_EXPERIMENTAL_LABELS[key]())
+            box.setToolTip(_EXPERIMENTAL_DETAILS[key]())
+            box.setChecked(self._ctx.config.experimental.get(key, False))
+            box.toggled.connect(
+                lambda on, k=key: self._on_experimental_toggled(k, on))
+            elay.addWidget(box)
+        root.addWidget(eframe)
 
         lframe, llay = card(tr("Language"))
         lrow = QHBoxLayout()
@@ -203,6 +239,28 @@ class SetupPage(QWidget):
         lrow.addWidget(lhint, 1)
         llay.addLayout(lrow)
         root.addWidget(lframe)
+
+        upframe, uplay = card(tr("Updates"))
+        upexpl = QLabel(tr(
+            "Checks the GitHub releases for a newer version — only when you "
+            "click, podstage never phones home on its own."))
+        upexpl.setProperty("muted", True)
+        upexpl.setWordWrap(True)
+        uplay.addWidget(upexpl)
+        uprow = QHBoxLayout()
+        self._update_status = QLabel(tr("Installed: {current}", current=__version__))
+        self._update_status.setProperty("muted", True)
+        self._update_status.setWordWrap(True)
+        self._update_btn = QPushButton(tr("Check for updates"))
+        self._update_btn.clicked.connect(self._on_check_updates)
+        self._release_btn = QPushButton(tr("Open release page"))
+        self._release_btn.setVisible(False)
+        self._release_btn.clicked.connect(self._on_open_release)
+        uprow.addWidget(self._update_status, 1)
+        uprow.addWidget(self._release_btn)
+        uprow.addWidget(self._update_btn)
+        uplay.addLayout(uprow)
+        root.addWidget(upframe)
 
         uframe, ulay = card(tr("Remove podstage"))
         uexpl = QLabel(tr("Removes the udev rules, firewall ports, runtime "
@@ -329,6 +387,16 @@ class SetupPage(QWidget):
         self._ctx.config.close_desktop_steam = enabled
         self._ctx.save()
 
+    def _on_keep_preview_toggled(self, enabled: bool) -> None:
+        self._ctx.config.preview_keep_last = enabled
+        self._ctx.save()
+
+    def _on_experimental_toggled(self, key: str, enabled: bool) -> None:
+        self._ctx.config.experimental[key] = enabled
+        self._ctx.save()
+        self._action_status.setText(
+            tr("Experimental features apply from the next session start."))
+
     def _on_change_home_root(self) -> None:
         chosen = QFileDialog.getExistingDirectory(
             self, tr("Choose a folder for the sandbox homes"),
@@ -383,6 +451,36 @@ class SetupPage(QWidget):
         box.blockSignals(True)
         box.setChecked(state)
         box.blockSignals(False)
+
+    # -- update check ----------------------------------------------------
+    def _on_check_updates(self) -> None:
+        self._update_btn.setEnabled(False)
+        self._release_btn.setVisible(False)
+        self._update_status.setText(tr("checking …"))
+
+        def _check() -> str:
+            info = update.check_latest()
+            self._update_info = info  # read back on the UI thread in _done
+            if not info.is_newer:
+                return tr("podstage {current} is up to date.", current=info.current)
+            msg = tr("Version {latest} is available (installed: {current}).",
+                     latest=info.latest, current=info.current)
+            if info.mentions_image_rebuild:
+                msg += " " + tr("The release notes mention an image rebuild.")
+            return msg
+
+        start_action(self._pool, _check, "Update check", self._on_update_checked)
+
+    def _on_update_checked(self, ok: bool, msg: str) -> None:
+        self._update_btn.setEnabled(True)
+        self._update_status.setText(
+            msg if ok else tr("Update check failed: {msg}", msg=msg))
+        info = self._update_info
+        self._release_btn.setVisible(ok and info is not None and info.is_newer)
+
+    def _on_open_release(self) -> None:
+        info = self._update_info
+        QDesktopServices.openUrl(QUrl(info.url if info else update.RELEASES_URL))
 
     # -- actions ---------------------------------------------------------
     def _start(self, label: str, fn) -> None:

@@ -85,11 +85,11 @@ host GUI.
 - Linux with a Wayland desktop. Developed on Bazzite-DX (Fedora-based, KDE
   Plasma); other modern distros should work.
 - podman
-- A GPU with hardware video encode: NVIDIA (NVENC, via CDI injection) or AMD
-  (VAAPI, via `/dev/dri`). The GUI adapts its encoder controls and telemetry to
-  the detected vendor. NVIDIA has the most testing; the AMD path is validated on
-  one iGPU. Intel (VAAPI via `/dev/dri`, Broadwell+) is wired the same way and
-  confirmed working by a community report (Arc B580).
+- A GPU with hardware video encode: NVIDIA (NVENC, via CDI injection), AMD or
+  Intel (both VAAPI, via `/dev/dri`; Intel needs Broadwell+ for the iHD
+  driver). The GUI adapts its encoder controls and telemetry to the detected
+  vendor. NVIDIA has the most testing, AMD is validated on one iGPU, Intel is
+  confirmed by a community report (Arc B580).
 - Steam installed on the host; its libraries are shared into the sandboxes.
 - Python ≥ 3.11 for the CLI/core, PyQt6 ≥ 6.6 for the GUI (`./ui.sh` tries to find a suitable interpreter).
 - A Moonlight client with a gamepad (Steam Deck, laptop, phone with
@@ -108,8 +108,8 @@ git clone https://github.com/slooock-dev/podstage && cd podstage
 python3 -m venv .venv && . .venv/bin/activate   # Fedora/Bazzite are PEP 668
 pip install -e '.[ui]'          # core + CLI + management GUI
 
-# 1. Build the runtime image (~2.5 GB, self-contained), run from the repo root
-podman build -t podstage-runtime:latest containers/runtime/
+# 1. Build the runtime image (~2.5 GB, self-contained)
+podstage runtime build
 
 # 2. Launch the management GUI
 ./ui.sh
@@ -180,8 +180,8 @@ streaming needs the Moonlight pairing PIN. The image is built locally
 | Page | What it does |
 |------|--------------|
 | **Session** | Start/stop the stream, the active game, CPU/GPU/VRAM/encoder meters, a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
-| **Sandboxes** | Client profiles, per-sandbox status (login, paired clients, disk size), the visible Steam-login bootstrap. |
-| **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, UI language. |
+| **Sandboxes** | Client profiles, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
+| **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, experimental feature toggles, an on-demand update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
 
 <p align="center">
@@ -191,9 +191,10 @@ streaming needs the Moonlight pairing PIN. The image is built locally
 
 The GUI needs PyQt6; everything else runs under any Python ≥ 3.11. `./ui.sh`
 selects the interpreter (`$PS_QT_PYTHON` if set, otherwise the first of
-`python3`, `python`, Homebrew's `python3` that can `import PyQt6`) and points
-Qt's plugin path at PyQt6's bundled `Qt6/plugins`, falling back to Homebrew's
-`qtbase` plugins (`$QT_PLUGIN_PATH` overrides).
+`python3`, `python`, Homebrew's `python3` that can `import PyQt6`) and hands
+Qt's plugin path (PyQt6's bundled `Qt6/plugins`, else Homebrew's `qtbase`
+plugins) to the app, which applies it in-process, so child processes keep a
+clean environment. A caller-set `$QT_PLUGIN_PATH` overrides.
 
 ## Image quality
 
@@ -219,13 +220,14 @@ and the network:
 
 After that, tune the encoder on the Session page: on NVIDIA, max the preset
 (P7) and two-pass (full res), and raise VBV if fast motion still shows
-artifacts; on AMD, raise the VAAPI quality profile.
+artifacts; on AMD and Intel, raise the VAAPI quality profile.
 
 ## CLI
 
 ```
 podstage doctor                    # validate the environment
 podstage setup                     # print guided (sudo) setup commands
+podstage runtime build             # (re)build the runtime image
 podstage runtime start|stop|status # drive the container directly (by HOME dir)
 podstage session list|start|stop|status <name>
 podstage provision <app_id> <session>
@@ -253,8 +255,10 @@ that:
   had less testing than the NVIDIA path.
 - Intel takes the same `/dev/dri` + VAAPI wiring, with ANV Vulkan and the iHD
   media driver (Broadwell+) baked into the image. A community report confirms
-  it working out of the box on an Arc B580. The GUI shows no GPU load/VRAM
-  telemetry (the i915/xe kernel drivers expose no simple sysfs counters).
+  it working out of the box on an Arc B580; Intel iGPUs and pre-Broadwell
+  parts are untested so far. GPU load shows up in the GUI when
+  `intel_gpu_top` is installed and the GPU PMU is readable; VRAM stays
+  unavailable (the i915/xe kernel drivers expose no sysfs counters).
   `PS_GPU_VENDOR=intel` forces the path on hybrid machines.
 
 Patches widening distro and GPU support are very welcome.
@@ -289,8 +293,13 @@ Patches widening distro and GPU support are very welcome.
 - **NVIDIA `vulkan_make_output failed` on start.** The CDI spec doesn't inject
   `/dev/nvidia-modeset`; the runtime adds it explicitly. Regenerating CDI
   (`nvidia-ctk cdi generate`) also fixes it.
+- **No GPU load shown on Intel.** The meter samples `intel_gpu_top`; install
+  it (igt-gpu-tools) and make the GPU PMU readable (CAP_PERFMON or a relaxed
+  `perf_event_paranoid`). VRAM stays unavailable on i915/xe.
 - **The preview stays blank.** The in-container capture only produces a frame
-  while the Big Picture UI is actually animating.
+  while the picture is actually changing; the placeholder shows until the
+  session's first frame arrives. After that the last frame stays visible
+  through static scenes (Setup → Streaming turns that off).
 - **A game re-downloads the same update in every session.** Sandbox-side
   updates live in per-sandbox overlay storage
   (`~/.local/share/podstage/overlays/`) and are purged once the host updates

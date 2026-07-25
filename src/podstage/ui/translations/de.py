@@ -146,6 +146,22 @@ TEXTS: dict[str, str] = {
     "Edit …": "Bearbeiten …",
     "Delete …": "Löschen …",
     "Start Steam login": "Steam-Login starten",
+    "Clear overlay …": "Overlay leeren …",
+    "Discards this sandbox's writes onto the shared game libraries (game "
+    "updates re-apply in the next session). Host libraries and the sandbox "
+    "HOME are untouched.":
+        "Verwirft die Schreibzugriffe dieser Sandbox auf die geteilten "
+        "Spiele-Bibliotheken (Spiel-Updates werden in der nächsten Session neu "
+        "angewendet). Host-Bibliotheken und Sandbox-HOME bleiben unberührt.",
+    "Clear overlay?": "Overlay leeren?",
+    "Discard '{name}'s writes onto the shared game libraries ({size})? Game "
+    "updates applied in a session are lost and re-apply next time; the host "
+    "libraries and the sandbox HOME are untouched.":
+        "Die Schreibzugriffe von '{name}' auf die geteilten "
+        "Spiele-Bibliotheken verwerfen ({size})? In einer Session angewendete "
+        "Spiel-Updates gehen verloren und werden beim nächsten Mal neu "
+        "angewendet; Host-Bibliotheken und Sandbox-HOME bleiben unberührt.",
+    "Overlay of '{name}' cleared.": "Overlay von '{name}' geleert.",
     "Pick at startup": "Beim Start wählen",
     "✓ logged in": "✓ eingeloggt",
     "— empty": "— leer",
@@ -302,12 +318,48 @@ TEXTS: dict[str, str] = {
     "{label} running …": "{label} läuft …",
     "Exit code {rc}": "Exit-Code {rc}",
     "Image built.": "Image gebaut.",
+    "Keep the last preview frame during static scenes":
+        "Bei statischem Bild das letzte Vorschaubild behalten",
+    "The capture only delivers frames while the picture changes. Off hides "
+    "the preview 45 s after the last new frame.":
+        "Die Aufnahme liefert nur Frames, solange sich das Bild ändert. Aus "
+        "blendet die Vorschau 45 s nach dem letzten neuen Frame aus.",
+    "Experimental features": "Experimentelle Features",
+    "Global switches, applied at the next session start. Container-side "
+    "features need a current runtime image.":
+        "Globale Schalter, gelten ab dem nächsten Session-Start. "
+        "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
+    "Follow the client's resolution": "Der Auflösung des Clients folgen",
+    "Resizes the stream output to the connecting Moonlight client's "
+    "resolution; the profile resolution is the startup and fallback size.":
+        "Passt die Stream-Ausgabe an die Auflösung des verbindenden "
+        "Moonlight-Clients an; die Profilauflösung ist Start- und "
+        "Rückfallgröße.",
+    "HDR stream": "HDR-Stream",
+    "gamescope advertises an HDR output and games see DXVK_HDR. Unverified "
+    "end to end.":
+        "gamescope meldet einen HDR-Output und Spiele sehen DXVK_HDR. "
+        "Ende-zu-Ende unverifiziert.",
+    "Experimental features apply from the next session start.":
+        "Experimentelle Features gelten ab dem nächsten Session-Start.",
+    "Checks the GitHub releases for a newer version — only when you click, "
+    "podstage never phones home on its own.":
+        "Prüft die GitHub-Releases auf eine neuere Version, aber nur per "
+        "Klick; podstage telefoniert nie von selbst nach Hause.",
+    "Installed: {current}": "Installiert: {current}",
+    "Check for updates": "Auf Updates prüfen",
+    "Open release page": "Release-Seite öffnen",
+    "podstage {current} is up to date.": "podstage {current} ist aktuell.",
+    "Version {latest} is available (installed: {current}).":
+        "Version {latest} ist verfügbar (installiert: {current}).",
+    "The release notes mention an image rebuild.":
+        "Die Release-Notes erwähnen einen Image-Rebuild.",
+    "Update check failed: {msg}": "Update-Prüfung fehlgeschlagen: {msg}",
     "udev rules installed. Input isolation and device access "
     "are set up.":
         "udev-Regeln installiert. Eingabe-Isolation und Gerätezugriff "
         "sind eingerichtet.",
     "Done.": "Erledigt.",
-    "podman build failed:\n{tail}": "podman build fehlgeschlagen:\n{tail}",
 
     # -- setup page: uninstall --------------------------------------------
     "Remove podstage": "podstage entfernen",

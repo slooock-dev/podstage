@@ -108,12 +108,13 @@ def _load_or_seed_config() -> AppConfig:
 
 
 def _resolve_session(name: str) -> Session | None:
-    sc = _load_or_seed_config().get(name)
+    cfg = _load_or_seed_config()
+    sc = cfg.get(name)
     if sc is None:
         print(f"No session '{name}'. Known: "
-              f"{', '.join(s.name for s in _load_or_seed_config().sessions)}", file=sys.stderr)
+              f"{', '.join(s.name for s in cfg.sessions)}", file=sys.stderr)
         return None
-    return Session(sc)
+    return Session(sc, app_config=cfg)
 
 
 def cmd_session_list(_args: argparse.Namespace) -> int:
@@ -194,6 +195,16 @@ def cmd_runtime_start(args: argparse.Namespace) -> int:
     if not args.attach:
         print(f"Container {runtime.CONTAINER_NAME} started.")
         print("  Logs: journalctl -f CONTAINER_NAME=podstage-runtime")
+    return 0
+
+
+def cmd_runtime_build(_args: argparse.Namespace) -> int:
+    """Build the runtime image with the source-hash label doctor checks."""
+    try:
+        print(runtime.build_image(quiet=False))
+    except RuntimeError as e:
+        print(f"build failed: {e}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -310,6 +321,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="skip game/library provisioning (HOME not bootstrapped yet)")
     rs.add_argument("--client", help="profile name to record as the session owner")
     rs.set_defaults(func=cmd_runtime_start)
+    rt_sub.add_parser(
+        "build", help="(re)build the runtime image from containers/runtime/"
+    ).set_defaults(func=cmd_runtime_build)
     rt_sub.add_parser("stop", help="stop the runtime container").set_defaults(func=cmd_runtime_stop)
     rt_sub.add_parser("status", help="show runtime container status").set_defaults(func=cmd_runtime_status)
 

@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -233,6 +234,7 @@ class ProfileDialog(QDialog):
             name=name, resolution=resolution, app_ids=app_ids,
             sunshine_port_base=port, home=base.home,
             sunshine_extra=dict(base.sunshine_extra),
+            preview_interval_s=base.preview_interval_s,
         )
         self.accept()
 
@@ -292,6 +294,7 @@ class SandboxPage(QWidget):
         self._steam_proc: QProcess | None = None
         self._bootstrap_profile: str | None = None
         self._sizes: dict[str, int | None] = {}
+        self._overlay_sizes: dict[str, int | None] = {}
         self._build()
         ctx.config_changed.connect(self.refresh)
         self.refresh()
@@ -303,16 +306,18 @@ class SandboxPage(QWidget):
         root.setSpacing(12)
 
         frame, lay = card(tr("Client sandboxes"))
-        self._table = QTableWidget(0, 6)
+        self._table = QTableWidget(0, 7)
         self._table.setHorizontalHeaderLabels(
             [tr("Name"), tr("Resolution"), tr("Port"), tr("Login"),
-             tr("Pairings"), tr("Size")])
+             tr("Pairings"), tr("Size"), tr("Overlay")])
         self._table.verticalHeader().setVisible(False)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setAlternatingRowColors(True)
-        self._table.horizontalHeader().setStretchLastSection(True)
+        # All columns share the width evenly and follow window resizes.
+        self._table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
         self._table.setMinimumHeight(160)
         self._table.itemSelectionChanged.connect(self._update_login_btn)
         lay.addWidget(self._table)
@@ -326,12 +331,19 @@ class SandboxPage(QWidget):
         self._delete_btn = QPushButton(tr("Delete …"))
         self._delete_btn.setProperty("danger", True)
         self._delete_btn.clicked.connect(self._on_delete)
+        self._clear_overlay_btn = QPushButton(tr("Clear overlay …"))
+        self._clear_overlay_btn.setToolTip(tr(
+            "Discards this sandbox's writes onto the shared game libraries "
+            "(game updates re-apply in the next session). Host libraries and "
+            "the sandbox HOME are untouched."))
+        self._clear_overlay_btn.clicked.connect(self._on_clear_overlay)
         self._login_btn = QPushButton(tr("Start Steam login"))
         self._login_btn.setProperty("primary", True)
         self._login_btn.clicked.connect(self._on_bootstrap)
         buttons.addWidget(new_btn)
         buttons.addWidget(edit_btn)
         buttons.addWidget(self._delete_btn)
+        buttons.addWidget(self._clear_overlay_btn)
         buttons.addStretch(1)
         buttons.addWidget(self._login_btn)
         lay.addLayout(buttons)
@@ -369,17 +381,14 @@ class SandboxPage(QWidget):
                 tr("— empty") if not info.exists else tr("✗ no login"))
             paired = ", ".join(info.paired) if info.paired else "—"
             values = [sc.name, resolution, str(sc.sunshine_port_base), login,
-                      paired, _fmt_size(self._sizes.get(sc.name))]
+                      paired, _fmt_size(self._sizes.get(sc.name)),
+                      _fmt_size(self._overlay_sizes.get(sc.name))]
             for col, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                if col in (2, 5):
+                if col in (2, 5, 6):
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight
                                           | Qt.AlignmentFlag.AlignVCenter)
                 self._table.setItem(row, col, item)
-        self._table.resizeColumnsToContents()
-        for col in range(self._table.columnCount() - 1):
-            # the stylesheet's item padding is not part of the size hint
-            self._table.setColumnWidth(col, self._table.columnWidth(col) + 20)
         if 0 <= selected < len(sessions):
             self._table.selectRow(selected)
         self._update_login_btn()
@@ -402,6 +411,7 @@ class SandboxPage(QWidget):
         def _measure() -> str:
             for name, home in profiles:
                 self._sizes[name] = sandbox.size_bytes(home)
+                self._overlay_sizes[name] = sandbox.overlay_size_bytes(home)
             return "sizes"
 
         start_action(self._pool, _measure, "Sizes", self._on_sizes_done)
@@ -411,6 +421,8 @@ class SandboxPage(QWidget):
             for row in range(self._table.rowCount()):
                 name = self._table.item(row, 0).text()
                 self._table.item(row, 5).setText(_fmt_size(self._sizes.get(name)))
+                self._table.item(row, 6).setText(
+                    _fmt_size(self._overlay_sizes.get(name)))
 
     # -- profile CRUD ----------------------------------------------------
     def _on_new(self) -> None:
@@ -449,6 +461,7 @@ class SandboxPage(QWidget):
         self._ctx.config.remove(sc.name)
         self._ctx.save()
         self._sizes.pop(sc.name, None)
+        self._overlay_sizes.pop(sc.name, None)
         if dlg.delete_data and home.exists():
             self._status.setText(tr("Deleting {home} …", home=home))
             self._delete_btn.setEnabled(False)
@@ -465,6 +478,44 @@ class SandboxPage(QWidget):
 
     def _on_delete_done(self, ok: bool, msg: str) -> None:
         self._delete_btn.setEnabled(True)
+        self._status.setText(msg if ok else tr("Error: {msg}", msg=msg))
+        self.refresh()
+
+    # -- overlay cleanup -------------------------------------------------
+    def _on_clear_overlay(self) -> None:
+        sc = self._selected()
+        if sc is None:
+            self._status.setText(tr("No profile selected."))
+            return
+        st = runtime.status()
+        if st.running and st.client in (None, "", sc.name):
+            self._status.setText(tr("Stop the running session first."))
+            return
+        size = self._overlay_sizes.get(sc.name)
+        answer = QMessageBox.question(
+            self, tr("Clear overlay?"),
+            tr("Discard '{name}'s writes onto the shared game libraries "
+               "({size})? Game updates applied in a session are lost and "
+               "re-apply next time; the host libraries and the sandbox HOME "
+               "are untouched.", name=sc.name, size=_fmt_size(size)),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        home = sc.home_dir()
+        self._clear_overlay_btn.setEnabled(False)
+
+        def _clear() -> str:
+            sandbox.clear_overlays(home)
+            return tr("Overlay of '{name}' cleared.", name=sc.name)
+
+        # Force a re-measure of both sizes on the next refresh.
+        self._sizes.pop(sc.name, None)
+        self._overlay_sizes.pop(sc.name, None)
+        start_action(self._pool, _clear, "Overlay", self._on_overlay_cleared)
+
+    def _on_overlay_cleared(self, ok: bool, msg: str) -> None:
+        self._clear_overlay_btn.setEnabled(True)
         self._status.setText(msg if ok else tr("Error: {msg}", msg=msg))
         self.refresh()
 

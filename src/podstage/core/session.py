@@ -25,9 +25,17 @@ from . import provisioner, runtime, sandbox
 
 
 class Session:
-    def __init__(self, cfg: config.SessionConfig):
+    def __init__(self, cfg: config.SessionConfig,
+                 app_config: config.AppConfig | None = None):
         self.cfg = cfg
         self.home = cfg.home_dir()
+        # Injected by GUI/CLI (they hold a loaded config); loaded lazily else.
+        self._app_config = app_config
+
+    def app_config(self) -> config.AppConfig:
+        if self._app_config is None:
+            self._app_config = config.AppConfig.load()
+        return self._app_config
 
     # -- helpers ---------------------------------------------------------
 
@@ -68,7 +76,7 @@ class Session:
         """Gracefully shut down the desktop Steam, unless the user disabled it
         (``close_desktop_steam`` off → a second Steam account can stream while
         the desktop Steam keeps running)."""
-        if not config.AppConfig.load().close_desktop_steam:
+        if not self.app_config().close_desktop_steam:
             return
         if shutil.which("steam") is None or not self._host_steam_running():
             return
@@ -113,6 +121,7 @@ class Session:
             env["PS_THUMBNAIL"] = "disabled"
         else:
             env["PS_THUMBNAIL_INTERVAL"] = str(self.cfg.preview_interval_s)
+        env.update(self.app_config().experimental_env())
         return runtime.RuntimeOptions(
             home_dir=self.home,
             resolution=self._resolution_str(resolution),

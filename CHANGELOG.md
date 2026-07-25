@@ -4,6 +4,57 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Stale-image detection**: `podstage runtime build` (new CLI command; the
+  GUI's build button uses the same path) stamps a hash of
+  `containers/runtime/` into the image as a label. `doctor` and session start
+  warn when the sources changed after the build (a plain `podman build`
+  without the label counts as stale).
+- **Update check on demand**: a Setup-page button queries the GitHub releases
+  (only on click, no telemetry), links the release page and flags releases
+  whose notes mention an image rebuild.
+- **Overlay disk usage and cleanup**: the Sandboxes table shows each
+  sandbox's overlay size (its writes onto the shared libraries) next to the
+  HOME size; "Clear overlay" discards them after confirmation. Host libraries
+  and the sandbox HOME stay untouched.
+- **Experimental features card**: every experimental switch lives on the
+  Setup page (persisted under `[experimental]` in config.toml, applied at the
+  next session start). Current entries:
+  - *Follow client resolution*: a Sunshine prep-cmd resizes the output to
+    the connecting Moonlight client's resolution (`wlr-randr` inside the
+    container) and restores the profile resolution when the stream ends.
+  - *HDR stream* (unverified): gamescope gets `--hdr-enabled`, games see
+    `DXVK_HDR=1`; whether the stream carries HDR depends on Sunshine's
+    capture path and the client.
+
+  Both need a current runtime image (`PS_DYNAMIC_RES`/`PS_HDR` also work as
+  plain env overrides).
+- **Intel GPU load telemetry**: on Intel the Session page now shows GPU busy
+  percent from one `intel_gpu_top -J` sample, when the tool is installed and
+  the GPU PMU is readable (i915/xe expose no sysfs counters; VRAM stays
+  unavailable).
+- **CI job for the GUI**: byte-compiles `src/podstage/ui` and boots the main
+  window offscreen with PyQt6 installed; errors there were invisible to the
+  PyQt6-less test suite.
+
+### Fixed
+
+- The session preview no longer disappears during static scenes. The capture
+  (wlr-screencopy) only delivers frames while the picture changes, and the
+  GUI hid the last frame after 45 s without a new one; it now keeps it for
+  the rest of the session (frames from a previous session stay excluded). A
+  Setup → Streaming toggle restores the strict hiding.
+- The GUI's "open in browser" buttons (Sunshine web UI, release page) did
+  nothing on KDE: `ui.sh` exported `QT_PLUGIN_PATH`, the spawned
+  `xdg-open`/`kde-open` inherited it and aborted on the ABI-foreign Qt
+  plugins before a browser could open. The plugin dir is now handed over
+  privately (`PS_QT_PLUGIN_PATH`) and consumed in-process, so children keep
+  a clean environment.
+- Editing a profile no longer resets its preview interval to the default.
+
 ## [0.1.3] - 2026-07-24
 
 ### Added

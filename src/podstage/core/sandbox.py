@@ -71,15 +71,35 @@ def inspect(cfg: config.SessionConfig) -> SandboxInfo:
     )
 
 
-def size_bytes(home: Path) -> int | None:
-    """Apparent disk usage of the sandbox (blocks). Runs ``du`` — seconds on
-    a populated sandbox, call off the UI thread."""
+def _du_bytes(path: Path) -> int | None:
     try:
-        p = subprocess.run(["du", "-sb", str(home)], capture_output=True,
+        p = subprocess.run(["du", "-sb", str(path)], capture_output=True,
                            text=True, timeout=120, check=False)
         return int(p.stdout.split()[0]) if p.returncode == 0 else None
     except (OSError, subprocess.SubprocessError, ValueError, IndexError):
         return None
+
+
+def size_bytes(home: Path) -> int | None:
+    """Apparent disk usage of the sandbox (blocks). Runs ``du`` — seconds on
+    a populated sandbox, call off the UI thread."""
+    return _du_bytes(home)
+
+
+def overlay_size_bytes(home: Path) -> int | None:
+    """Disk usage of the sandbox's overlay writes onto the shared libraries
+    (0 before the first session write)."""
+    root = config.overlay_root(home)
+    if not root.exists():
+        return 0
+    return _du_bytes(root)
+
+
+def clear_overlays(home: Path) -> None:
+    """Drop the sandbox's overlay writes; the read-only host libraries stay
+    untouched, Steam re-applies updates next session. The caller must ensure
+    no session is running on this sandbox."""
+    shutil.rmtree(config.overlay_root(home), ignore_errors=True)
 
 
 def _guard(home: Path) -> Path:

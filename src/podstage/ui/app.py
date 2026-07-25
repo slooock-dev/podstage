@@ -14,10 +14,11 @@ go through pkexec — the GUI never needs a terminal.
 Run under the Qt-capable Python (brew's, with PyQt6) via ``ui.sh``.
 """
 
+import os
 import sys
 
 try:
-    from PyQt6.QtCore import QObject, pyqtSignal
+    from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
     from PyQt6.QtGui import QIcon
     from PyQt6.QtWidgets import (
         QApplication,
@@ -207,6 +208,12 @@ def _app_icon() -> QIcon:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Qt plugin dir from ui.sh — deliberately not QT_PLUGIN_PATH: children
+    # (xdg-open → kde-open, a host Qt app) would inherit that and abort on
+    # the ABI-foreign plugins.
+    plugin_path = os.environ.pop("PS_QT_PLUGIN_PATH", "")
+    if plugin_path:
+        QCoreApplication.addLibraryPath(plugin_path)
     app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName("podstage")
     app.setDesktopFileName("podstage")  # Wayland maps the window to the .desktop icon

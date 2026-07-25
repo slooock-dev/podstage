@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from podstage import config
-from podstage.core import runtime
+from podstage.core import runtime, udev
 
 LIBS = [Path("/tmp/lib-a/steamapps"), Path("/tmp/lib-b/steamapps")]
 
@@ -173,3 +173,55 @@ def test_ensure_overlay_dirs_creates_upper_and_work(tmp_path, monkeypatch):
     for lib in LIBS:
         upper, work = config.overlay_dirs(tmp_path / "home", lib)
         assert upper.is_dir() and work.is_dir()
+
+
+# -- image staleness ---------------------------------------------------------
+
+def _fake_src(tmp_path, monkeypatch, content="FROM x\n"):
+    src = tmp_path / "containers" / "runtime"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "Containerfile").write_text(content)
+    monkeypatch.setattr(udev, "REPO_ROOT", tmp_path)
+    return src
+
+
+def test_runtime_src_hash_tracks_content(tmp_path, monkeypatch):
+    src = _fake_src(tmp_path, monkeypatch)
+    h1 = runtime.runtime_src_hash()
+    (src / "Containerfile").write_text("FROM y\n")
+    h2 = runtime.runtime_src_hash()
+    (src / "entrypoint.sh").write_text("#!/bin/sh\n")
+    h3 = runtime.runtime_src_hash()
+    assert h1 and h2 and h3 and len({h1, h2, h3}) == 3
+
+
+def test_runtime_src_hash_none_without_checkout(tmp_path, monkeypatch):
+    monkeypatch.setattr(udev, "REPO_ROOT", tmp_path / "not-a-checkout")
+    assert runtime.runtime_src_hash() is None
+    assert runtime.image_is_stale() is None  # nothing to compare against
+
+
+def test_image_is_stale_compares_the_label(tmp_path, monkeypatch):
+    _fake_src(tmp_path, monkeypatch)
+    current = runtime.runtime_src_hash()
+
+    def fake_run(cmd, timeout=15, label=current):
+        return (0, label) if "inspect" in cmd else (0, "")
+
+    monkeypatch.setattr(runtime, "_run", fake_run)
+    assert runtime.image_is_stale() is False
+    monkeypatch.setattr(runtime, "_run",
+                        lambda cmd, timeout=15: (0, "0" * 64) if "inspect" in cmd
+                        else (0, ""))
+    assert runtime.image_is_stale() is True
+    # An image built without the label (plain podman build) counts as stale.
+    monkeypatch.setattr(runtime, "_run",
+                        lambda cmd, timeout=15: (0, "<no value>") if "inspect" in cmd
+                        else (0, ""))
+    assert runtime.image_is_stale() is True
+
+
+def test_image_is_stale_none_without_image(tmp_path, monkeypatch):
+    _fake_src(tmp_path, monkeypatch)
+    monkeypatch.setattr(runtime, "_run", lambda cmd, timeout=15: (1, ""))
+    assert runtime.image_is_stale() is None

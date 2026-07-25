@@ -72,9 +72,17 @@ def check_image() -> CheckResult:
         return CheckResult(
             "image", Status.FAIL,
             f"{runtime.DEFAULT_IMAGE} not built yet",
-            fix=f"podman build -t {runtime.DEFAULT_IMAGE} containers/runtime/",
+            fix="podstage runtime build",
         )
     _, img_id = _run(["podman", "image", "inspect", "--format", "{{.Id}}", runtime.DEFAULT_IMAGE])
+    # Hash label vs. current sources; unlabeled (plain podman build) counts
+    # as stale too.
+    if runtime.image_is_stale():
+        return CheckResult(
+            "image", Status.WARN,
+            "image is stale — containers/runtime/ changed since it was built",
+            fix="podstage runtime build",
+        )
     return CheckResult("image", Status.OK, f"present: {img_id[:12]}")
 
 
@@ -243,10 +251,14 @@ def check_gpu() -> CheckResult:
                            "AMD GPU detected but no /dev/dri render node")
     if vendor == "intel":
         if glob.glob("/dev/dri/renderD*"):
+            telemetry = ("GPU-load telemetry via intel_gpu_top"
+                         if shutil.which("intel_gpu_top")
+                         else "no GPU-load telemetry (optional: install "
+                              "intel_gpu_top / igt-gpu-tools)")
             return CheckResult(
                 "gpu/encoder", Status.OK,
                 "Intel GPU: VAAPI encoder via iHD (confirmed on an Arc B580; "
-                "needs Broadwell+ for intel-media-driver)")
+                f"needs Broadwell+ for intel-media-driver); {telemetry}")
         return CheckResult("gpu/encoder", Status.FAIL,
                            "Intel GPU detected but no /dev/dri render node")
     if not shutil.which("nvidia-smi"):
