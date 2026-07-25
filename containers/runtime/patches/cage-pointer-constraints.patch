@@ -27,7 +27,7 @@ index f4b661d..48456f5 100644
  	if (!server.foreign_toplevel_manager) {
  		wlr_log(WLR_ERROR, "Unable to create the foreign toplevel manager");
 diff --git a/seat.c b/seat.c
-index 5f659a4..a9a8074 100644
+index 5f659a4..cb3e3fa 100644
 --- a/seat.c
 +++ b/seat.c
 @@ -23,6 +23,7 @@
@@ -52,16 +52,27 @@ index 5f659a4..a9a8074 100644
  		wlr_cursor_unset_image(seat->cursor);
  	} else {
  		wlr_cursor_set_xcursor(seat->cursor, seat->xcursor_manager, DEFAULT_XCURSOR);
-@@ -625,6 +629,16 @@ process_cursor_motion(struct cg_seat *seat, uint32_t time_msec, double dx, doubl
+@@ -491,8 +495,9 @@ handle_request_set_cursor(struct wl_listener *listener, void *data)
+ 	}
+ 
+ 	/* This can be sent by any client, so we check to make sure
+-	 * this one actually has pointer focus first. */
+-	if (focused_client == event->seat_client->client) {
++	 * this one actually has pointer focus first. No cursor image before
++	 * real motion either (see process_cursor_motion). */
++	if (focused_client == event->seat_client->client && seat->pointer_active) {
+ 		wlr_cursor_set_surface(seat->cursor, event->surface, event->hotspot_x, event->hotspot_y);
+ 	}
+ }
+@@ -625,6 +630,15 @@ process_cursor_motion(struct cg_seat *seat, uint32_t time_msec, double dx, doubl
  	struct wlr_seat *wlr_seat = seat->seat;
  	struct wlr_surface *surface = NULL;
  
-+	/* Inert until the first real motion: no pointer focus, no hover, no
-+	 * cursor — a parked virtual mouse must not disturb gamepad UI focus. */
-+	if (!seat->pointer_active) {
-+		if (dx == 0 && dy == 0) {
-+			return;
-+		}
++	/* No cursor image until the first real motion — Sunshine creates
++	 * virtual mice for every stream, gamepad-only clients included. Focus
++	 * and motion still flow: without pointer ENTER, nested gamescope
++	 * composites its OWN cursor into the frame instead. */
++	if (!seat->pointer_active && (dx != 0 || dy != 0)) {
 +		seat->pointer_active = true;
 +		wlr_cursor_set_xcursor(seat->cursor, seat->xcursor_manager, DEFAULT_XCURSOR);
 +	}
