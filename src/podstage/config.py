@@ -106,7 +106,6 @@ def sunshine_web_credentials() -> tuple[str, str]:
 # labels live in ui/pages/setup_page.py. Add/remove features HERE.
 EXPERIMENTAL_FEATURES: dict[str, str] = {
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
-    "mouse_input": "PS_MOUSE_INPUT",         # inject the client's mouse
 }
 
 
@@ -220,6 +219,9 @@ class AppConfig:
     # Keep the last preview frame during static scenes (wlr-screencopy only
     # delivers frames while the picture changes). Off hides it after ~45 s.
     preview_keep_last: bool = True
+    # Stream the client's mouse AND keyboard into the session
+    # (PS_MOUSE_INPUT). Off for controller-only setups (default).
+    mouse_keyboard: bool = False
     # Enabled experimental features (keys from EXPERIMENTAL_FEATURES),
     # toggled on the Setup page, applied at the next session start.
     experimental: dict[str, bool] = field(default_factory=dict)
@@ -249,6 +251,10 @@ class AppConfig:
                    sessions_home_root=data.get("sessions_home_root", ""),
                    close_desktop_steam=data.get("close_desktop_steam", True),
                    preview_keep_last=data.get("preview_keep_last", True),
+                   # mouse_input was experimental before it graduated
+                   mouse_keyboard=bool(data.get(
+                       "mouse_keyboard",
+                       data.get("experimental", {}).get("mouse_input", False))),
                    experimental=experimental)
 
     @classmethod
@@ -283,6 +289,8 @@ class AppConfig:
             data["close_desktop_steam"] = False
         if not self.preview_keep_last:
             data["preview_keep_last"] = False
+        if self.mouse_keyboard:
+            data["mouse_keyboard"] = True
         enabled = {k: True for k, v in self.experimental.items() if v}
         if enabled:
             data["experimental"] = enabled

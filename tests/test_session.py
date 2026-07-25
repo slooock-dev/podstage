@@ -22,10 +22,10 @@ def test_options_forward_sunshine_extra_env():
 
 def test_options_forward_experimental_env():
     sc = SessionConfig(name="deck")
-    on = AppConfig(experimental={"mouse_input": True, "hdr": True})
+    on = AppConfig(experimental={"hdr": True}, mouse_keyboard=True)
     env = Session(sc, app_config=on)._options().env
-    assert env["PS_MOUSE_INPUT"] == "enabled"
     assert env["PS_HDR"] == "enabled"
+    assert env["PS_MOUSE_INPUT"] == "enabled"
     off = Session(sc, app_config=AppConfig())._options().env
     assert "PS_MOUSE_INPUT" not in off and "PS_HDR" not in off
 

@@ -122,6 +122,8 @@ class Session:
         else:
             env["PS_THUMBNAIL_INTERVAL"] = str(self.cfg.preview_interval_s)
         env.update(self.app_config().experimental_env())
+        if self.app_config().mouse_keyboard:
+            env["PS_MOUSE_INPUT"] = "enabled"
         return runtime.RuntimeOptions(
             home_dir=self.home,
             resolution=self._resolution_str(resolution),

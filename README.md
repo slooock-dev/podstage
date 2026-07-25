@@ -57,9 +57,9 @@ host GUI.
   `-gamepadui`, captured by a bundled Sunshine (wlr screencopy, hardware encode
   via NVENC or VAAPI). No window on the host, no DRM output.
 - **Built for Steam, gamepad first.** The streamed session is Big Picture;
-  Steam Input works natively. Experimental: keyboard/mouse streaming
-  (`mouse_input`, incl. in-game pointer lock via a patched `cage`) and a
-  desktop mode streaming the Steam desktop UI. Non-Steam launchers aren't
+  Steam Input works natively. Optional mouse & keyboard streaming (off by
+  default, incl. in-game pointer lock via a patched `cage`); an experimental
+  desktop mode streams the Steam desktop UI. Non-Steam launchers aren't
   wired up.
 - **Resolution follows the client.** The pipeline launches on the first
   Moonlight connect and renders at that client's resolution and refresh
@@ -97,8 +97,7 @@ host GUI.
 - Steam installed on the host; its libraries are shared into the sandboxes.
 - Python ≥ 3.11 for the CLI/core, PyQt6 ≥ 6.6 for the GUI (`./ui.sh` tries to find a suitable interpreter).
 - A Moonlight client with a gamepad (Steam Deck, laptop, phone with
-  controller); keyboard/mouse works via the experimental `mouse_input`
-  toggle.
+  controller); mouse & keyboard work via a Setup-page toggle.
 
 > **Tested configuration.** Developed and verified end-to-end on Bazzite-DX 43
 > (KDE Plasma, Wayland) with an NVIDIA RTX 4080 SUPER, streaming to a Steam

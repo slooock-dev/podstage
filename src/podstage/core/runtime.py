@@ -79,7 +79,7 @@ def _glxserver() -> Path | None:
 
 # Environment variables forwarded from the caller into the container (with
 # defaults where the pipeline needs one). PS_MOUSE_INPUT is driven by the
-# mouse_input experimental feature; gamepad stays the default input path.
+# mouse & keyboard setting; gamepad stays the default input path.
 _FORWARD_ENV: dict[str, str | None] = {
     "PS_STEAM_FLAGS": "-gamepadui",
     "PS_NATIVE_TOUCH": "disabled",

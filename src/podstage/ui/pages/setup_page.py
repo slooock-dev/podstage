@@ -42,15 +42,11 @@ _GLYPH = {doctor.Status.OK: ("●", "ok"),
 # card build fails loudly on a missing one (gui-smoke catches it).
 _EXPERIMENTAL_LABELS = {
     "hdr": lambda: tr("HDR stream"),
-    "mouse_input": lambda: tr("Mouse input"),
 }
 _EXPERIMENTAL_DETAILS = {
     "hdr": lambda: tr(
         "gamescope advertises an HDR output and games see DXVK_HDR. "
         "Unverified end to end."),
-    "mouse_input": lambda: tr(
-        "Streams the client's mouse into the session. Big Picture is "
-        "mouse-navigable; games can lock the pointer for mouse look."),
 }
 
 
@@ -206,6 +202,18 @@ class SetupPage(QWidget):
         self._keep_preview.setChecked(self._ctx.config.preview_keep_last)
         self._keep_preview.toggled.connect(self._on_keep_preview_toggled)
         slay.addWidget(self._keep_preview)
+        self._mouse_kb = QCheckBox(tr("Mouse && keyboard input"))
+        self._mouse_kb.setToolTip(tr(
+            "Streams the client's mouse and keyboard into the session; games "
+            "can lock the pointer for mouse look."))
+        self._mouse_kb.setChecked(self._ctx.config.mouse_keyboard)
+        self._mouse_kb.toggled.connect(self._on_mouse_kb_toggled)
+        mkhint = QLabel(tr("Recommended off for controller-only clients. "
+                           "Applies at the next session start."))
+        mkhint.setProperty("muted", True)
+        mkhint.setWordWrap(True)
+        slay.addWidget(self._mouse_kb)
+        slay.addWidget(mkhint)
         root.addWidget(sframe)
 
         eframe, elay = card(tr("Experimental features"))
@@ -389,6 +397,10 @@ class SetupPage(QWidget):
 
     def _on_keep_preview_toggled(self, enabled: bool) -> None:
         self._ctx.config.preview_keep_last = enabled
+        self._ctx.save()
+
+    def _on_mouse_kb_toggled(self, enabled: bool) -> None:
+        self._ctx.config.mouse_keyboard = enabled
         self._ctx.save()
 
     def _on_experimental_toggled(self, key: str, enabled: bool) -> None:

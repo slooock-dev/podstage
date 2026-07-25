@@ -235,6 +235,7 @@ port = $PS_SUNSHINE_PORT
 encoder = ${PS_ENCODER:-nvenc}
 capture = wlr
 mouse = ${PS_MOUSE_INPUT:-$MOUSE_DEFAULT}
+keyboard = ${PS_MOUSE_INPUT:-$MOUSE_DEFAULT}
 native_pen_touch = ${PS_NATIVE_TOUCH:-disabled}
 origin_web_ui_allowed = lan
 csrf_allowed_origins = $PS_CSRF_ORIGINS

@@ -457,7 +457,7 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("action", nargs="?", default="list",
                     choices=["list", "enable", "disable"])
     ex.add_argument("feature", nargs="?",
-                    help="feature key, e.g. mouse_input (see 'list')")
+                    help="feature key, e.g. hdr (see 'list')")
     ex.set_defaults(func=cmd_experimental)
 
     prov = sub.add_parser("provision", help="make a Steam app available in a streaming session")

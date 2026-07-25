@@ -50,9 +50,10 @@ the GUI's Steam-login bootstrap (or `podstage session setup`).
 
 Dynamic resolution is the default (`PS_DYNAMIC_RES=disabled` opts out): the
 pipeline launches on the first connect at that client's WxH@R, locked until
-restart; other clients get scaled. Experimental (GUI Setup page, or env):
-`PS_MOUSE_INPUT=enabled` injects the client's mouse; `PS_HDR=enabled` adds
-gamescope `--hdr-enabled` plus `DXVK_HDR=1` (unverified end to end).
+restart; other clients get scaled. `PS_MOUSE_INPUT=enabled` injects the
+client's mouse + keyboard (Setup-page toggle, off by default). Experimental:
+`PS_HDR=enabled` adds gamescope `--hdr-enabled` plus `DXVK_HDR=1`
+(unverified end to end).
 
 ## Required run flags (why)
 

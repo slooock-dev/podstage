@@ -124,7 +124,7 @@ def test_preview_keep_last_roundtrip(tmp_path: Path):
 def test_experimental_roundtrip_and_env(tmp_path: Path):
     path = tmp_path / "config.toml"
     AppConfig(sessions=[SessionConfig(name="s")],
-              experimental={"hdr": True, "mouse_input": False}).save(path)
+              experimental={"hdr": True}).save(path)
     loaded = AppConfig.load(path)
     assert loaded.experimental == {"hdr": True}  # only enabled keys persist
     assert loaded.experimental_env() == {"PS_HDR": "enabled"}
@@ -138,6 +138,16 @@ def test_experimental_unknown_keys_dropped(tmp_path: Path):
     path = tmp_path / "config.toml"
     path.write_text('[experimental]\nhdr = true\nremoved_feature = true\n')
     assert AppConfig.load(path).experimental == {"hdr": True}
+
+
+def test_mouse_keyboard_migrates_from_experimental(tmp_path: Path):
+    path = tmp_path / "config.toml"
+    path.write_text('[experimental]\nmouse_input = true\n')
+    cfg = AppConfig.load(path)
+    assert cfg.mouse_keyboard is True
+    assert cfg.experimental == {}  # legacy key not kept as experimental
+    cfg.save(path)
+    assert AppConfig.load(path).mouse_keyboard is True  # persists natively
 
 
 def test_preview_interval_roundtrip(tmp_path: Path):
