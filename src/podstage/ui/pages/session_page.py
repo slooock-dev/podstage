@@ -165,6 +165,12 @@ class SessionPage(QWidget):
         top.setSpacing(8)
         self._client = QComboBox()
         self._client.currentTextChanged.connect(self._on_profile_selected)
+        self._mode = QComboBox()
+        self._mode.addItem(tr("Big Picture"), "pipeline")
+        self._mode.addItem(tr("Desktop (experimental)"), "desktop")
+        self._mode.setToolTip(tr(
+            "Big Picture (gamepad) or the Steam desktop UI with mouse and "
+            "keyboard (experimental). Applies at the next start."))
         self._start_btn = QPushButton(tr("Start"))
         self._start_btn.setProperty("primary", True)
         self._start_btn.clicked.connect(self._on_start)
@@ -178,6 +184,7 @@ class SessionPage(QWidget):
         self._pair_btn.clicked.connect(self._on_pair)
         top.addWidget(QLabel(tr("Client")))
         top.addWidget(self._client, 1)
+        top.addWidget(self._mode)
         top.addWidget(self._start_btn)
         top.addWidget(self._stop_btn)
         top.addWidget(self._pair_btn)
@@ -450,6 +457,7 @@ class SessionPage(QWidget):
             self._detail.setText("")
 
         self._start_btn.setEnabled(not busy and not snap.running)
+        self._mode.setEnabled(not busy and not snap.running)
         self._stop_btn.setEnabled(not busy and snap.running)
         self._pair_btn.setEnabled(not busy and snap.running)
 
@@ -567,11 +575,13 @@ class SessionPage(QWidget):
             if resolution is None:
                 return
 
+        mode = self._mode.currentData()
+
         def _launch() -> runtime.RuntimeStatus:
             if close_sandbox_steam and not session.close_sandbox_steam():
                 raise RuntimeError(tr(
                     "Could not close the sandbox Steam; close it manually."))
-            return session.start(resolution=resolution)
+            return session.start(resolution=resolution, mode=mode)
 
         self._last_error = ""
         self._pending = "start"
@@ -595,7 +605,8 @@ class SessionPage(QWidget):
                      f"Stop {sc.name}", self._on_action_done)
 
     def _ask_resolution(self, name: str) -> str | None:
-        presets = ["1920x1080@60", "1280x800@60", "2560x1440@60", "3840x2160@60"]
+        presets = ["{}x{}@{}".format(*dims)
+                   for dims in config.RESOLUTION_PRESETS.values()]
         value, ok = QInputDialog.getItem(
             self, tr("Resolution"),
             tr("'{name}' picks its resolution at startup.\nResolution for this "

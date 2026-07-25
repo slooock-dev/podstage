@@ -329,6 +329,11 @@ TEXTS: dict[str, str] = {
     "features need a current runtime image.":
         "Globale Schalter, gelten ab dem nächsten Session-Start. "
         "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
+    "Desktop (experimental)": "Desktop (experimentell)",
+    "Big Picture (gamepad) or the Steam desktop UI with mouse and "
+    "keyboard (experimental). Applies at the next start.":
+        "Big Picture (Gamepad) oder die Steam-Desktop-UI mit Maus und "
+        "Tastatur (experimentell). Gilt ab dem nächsten Start.",
     "HDR stream": "HDR-Stream",
     "gamescope advertises an HDR output and games see DXVK_HDR. Unverified "
     "end to end.":
