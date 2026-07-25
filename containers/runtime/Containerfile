@@ -85,6 +85,32 @@ RUN pacman -Sy --noconfirm --needed \
         libva-mesa-driver lib32-libva-mesa-driver libva-utils && \
     pacman -Scc --noconfirm
 
+# --- patched cage: pointer-constraints support -----------------------------
+# Stock cage (kiosk) implements relative-pointer but NOT pointer-constraints,
+# so games can never lock the mouse: the cursor drifts to the output edge and
+# mouse-look stutters/jumps (Moonlight keyboard/mouse streaming). The vendored
+# patch wires wlroots' zwp_pointer_constraints_v1 into cage: locks activate
+# immediately (single-client kiosk) and freeze the cursor while clients read
+# the relative-pointer stream. Built from the pinned release tarball
+# (sha256-verified like Sunshine); installed to /usr/local/bin, which shadows
+# the Arch package's /usr/bin/cage in PATH (kept for its dependency pull-in).
+ARG CAGE_VERSION=v0.3.1
+ARG CAGE_SHA256=6dc1619665acd367e0174c93b234002549a66f55f1de9197d67f0305415babc8
+COPY patches/cage-pointer-constraints.patch /tmp/
+RUN curl -fL "https://github.com/cage-kiosk/cage/archive/refs/tags/${CAGE_VERSION}.tar.gz" \
+        -o /tmp/cage.tar.gz && \
+    echo "${CAGE_SHA256}  /tmp/cage.tar.gz" | sha256sum -c - && \
+    pacman -S --noconfirm --needed gcc meson ninja pkgconf wayland-protocols scdoc patch && \
+    mkdir /tmp/cage-src && \
+    tar -C /tmp/cage-src --strip-components=1 -xf /tmp/cage.tar.gz && \
+    cd /tmp/cage-src && \
+    patch -p1 < /tmp/cage-pointer-constraints.patch && \
+    meson setup build --buildtype=release && \
+    ninja -C build && \
+    install -m 755 build/cage /usr/local/bin/cage && \
+    cd / && rm -rf /tmp/cage* /tmp/cage-pointer-constraints.patch && \
+    pacman -Rns --noconfirm meson ninja scdoc patch && pacman -Scc --noconfirm
+
 # Seat shim: cage must enumerate the STREAMING seat ("seat9" — where the host
 # udev rule puts Sunshine's virtual devices) instead of seatd's hardcoded
 # "seat0", or it grabs the host desktop's real keyboard/mouse (input leak in

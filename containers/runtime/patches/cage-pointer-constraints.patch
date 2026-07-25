@@ -1,0 +1,147 @@
+diff --git a/cage.c b/cage.c
+index f4b661d..48456f5 100644
+--- a/cage.c
++++ b/cage.c
+@@ -33,6 +33,7 @@
+ #include <wlr/types/wlr_output_management_v1.h>
+ #include <wlr/types/wlr_presentation_time.h>
+ #include <wlr/types/wlr_primary_selection_v1.h>
++#include <wlr/types/wlr_pointer_constraints_v1.h>
+ #include <wlr/types/wlr_relative_pointer_v1.h>
+ #include <wlr/types/wlr_scene.h>
+ #include <wlr/types/wlr_screencopy_v1.h>
+@@ -553,6 +554,15 @@ main(int argc, char *argv[])
+ 		goto end;
+ 	}
+ 
++	server.pointer_constraints = wlr_pointer_constraints_v1_create(server.wl_display);
++	if (!server.pointer_constraints) {
++		wlr_log(WLR_ERROR, "Unable to create the pointer constraints manager");
++		ret = 1;
++		goto end;
++	}
++	server.new_constraint.notify = handle_pointer_constraint;
++	wl_signal_add(&server.pointer_constraints->events.new_constraint, &server.new_constraint);
++
+ 	server.foreign_toplevel_manager = wlr_foreign_toplevel_manager_v1_create(server.wl_display);
+ 	if (!server.foreign_toplevel_manager) {
+ 		wlr_log(WLR_ERROR, "Unable to create the foreign toplevel manager");
+diff --git a/seat.c b/seat.c
+index 5f659a4..5df82e9 100644
+--- a/seat.c
++++ b/seat.c
+@@ -23,6 +23,7 @@
+ #include <wlr/types/wlr_idle_notify_v1.h>
+ #include <wlr/types/wlr_keyboard_group.h>
+ #include <wlr/types/wlr_primary_selection.h>
++#include <wlr/types/wlr_pointer_constraints_v1.h>
+ #include <wlr/types/wlr_relative_pointer_v1.h>
+ #include <wlr/types/wlr_scene.h>
+ #include <wlr/types/wlr_seat.h>
+@@ -647,6 +648,53 @@ process_cursor_motion(struct cg_seat *seat, uint32_t time_msec, double dx, doubl
+ 	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+ }
+ 
++/* Pointer constraints: a locked pointer freezes the cursor — clients (games
++ * via Xwayland, nested gamescope) then track motion exclusively through the
++ * relative-pointer events process_cursor_motion() already sends. Confined
++ * constraints keep normal movement: the kiosk view covers the whole output,
++ * so the region is effectively the screen. */
++static bool
++pointer_is_locked(struct cg_seat *seat)
++{
++	return seat->active_constraint != NULL &&
++	       seat->active_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED;
++}
++
++static void
++handle_constraint_destroy(struct wl_listener *listener, void *data)
++{
++	struct cg_seat *seat = wl_container_of(listener, seat, constraint_destroy);
++	struct wlr_pointer_constraint_v1 *constraint = data;
++
++	if (seat->active_constraint == constraint) {
++		seat->active_constraint = NULL;
++	}
++	wl_list_remove(&seat->constraint_destroy.link);
++	wl_list_init(&seat->constraint_destroy.link);
++}
++
++void
++handle_pointer_constraint(struct wl_listener *listener, void *data)
++{
++	struct cg_server *server = wl_container_of(listener, server, new_constraint);
++	struct cg_seat *seat = server->seat;
++	struct wlr_pointer_constraint_v1 *constraint = data;
++
++	/* Kiosk: one client owns the output — activate immediately, replacing
++	 * any previous constraint. */
++	if (seat->active_constraint != NULL) {
++		if (seat->active_constraint == constraint) {
++			return;
++		}
++		wlr_pointer_constraint_v1_send_deactivated(seat->active_constraint);
++		wl_list_remove(&seat->constraint_destroy.link);
++	}
++	seat->active_constraint = constraint;
++	seat->constraint_destroy.notify = handle_constraint_destroy;
++	wl_signal_add(&constraint->events.destroy, &seat->constraint_destroy);
++	wlr_pointer_constraint_v1_send_activated(constraint);
++}
++
+ static void
+ handle_cursor_motion_absolute(struct wl_listener *listener, void *data)
+ {
+@@ -659,7 +707,9 @@ handle_cursor_motion_absolute(struct wl_listener *listener, void *data)
+ 	double dx = lx - seat->cursor->x;
+ 	double dy = ly - seat->cursor->y;
+ 
+-	wlr_cursor_warp_absolute(seat->cursor, &event->pointer->base, event->x, event->y);
++	if (!pointer_is_locked(seat)) {
++		wlr_cursor_warp_absolute(seat->cursor, &event->pointer->base, event->x, event->y);
++	}
+ 	process_cursor_motion(seat, event->time_msec, dx, dy, dx, dy);
+ 	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+ }
+@@ -670,7 +720,9 @@ handle_cursor_motion_relative(struct wl_listener *listener, void *data)
+ 	struct cg_seat *seat = wl_container_of(listener, seat, cursor_motion_relative);
+ 	struct wlr_pointer_motion_event *event = data;
+ 
+-	wlr_cursor_move(seat->cursor, &event->pointer->base, event->delta_x, event->delta_y);
++	if (!pointer_is_locked(seat)) {
++		wlr_cursor_move(seat->cursor, &event->pointer->base, event->delta_x, event->delta_y);
++	}
+ 	process_cursor_motion(seat, event->time_msec, event->delta_x, event->delta_y, event->unaccel_dx,
+ 			      event->unaccel_dy);
+ 	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+diff --git a/seat.h b/seat.h
+index 4b7bfda..5128291 100644
+--- a/seat.h
++++ b/seat.h
+@@ -48,8 +48,13 @@ struct cg_seat {
+ 	struct wl_listener request_set_cursor;
+ 	struct wl_listener request_set_selection;
+ 	struct wl_listener request_set_primary_selection;
++
++	struct wlr_pointer_constraint_v1 *active_constraint;
++	struct wl_listener constraint_destroy;
+ };
+ 
++void handle_pointer_constraint(struct wl_listener *listener, void *data);
++
+ struct cg_keyboard_group {
+ 	struct wlr_keyboard_group *wlr_group;
+ 	struct cg_seat *seat;
+diff --git a/server.h b/server.h
+index 27f212a..42c592b 100644
+--- a/server.h
++++ b/server.h
+@@ -67,6 +67,8 @@ struct cg_server {
+ #endif
+ 
+ 	struct wlr_relative_pointer_manager_v1 *relative_pointer_manager;
++	struct wlr_pointer_constraints_v1 *pointer_constraints;
++	struct wl_listener new_constraint;
+ 
+ 	struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_manager;
+ 
