@@ -13,7 +13,7 @@
 #
 # Env: PS_IMAGE, PS_SUNSHINE_PORT, PS_CSRF_ORIGINS, PS_WEB_USER/PASS,
 #      PS_STEAM_FLAGS, PS_NATIVE_TOUCH, PS_MOUSE_INPUT, PS_SHOW_CURSOR,
-#      PS_SEAT_NAME, PS_DYNAMIC_RES, PS_HDR (experimental),
+#      PS_SEAT_NAME, PS_DYNAMIC_RES (default enabled), PS_HDR (experimental),
 #      PS_NO_PROVISION=1 — all honored by the Python runtime.
 # The container runs rootless (--userns=keep-id) — no sudo involved.
 set -euo pipefail

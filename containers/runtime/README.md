@@ -48,10 +48,12 @@ Examples:
 `homes/deck` is an isolated, already-logged-in Steam sandbox HOME as created by
 the GUI's Steam-login bootstrap (or `podstage session setup`).
 
-Experimental (toggled on the GUI's Setup page, or as env): `PS_DYNAMIC_RES=enabled`
-resizes the output to the connecting client via a Sunshine prep-cmd;
-`PS_HDR=enabled` adds gamescope `--hdr-enabled` plus `DXVK_HDR=1` (unverified
-end to end).
+Dynamic resolution is the default (`PS_DYNAMIC_RES=disabled` opts out): the
+pipeline launches on the first client connect and renders at that client's
+resolution and refresh rate — locked until the container restarts, other
+clients get scaled. Experimental (GUI Setup page, or as env):
+`PS_MOUSE_INPUT=enabled` injects the client's mouse; `PS_HDR=enabled` adds
+gamescope `--hdr-enabled` plus `DXVK_HDR=1` (unverified end to end).
 
 ## Required run flags (why)
 

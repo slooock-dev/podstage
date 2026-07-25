@@ -41,15 +41,10 @@ _GLYPH = {doctor.Status.OK: ("●", "ok"),
 # Labels/tooltips for config.EXPERIMENTAL_FEATURES — one entry per key, the
 # card build fails loudly on a missing one (gui-smoke catches it).
 _EXPERIMENTAL_LABELS = {
-    "dynamic_resolution": lambda: tr("Follow the client's resolution"),
     "hdr": lambda: tr("HDR stream"),
     "mouse_input": lambda: tr("Mouse input"),
 }
 _EXPERIMENTAL_DETAILS = {
-    "dynamic_resolution": lambda: tr(
-        "Steam launches when the first Moonlight client connects and renders "
-        "at that client's resolution and refresh rate. Later clients with a "
-        "different resolution get scaled."),
     "hdr": lambda: tr(
         "gamescope advertises an HDR output and games see DXVK_HDR. "
         "Unverified end to end."),

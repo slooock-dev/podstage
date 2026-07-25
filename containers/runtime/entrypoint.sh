@@ -19,7 +19,10 @@
 #        to a random per-sandbox password persisted in the mounted HOME —
 #        there is deliberately no fixed default credential)
 #   PS_CSRF_ORIGINS   comma-sep allowed web-UI origins             (default: auto-detected LAN IPs)
-#   PS_DYNAMIC_RES    enabled → prep-cmd resizes output to the client (experimental)
+#   PS_DYNAMIC_RES  enabled (default) → the pipeline launches on the FIRST
+#       client connect and renders at that client's resolution + refresh rate
+#       (locked until the container restarts; other clients get scaled).
+#       disabled → immediate start at the fixed PS_RESOLUTION.
 #   PS_HDR            enabled → gamescope HDR output + DXVK_HDR (experimental)
 #   PS_FAKE_UDEV      1 → seat-shim fakes the udev hotplug monitor for cage
 #       (required rootless: the kernel delivers no uevents into a user
@@ -39,6 +42,7 @@ set -uo pipefail
 : "${PS_WEB_PASS:=}"
 : "${PS_APP:=}"                       # Steam AppID to launch directly
 : "${PS_STEAM_FLAGS:=-gamepadui}"     # Steam UI mode (-gamepadui | -bigpicture); games-on-whales uses -bigpicture
+: "${PS_DYNAMIC_RES:=enabled}"        # render at the first client's resolution (see header)
 
 # What gamescope runs. With PS_APP set, also boot straight into the game.
 if [ -n "$PS_APP" ]; then

@@ -22,12 +22,12 @@ def test_options_forward_sunshine_extra_env():
 
 def test_options_forward_experimental_env():
     sc = SessionConfig(name="deck")
-    on = AppConfig(experimental={"dynamic_resolution": True, "hdr": True})
+    on = AppConfig(experimental={"mouse_input": True, "hdr": True})
     env = Session(sc, app_config=on)._options().env
-    assert env["PS_DYNAMIC_RES"] == "enabled"
+    assert env["PS_MOUSE_INPUT"] == "enabled"
     assert env["PS_HDR"] == "enabled"
     off = Session(sc, app_config=AppConfig())._options().env
-    assert "PS_DYNAMIC_RES" not in off and "PS_HDR" not in off
+    assert "PS_MOUSE_INPUT" not in off and "PS_HDR" not in off
 
 
 def test_start_requires_steam_login(monkeypatch):

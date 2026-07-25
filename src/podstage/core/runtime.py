@@ -102,9 +102,11 @@ _FORWARD_ENV: dict[str, str | None] = {
     # In-container thumbnail loop (entrypoint defaults: enabled, every 10s).
     "PS_THUMBNAIL": None,
     "PS_THUMBNAIL_INTERVAL": None,
-    # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each:
-    # client-resolution follow and gamescope HDR — see the entrypoint.
+    # Dynamic resolution is the entrypoint DEFAULT (render at the first
+    # client's resolution); forwarded only to opt out (=disabled).
     "PS_DYNAMIC_RES": None,
+    # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each —
+    # see the entrypoint.
     "PS_HDR": None,
 }
 

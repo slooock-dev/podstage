@@ -124,7 +124,7 @@ def test_preview_keep_last_roundtrip(tmp_path: Path):
 def test_experimental_roundtrip_and_env(tmp_path: Path):
     path = tmp_path / "config.toml"
     AppConfig(sessions=[SessionConfig(name="s")],
-              experimental={"hdr": True, "dynamic_resolution": False}).save(path)
+              experimental={"hdr": True, "mouse_input": False}).save(path)
     loaded = AppConfig.load(path)
     assert loaded.experimental == {"hdr": True}  # only enabled keys persist
     assert loaded.experimental_env() == {"PS_HDR": "enabled"}
@@ -208,9 +208,9 @@ def test_set_sessions_home_root_moves(tmp_path: Path, monkeypatch):
 def test_load_or_seed_creates_default(tmp_path: Path):
     path = tmp_path / "config.toml"
     cfg = AppConfig.load_or_seed(path)
-    assert [s.name for s in cfg.sessions] == ["deck"]
+    assert [s.name for s in cfg.sessions] == ["sandbox_steam"]
     assert path.exists()
     # second load returns the saved config, not a fresh seed
-    cfg.sessions[0].resolution = "1080p60"
+    cfg.sessions[0].resolution = "1440p60"
     cfg.save(path)
-    assert [s.resolution for s in AppConfig.load_or_seed(path).sessions] == ["1080p60"]
+    assert [s.resolution for s in AppConfig.load_or_seed(path).sessions] == ["1440p60"]

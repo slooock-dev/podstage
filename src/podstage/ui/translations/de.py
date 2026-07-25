@@ -329,13 +329,6 @@ TEXTS: dict[str, str] = {
     "features need a current runtime image.":
         "Globale Schalter, gelten ab dem nächsten Session-Start. "
         "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
-    "Follow the client's resolution": "Der Auflösung des Clients folgen",
-    "Steam launches when the first Moonlight client connects and renders "
-    "at that client's resolution and refresh rate. Later clients with a "
-    "different resolution get scaled.":
-        "Steam startet, sobald sich der erste Moonlight-Client verbindet, "
-        "und rendert in dessen Auflösung und Bildrate. Spätere Clients mit "
-        "anderer Auflösung werden skaliert.",
     "HDR stream": "HDR-Stream",
     "gamescope advertises an HDR output and games see DXVK_HDR. Unverified "
     "end to end.":

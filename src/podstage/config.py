@@ -105,7 +105,6 @@ def sunshine_web_credentials() -> tuple[str, str]:
 # start). Single registry — the Setup page renders its card from this, the
 # labels live in ui/pages/setup_page.py. Add/remove features HERE.
 EXPERIMENTAL_FEATURES: dict[str, str] = {
-    "dynamic_resolution": "PS_DYNAMIC_RES",  # follow the client's resolution
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
     "mouse_input": "PS_MOUSE_INPUT",         # inject the client's mouse (BP is
                                              # mouse-navigable; keyboard is
@@ -153,8 +152,12 @@ class SessionConfig:
     """A client profile: a sandboxed Steam Big Picture stream for one client.
 
     resolution:
-      * a preset key ("deck", "1080p60", …) or "WxH@R" → fixed resolution, or
-      * "ask" → no fixed resolution; you choose it when you start the session.
+      * a preset key ("deck", "1080p60", …) or "WxH@R", or
+      * "ask" → chosen when you start the session.
+      The streamed session renders at the FIRST connecting client's
+      resolution (locked until the session restarts; other clients get
+      scaled). The profile resolution is the pre-connect canvas and the
+      fallback with PS_DYNAMIC_RES=disabled.
     app_ids:
       * empty (default) → the *whole* installed library is shared into the sandbox
         (games are picked inside Big Picture), or
@@ -253,14 +256,14 @@ class AppConfig:
 
     @classmethod
     def load_or_seed(cls, path: Path = CONFIG_FILE) -> "AppConfig":
-        """Load the config, seeding one bring-up profile ('deck', fixed Deck
-        resolution) on first use. One is enough to get streaming: further
-        clients are added in the GUI, and the dynamic-resolution feature
-        adapts a profile to whatever client connects."""
+        """Load the config, seeding one generic bring-up profile on first
+        use. One is enough to get streaming: the session renders at whatever
+        client connects first; more profiles are added in the GUI."""
         cfg = cls.load(path)
         if not cfg.sessions:
             cfg = cls(sessions=[
-                SessionConfig(name="deck", resolution="deck", sunshine_port_base=47989),
+                SessionConfig(name="sandbox_steam", resolution="1080p60",
+                              sunshine_port_base=47989),
             ])
             cfg.save(path)
         return cfg

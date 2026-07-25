@@ -211,9 +211,11 @@ and the network:
   the same bitrate HEVC looks noticeably better, AV1 better still. NVIDIA
   encodes all three; AMD and Intel cover H.264 and HEVC, with AV1 on newer
   GPUs.
-- **Match the resolution 1:1.** Set Moonlight to the client's native
-  resolution and use a matching podstage profile (e.g. `1280x800` for a Steam
-  Deck LCD), so nothing is scaled.
+- **Resolution follows the first client.** The session launches Steam when
+  the first Moonlight client connects and renders at that client's resolution
+  and refresh rate, locked until the session restarts — later clients with a
+  different resolution get scaled. Set Moonlight to the client's native
+  resolution and reconnecting devices stay 1:1.
 - **Prefer a wired host.** High bitrate over Wi-Fi suffers from packet loss.
   Wiring the host, or a clean 5 GHz link, often helps more than any encoder
   setting.
@@ -230,6 +232,8 @@ podstage setup                     # print guided (sudo) setup commands
 podstage runtime build             # (re)build the runtime image
 podstage runtime start|stop|status # drive the container directly (by HOME dir)
 podstage session list|start|stop|status <name>
+podstage session pair <name> <PIN>    # complete a Moonlight pairing
+podstage experimental [enable|disable <feature>]
 podstage provision <app_id> <session>
 ```
 
