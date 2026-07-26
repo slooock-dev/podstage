@@ -326,15 +326,16 @@ def cmd_experimental(args: argparse.Namespace) -> int:
 
 
 def cmd_config(args: argparse.Namespace) -> int:
-    """Get or set app settings headlessly (currently: mouse-keyboard). Same
-    store as the GUI's Setup page; applies at the next session start."""
+    """Get or set app settings headlessly. Same store as the GUI's Setup
+    page; applies at the next session start."""
+    attr = args.key.replace("-", "_")  # mouse-keyboard | perf-metrics
     cfg = _load_or_seed_config()
     if args.value is None:
-        print("on" if cfg.mouse_keyboard else "off")
+        print("on" if getattr(cfg, attr) else "off")
         return 0
-    cfg.mouse_keyboard = args.value == "on"
+    setattr(cfg, attr, args.value == "on")
     cfg.save()
-    print(f"mouse-keyboard {args.value} (applies at the next session start)")
+    print(f"{args.key} {args.value} (applies at the next session start)")
     return 0
 
 
@@ -534,7 +535,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     cf = sub.add_parser("config",
                         help="get/set app settings (Setup-page equivalent)")
-    cf.add_argument("key", choices=["mouse-keyboard"])
+    cf.add_argument("key", choices=["mouse-keyboard", "perf-metrics"])
     cf.add_argument("value", nargs="?", choices=["on", "off"],
                     help="omit to print the current state")
     cf.set_defaults(func=cmd_config)

@@ -82,9 +82,8 @@ host GUI.
   normal. Only the game files are shared instead of duplicated, and where the
   sandboxes live is configurable.
 - **Management GUI.** One-click setup fixes, sandbox management, live
-  CPU/GPU/VRAM/encoder telemetry plus game FPS from the compositor
-  (experimental), a stream preview, pairing, and encoder settings that follow
-  the GPU. English and German, following the system
+  CPU/GPU/VRAM/encoder telemetry plus game FPS from the compositor, a stream
+  preview, pairing, and encoder settings that follow the GPU. English and German, following the system
   locale (override in Setup or via `PS_LANG`).
 
 ## Requirements
@@ -191,7 +190,7 @@ streaming needs the Moonlight pairing PIN. The image is built locally
 |------|--------------|
 | **Session** | Start/stop the stream (Big Picture or the experimental desktop mode), the active game, the Performance card (game FPS plus CPU/GPU/VRAM/encoder), a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
 | **Sandboxes** | Sandbox profiles, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
-| **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, streaming toggles (mouse & keyboard, preview behavior), experimental features, an on-demand update check, UI language. |
+| **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, streaming toggles (mouse & keyboard, preview behavior, performance metrics), experimental features, an on-demand update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
 
 <p align="center">

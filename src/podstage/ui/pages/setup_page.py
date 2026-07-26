@@ -42,16 +42,11 @@ _GLYPH = {doctor.Status.OK: ("●", "ok"),
 # card build fails loudly on a missing one (gui-smoke catches it).
 _EXPERIMENTAL_LABELS = {
     "hdr": lambda: tr("HDR stream"),
-    "perf_metrics": lambda: tr("Performance metrics (FPS)"),
 }
 _EXPERIMENTAL_DETAILS = {
     "hdr": lambda: tr(
         "gamescope advertises an HDR output and games see DXVK_HDR. "
         "Unverified end to end."),
-    "perf_metrics": lambda: tr(
-        "A probe in the container asks gamescope for the presented frametime of "
-        "the running game and shows FPS on the Session page. Works on any GPU "
-        "vendor; needs a gamescope with the perf query (3.16+)."),
 }
 
 
@@ -219,6 +214,14 @@ class SetupPage(QWidget):
         mkhint.setWordWrap(True)
         slay.addWidget(self._mouse_kb)
         slay.addWidget(mkhint)
+        self._perf = QCheckBox(tr("Performance metrics (FPS)"))
+        self._perf.setToolTip(tr(
+            "A probe in the container asks gamescope for the presented frametime of "
+            "the running game and shows FPS on the Session page. Works on any GPU "
+            "vendor; needs a gamescope with the perf query (3.16+)."))
+        self._perf.setChecked(self._ctx.config.perf_metrics)
+        self._perf.toggled.connect(self._on_perf_toggled)
+        slay.addWidget(self._perf)
         root.addWidget(sframe)
 
         eframe, elay = card(tr("Experimental features"))
@@ -405,6 +408,10 @@ class SetupPage(QWidget):
 
     def _on_mouse_kb_toggled(self, enabled: bool) -> None:
         self._ctx.config.mouse_keyboard = enabled
+        self._ctx.save()
+
+    def _on_perf_toggled(self, enabled: bool) -> None:
+        self._ctx.config.perf_metrics = enabled
         self._ctx.save()
 
     def _on_experimental_toggled(self, key: str, enabled: bool) -> None:

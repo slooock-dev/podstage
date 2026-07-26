@@ -550,10 +550,9 @@ class SessionPage(QWidget):
             theme.repolish(self._state)
 
     def _update_perf(self, snap: monitor.Snapshot) -> None:
-        """Current FPS from the in-container probe. The row is hidden unless
-        the experimental feature is on, so nobody stares at a permanent dash."""
-        self._fps.setVisible(
-            self._ctx.config.experimental.get("perf_metrics", False))
+        """Current FPS from the in-container probe. The row is hidden while
+        the setting is off, so nobody stares at a permanent dash."""
+        self._fps.setVisible(self._ctx.config.perf_metrics)
         perf = snap.perf if snap.running else None
         if perf is None:
             self._fps.set(None)

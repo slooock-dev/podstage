@@ -147,6 +147,8 @@ class Session:
         env.update(self.app_config().experimental_env())
         if self.app_config().mouse_keyboard:
             env["PS_MOUSE_INPUT"] = "enabled"
+        if self.app_config().perf_metrics:
+            env["PS_PERF_METRICS"] = "enabled"
         env["PS_DYNAMIC_RES"] = ("enabled" if self.cfg.dynamic_resolution
                                  else "disabled")
         return runtime.RuntimeOptions(

@@ -108,7 +108,6 @@ def sunshine_web_credentials() -> tuple[str, str]:
 # labels live in ui/pages/setup_page.py. Add/remove features HERE.
 EXPERIMENTAL_FEATURES: dict[str, str] = {
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
-    "perf_metrics": "PS_PERF_METRICS",       # in-container FPS probe (gamescope)
 }
 
 
@@ -235,6 +234,9 @@ class AppConfig:
     # Stream the client's mouse AND keyboard into the session
     # (PS_MOUSE_INPUT). Off for controller-only setups (default).
     mouse_keyboard: bool = False
+    # Game FPS from the compositor on the Session page (PS_PERF_METRICS).
+    # Read-only probe, vendor-neutral; stable since 0.2.2, on by default.
+    perf_metrics: bool = True
     # Enabled experimental features (keys from EXPERIMENTAL_FEATURES),
     # toggled on the Setup page, applied at the next session start.
     experimental: dict[str, bool] = field(default_factory=dict)
@@ -268,6 +270,11 @@ class AppConfig:
                    mouse_keyboard=bool(data.get(
                        "mouse_keyboard",
                        data.get("experimental", {}).get("mouse_input", False))),
+                   # perf_metrics graduated in 0.3 (default on; an old config
+                   # that had the experimental key enabled stays on too)
+                   perf_metrics=bool(data.get(
+                       "perf_metrics",
+                       data.get("experimental", {}).get("perf_metrics", True))),
                    experimental=experimental)
 
     @classmethod
@@ -304,6 +311,8 @@ class AppConfig:
             data["preview_keep_last"] = False
         if self.mouse_keyboard:
             data["mouse_keyboard"] = True
+        if not self.perf_metrics:
+            data["perf_metrics"] = False
         enabled = {k: True for k, v in self.experimental.items() if v}
         if enabled:
             data["experimental"] = enabled

@@ -245,3 +245,27 @@ def test_load_or_seed_creates_default(tmp_path: Path):
     cfg.sessions[0].resolution = "1440p60"
     cfg.save(path)
     assert [s.resolution for s in AppConfig.load_or_seed(path).sessions] == ["1440p60"]
+
+
+def test_perf_metrics_migrates_from_experimental(tmp_path: Path):
+    path = tmp_path / "c.toml"
+    path.write_text('[experimental]\nperf_metrics = true\n')
+    cfg = AppConfig.load(path)
+    assert cfg.perf_metrics is True
+    # The graduated key is no longer a known experimental feature.
+    assert "perf_metrics" not in cfg.experimental
+
+    path.write_text('perf_metrics = false\n')
+    assert AppConfig.load(path).perf_metrics is False
+
+    # Default (no key anywhere): on.
+    path.write_text('language = "en"\n')
+    assert AppConfig.load(path).perf_metrics is True
+
+
+def test_perf_metrics_save_roundtrip(tmp_path: Path):
+    path = tmp_path / "c.toml"
+    AppConfig(perf_metrics=False).save(path)
+    assert AppConfig.load(path).perf_metrics is False
+    AppConfig().save(path)
+    assert "perf_metrics" not in path.read_text()

@@ -102,3 +102,11 @@ def test_host_steam_running_ignores_container_steam(monkeypatch):
     monkeypatch.setattr(session_mod, "_pgrep_steam", lambda: own)
     assert s._host_steam_running() is False
     assert s.sandbox_steam_running() is True
+
+
+def test_options_forward_perf_metrics():
+    sc = SessionConfig(name="deck")
+    on = Session(sc, app_config=AppConfig())._options().env
+    assert on["PS_PERF_METRICS"] == "enabled"
+    off = Session(sc, app_config=AppConfig(perf_metrics=False))._options().env
+    assert "PS_PERF_METRICS" not in off
