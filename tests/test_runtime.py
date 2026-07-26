@@ -266,6 +266,14 @@ def test_kill_pid_checks_process_identity():
 
     victim = subprocess.Popen(["sleep", "30"])
     try:
+        # /proc/<pid>/cmdline is empty between fork and exec — wait until the
+        # child has actually become `sleep` or the guard (correctly) no-ops.
+        import time
+        from pathlib import Path
+        for _ in range(100):
+            if b"sleep" in Path(f"/proc/{victim.pid}/cmdline").read_bytes():
+                break
+            time.sleep(0.05)
         # Recycled-pid guard: cmdline does not match → must NOT be killed.
         _kill_pid(victim.pid)
         assert victim.poll() is None
