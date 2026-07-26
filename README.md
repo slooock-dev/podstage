@@ -61,7 +61,7 @@ host GUI.
 - **Built for Steam, gamepad first.** The streamed session is Big Picture and
   Steam Input works natively. Mouse and keyboard streaming is optional (off by
   default, with in-game pointer lock). An experimental desktop mode streams the
-  Steam desktop UI instead. Non-Steam launchers aren't wired up.
+  Steam desktop UI instead.
 - **Resolution follows the client.** The pipeline launches on the first
   Moonlight connect and renders at that client's resolution and refresh rate,
   locked until the session restarts. Per-profile toggle, on by default.
