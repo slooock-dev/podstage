@@ -107,13 +107,11 @@ host GUI.
 
 ```bash
 git clone https://github.com/slooock-dev/podstage && cd podstage
-python3 -m venv .venv && . .venv/bin/activate   # Fedora/Bazzite are PEP 668
-pip install -e '.[ui]'          # core + CLI + management GUI
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e '.[ui]' # core + CLI + management GUI
 
-# 1. Build the runtime image (~2.5 GB, self-contained)
 podstage runtime build
 
-# 2. Launch the management GUI
 ./ui.sh
 ```
 
