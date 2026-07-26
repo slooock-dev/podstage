@@ -107,6 +107,8 @@ _FORWARD_ENV: dict[str, str | None] = {
     # Big Picture focus watchdog: on by default, forwarded only to opt out.
     "PS_FOCUS_NUDGE": None,
     "PS_FOCUS_NUDGE_DELAYS": None,
+    # gamescope touch_click_mode pin (entrypoint default 1 — see there).
+    "PS_TOUCH_CLICK_MODE": None,
     # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each.
     "PS_HDR": None,
     "PS_PERF_METRICS": None,

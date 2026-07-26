@@ -28,6 +28,9 @@
 #       into /run/podstage/perf.json for the host GUI
 #   PS_FOCUS_NUDGE    disabled → no focus watchdog (default on: re-focuses
 #       Steam when gamescope hands it the focus, heals Big Picture navigation)
+#   PS_TOUCH_CLICK_MODE  gamescope touch_click_mode to pin (default 1 =
+#       pointer warp+click; "steam" leaves Steam's choice — it flips to
+#       touch passthrough for touch clients, which eats the streamed mouse)
 #   PS_FOCUS_NUDGE_DELAYS  ms offsets of the nudges per trigger
 #       (default "500,2500,10000")
 #   PS_FAKE_UDEV      1 → seat-shim fakes the udev hotplug monitor for labwc
@@ -295,6 +298,40 @@ if [ "${PS_FOCUS_NUDGE:-}" != disabled ] && [ "$PS_MODE" != desktop ]; then
     podstage-focus-nudge &
 fi
 
+# Wait for gamescope's control socket (appears a few seconds into the
+# session) and export GAMESCOPE_WAYLAND_DISPLAY. Returns 1 on timeout.
+wait_gamescope_socket() {
+    for _ in $(seq 1 "${PS_PERF_WAIT_S:-180}"); do
+        for sock in "$XDG_RUNTIME_DIR"/gamescope-*; do
+            case "$sock" in *.lock | *-ei) continue ;; esac
+            [ -S "$sock" ] || continue
+            GAMESCOPE_WAYLAND_DISPLAY=${sock##*/}
+            export GAMESCOPE_WAYLAND_DISPLAY
+            return 0
+        done
+        sleep 1
+    done
+    return 1
+}
+
+# --- touch click mode pin: keep host pointer motion warping ----------------
+# Steam flips gamescope's touch_click_mode to passthrough (4) when the
+# client advertises touch (its SteamOS touchscreen behavior — the Deck's
+# Moonlight does). But every kind of Moonlight input reaches this pipeline
+# as POINTER events, and gamescope funnels host pointer motion through its
+# touch path — in passthrough mode that silently eats the mouse. Re-assert
+# "left" (1: warp + click) every 30 s; PS_TOUCH_CLICK_MODE overrides the
+# mode, "steam" leaves Steam's choice alone.
+if [ "${PS_TOUCH_CLICK_MODE:-1}" != steam ] && [ "$PS_MODE" != desktop ]; then
+    (
+        wait_gamescope_socket || exit 0
+        while :; do
+            gamescopectl touch_click_mode "${PS_TOUCH_CLICK_MODE:-1}" >/dev/null 2>&1
+            sleep 30
+        done
+    ) &
+fi
+
 # --- perf probe: per-app FPS for the host GUI ------------------------------
 # Frametimes come from the compositor (gamescope_control PERF_QUERY), not from
 # an encoder counter, so the numbers are identical on NVIDIA/AMD/Intel. Two
@@ -315,20 +352,10 @@ if [ "${PS_PERF_METRICS:-}" = enabled ] && [ "$PS_MODE" != desktop ]; then
     fi
     rm -f "$PS_PERF_FILE"   # stale = from a previous session
     (
-        for _ in $(seq 1 "${PS_PERF_WAIT_S:-180}"); do
-            for sock in "$XDG_RUNTIME_DIR"/gamescope-*; do
-                case "$sock" in *.lock | *-ei) continue ;; esac
-                [ -S "$sock" ] || continue
-                GAMESCOPE_WAYLAND_DISPLAY=${sock##*/}
-                break 2
-            done
-            sleep 1
-        done
-        if [ -z "${GAMESCOPE_WAYLAND_DISPLAY:-}" ]; then
+        if ! wait_gamescope_socket; then
             log "(warning) perf probe: no gamescope socket appeared — no FPS"
             exit 0
         fi
-        export GAMESCOPE_WAYLAND_DISPLAY
         gamescopectl mangoapp_use_output_timing 0 >/dev/null 2>&1 || \
             log "(warning) perf probe: gamescopectl failed — FPS may stay empty"
         exec podstage-perf-probe
