@@ -257,3 +257,22 @@ def test_perf_share_dir_is_mounted_from_the_host_tmpfs(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "RUNTIME_SHARE_DIR", tmp_path / "share")
     flags = runtime.container_flags([], tmp_path / "home", vendor="amd")
     assert "-v" in flags and f"{tmp_path / 'share'}:/run/podstage" in flags
+
+
+def test_kill_pid_checks_process_identity():
+    import subprocess
+
+    from podstage.core.runtime import _kill_pid
+
+    victim = subprocess.Popen(["sleep", "30"])
+    try:
+        # Recycled-pid guard: cmdline does not match → must NOT be killed.
+        _kill_pid(victim.pid)
+        assert victim.poll() is None
+        # Matching expectation → killed.
+        _kill_pid(victim.pid, expect="sleep")
+        victim.wait(timeout=10)
+        assert victim.returncode is not None
+    finally:
+        victim.kill()
+        victim.wait(timeout=10)

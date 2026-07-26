@@ -1,8 +1,11 @@
 """podstage command-line interface.
 
-Milestone 1 ships ``doctor`` (environment validation). ``session`` and
-``provision`` are declared but stubbed until their milestones land — they print
-a clear "not yet implemented" notice so the surface is discoverable.
+Everything the GUI does is reachable here too: ``doctor`` validates the
+machine, ``setup``/``uninstall`` cover the one-time host steps, ``runtime``
+builds and drives the container directly (by HOME dir), ``session`` manages
+the client profiles (add/setup/start/stop/pair/remove), plus ``provision``,
+``experimental``, ``config`` and ``desktop`` for the smaller knobs. Only the
+first Steam login opens a window; the rest runs headless.
 """
 
 import argparse

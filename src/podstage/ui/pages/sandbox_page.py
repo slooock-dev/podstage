@@ -5,7 +5,6 @@ isolated Steam visibly for first-time login, and show per-sandbox state:
 logged in, paired Moonlight clients, disk usage.
 """
 
-import re
 
 from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt
 from PyQt6.QtWidgets import (
@@ -36,8 +35,6 @@ from ...core.session import Session
 from ..i18n import tr
 from ..widgets import card
 from ..workers import start_action
-
-_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _fmt_size(size: int | None) -> str:
@@ -209,9 +206,13 @@ class ProfileDialog(QDialog):
 
     def _on_accept(self) -> None:
         name = self._name.text().strip()
-        if not _NAME_RE.match(name):
+        try:
+            # Single source of truth — the same guard AppConfig.upsert enforces.
+            config.validate_client_name(name)
+        except ValueError:
             QMessageBox.warning(self, tr("Invalid name"),
-                                tr("Only letters, digits, '-' and '_' are allowed."))
+                                tr("Only letters, digits, '-' and '_' are allowed "
+                                   "(must start with a letter or digit)."))
             return
         if self._existing is None and self._cfg.get(name) is not None:
             QMessageBox.warning(self, tr("Name taken"),

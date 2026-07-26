@@ -81,3 +81,24 @@ def test_options_forward_dynamic_resolution():
     assert on["PS_DYNAMIC_RES"] == "enabled"
     off = Session(SessionConfig(name="deck", dynamic_resolution=False))._options().env
     assert off["PS_DYNAMIC_RES"] == "disabled"
+
+
+def test_host_steam_running_ignores_container_steam(monkeypatch):
+    from podstage.core import session as session_mod
+
+    s = Session(SessionConfig(name="deck"))
+    container = ("4242 /home/player/.local/share/Steam/ubuntu12_32/"
+                 "steamwebhelper -nocrashdialog")
+    desktop = "4243 /home/someone/.local/share/Steam/ubuntu12_32/steamwebhelper"
+    own = f"4244 {s.home}/.local/share/Steam/ubuntu12_32/steamwebhelper"
+
+    monkeypatch.setattr(session_mod, "_pgrep_steam", lambda: container)
+    assert s._host_steam_running() is False  # container Steam is not the desktop's
+
+    monkeypatch.setattr(session_mod, "_pgrep_steam",
+                        lambda: f"{container}\n{desktop}")
+    assert s._host_steam_running() is True
+
+    monkeypatch.setattr(session_mod, "_pgrep_steam", lambda: own)
+    assert s._host_steam_running() is False
+    assert s.sandbox_steam_running() is True

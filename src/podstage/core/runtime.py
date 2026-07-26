@@ -513,8 +513,17 @@ def start_publisher(name: str = "podstage", port: int = DEFAULT_SUNSHINE_PORT) -
     return proc.pid
 
 
-def _kill_pid(pid: int | None) -> None:
+def _kill_pid(pid: int | None, expect: str = "avahi-publish-service") -> None:
+    """Kill ``pid`` only if it still is the process we started: the pid comes
+    from a state file that can outlive a crash/reboot, and a recycled pid
+    would hit an unrelated process."""
     if not pid:
+        return
+    try:
+        cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return  # already gone
+    if expect and expect.encode() not in cmdline:
         return
     try:
         os.kill(pid, 15)

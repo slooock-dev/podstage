@@ -1,11 +1,9 @@
 """Configuration model and on-disk paths for podstage.
 
 Config lives under ``$XDG_CONFIG_HOME/podstage`` (default ``~/.config/podstage``).
-Per-session runtime state (isolated Steam HOMEs, generated Sunshine app entries)
-lives under ``$XDG_DATA_HOME/podstage`` (default ``~/.local/share/podstage``).
-
-The model is intentionally small in v0.1 — it grows with the session manager
-(milestone 4). ``doctor`` (milestone 1) does not require any of it to exist.
+Runtime state (overlay storage, web credentials, container state) lives under
+``$XDG_DATA_HOME/podstage``; the sandbox HOMEs under ``SESSIONS_HOME_ROOT``.
+``doctor`` does not require any of it to exist.
 """
 
 import hashlib

@@ -192,8 +192,10 @@ TEXTS: dict[str, str] = {
     "All {total} games included.": "Alle {total} Spiele einbezogen.",
     "{n} of {total} games selected.": "{n} von {total} Spielen ausgewählt.",
     "Invalid name": "Ungültiger Name",
-    "Only letters, digits, '-' and '_' are allowed.":
-        "Nur Buchstaben, Ziffern, '-' und '_' erlaubt.",
+    "Only letters, digits, '-' and '_' are allowed "
+    "(must start with a letter or digit).":
+        "Nur Buchstaben, Ziffern, '-' und '_' erlaubt "
+        "(muss mit Buchstabe oder Ziffer beginnen).",
     "Name taken": "Name vergeben",
     "A profile '{name}' already exists.": "Ein Profil '{name}' existiert bereits.",
     "Invalid resolution": "Ungültige Auflösung",

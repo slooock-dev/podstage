@@ -24,6 +24,27 @@ from .. import config
 from . import provisioner, runtime, sandbox
 
 
+def _pgrep_steam() -> str:
+    """Command lines of all running steamwebhelper processes ("" on error)."""
+    try:
+        return subprocess.run(["pgrep", "-af", "steamwebhelper"],
+                              capture_output=True, text=True, check=False,
+                              timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _steam_shutdown(env: dict | None = None) -> None:
+    """Fire ``steam -shutdown`` (returns quickly; the actual shutdown is
+    asynchronous — callers poll). Never raises: a hung/failed command just
+    means the poll loop reports Steam as still running."""
+    try:
+        subprocess.run(["steam", "-shutdown"], env=env, capture_output=True,
+                       check=False, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 class Session:
     def __init__(self, cfg: config.SessionConfig,
                  app_config: config.AppConfig | None = None):
@@ -43,17 +64,21 @@ class Session:
         return provisioner.stream_steamapps(self.home).exists()
 
     def _host_steam_running(self) -> bool:
-        """True if a Steam is running under a HOME other than this session's."""
-        out = subprocess.run(["pgrep", "-af", "steamwebhelper"],
-                             capture_output=True, text=True, check=False).stdout
-        return any(str(self.home) not in ln for ln in out.splitlines() if ln.strip())
+        """True if a Steam is running under a HOME other than this session's.
+
+        The container's own Steam shows up in a host pgrep too, with
+        ``/home/player/...`` paths (the in-container HOME) — that one is
+        neither the desktop nor the sandbox Steam, so it never counts.
+        """
+        out = _pgrep_steam()
+        return any(str(self.home) not in ln and "/home/player/" not in ln
+                   for ln in out.splitlines() if ln.strip())
 
     def sandbox_steam_running(self) -> bool:
         """True if the sandbox Steam (the visible login/settings instance)
         is open on the desktop. Steam is single-instance per HOME, so the
         container cannot start while it runs."""
-        out = subprocess.run(["pgrep", "-af", "steamwebhelper"],
-                             capture_output=True, text=True, check=False).stdout
+        out = _pgrep_steam()
         return any(str(self.home) in ln for ln in out.splitlines() if ln.strip())
 
     def close_sandbox_steam(self, timeout: int = 30) -> bool:
@@ -63,9 +88,7 @@ class Session:
             return True
         if shutil.which("steam") is None:
             return False
-        subprocess.run(["steam", "-shutdown"],
-                       env=dict(os.environ, HOME=str(self.home)),
-                       capture_output=True, check=False)
+        _steam_shutdown(env=dict(os.environ, HOME=str(self.home)))
         for _ in range(timeout):
             if not self.sandbox_steam_running():
                 return True
@@ -81,7 +104,7 @@ class Session:
         if shutil.which("steam") is None or not self._host_steam_running():
             return
         print("Closing desktop Steam (games can only run from one Steam instance at a time)…")
-        subprocess.run(["steam", "-shutdown"], capture_output=True, check=False)
+        _steam_shutdown()
         for _ in range(timeout):
             if not self._host_steam_running():
                 return
@@ -169,6 +192,8 @@ class Session:
             print("Just log in and close Steam — games get provisioned automatically.")
 
         print(f"Launching isolated Steam under HOME={self.home} …")
+        # Deliberately no timeout: this blocks for the whole visible Steam
+        # session (login, settings) until the user closes it.
         rc = subprocess.run(["steam"], env=env, check=False).returncode
 
         # After first-run login the library dir now exists → provision for next time.
