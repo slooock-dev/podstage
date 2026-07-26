@@ -255,8 +255,7 @@ class SetupPage(QWidget):
 
         upframe, uplay = card(tr("Updates"))
         upexpl = QLabel(tr(
-            "Checks the GitHub releases for a newer version — only when you "
-            "click, podstage never phones home on its own."))
+            "Checks the GitHub releases for a newer version."))
         upexpl.setProperty("muted", True)
         upexpl.setWordWrap(True)
         uplay.addWidget(upexpl)

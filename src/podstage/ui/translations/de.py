@@ -358,10 +358,8 @@ TEXTS: dict[str, str] = {
         "Session-Start.",
     "Experimental features apply from the next session start.":
         "Experimentelle Features gelten ab dem nächsten Session-Start.",
-    "Checks the GitHub releases for a newer version — only when you click, "
-    "podstage never phones home on its own.":
-        "Prüft die GitHub-Releases auf eine neuere Version, aber nur per "
-        "Klick; podstage telefoniert nie von selbst nach Hause.",
+    "Checks the GitHub releases for a newer version.":
+        "Prüft die GitHub-Releases auf eine neuere Version.",
     "Installed: {current}": "Installiert: {current}",
     "Check for updates": "Auf Updates prüfen",
     "Open release page": "Release-Seite öffnen",
