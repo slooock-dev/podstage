@@ -6,7 +6,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.2.1] - 2026-07-26
 
-No image rebuild needed.
+Host-side only: the runtime image stays as it is.
 
 ### Added
 
