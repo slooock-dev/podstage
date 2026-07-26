@@ -58,7 +58,8 @@ host GUI.
   via NVENC or VAAPI). No window on the host, no DRM output.
 - **Built for Steam, gamepad first.** The streamed session is Big Picture;
   Steam Input works natively. Optional mouse & keyboard streaming (off by
-  default, incl. in-game pointer lock via a patched `cage`); an experimental
+  default, incl. in-game pointer lock via a patched `cage`; the cursor only
+  shows around actual mouse use); an experimental
   desktop mode streams the Steam desktop UI. Non-Steam launchers aren't
   wired up. gamescope + Big Picture is the settled architecture: Steam forces
   the gamepad UI under gamescope (not overridable), and gamescope provides the
@@ -189,7 +190,7 @@ streaming needs the Moonlight pairing PIN. The image is built locally
 |------|--------------|
 | **Session** | Start/stop the stream (Big Picture or the experimental desktop mode), the active game, CPU/GPU/VRAM/encoder meters, a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
 | **Sandboxes** | Client profiles, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
-| **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, experimental feature toggles, an on-demand update check, UI language. |
+| **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, streaming toggles (mouse & keyboard, preview behavior), experimental features, an on-demand update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
 
 <p align="center">

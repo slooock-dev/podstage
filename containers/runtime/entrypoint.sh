@@ -10,6 +10,9 @@
 #   PS_MODE         pipeline|desktop|shell|probe|steam  what to run (default pipeline)
 #       desktop (experimental): no gamescope, target runs under cage, pointer on
 #   PS_DESKTOP_CMD  desktop-mode launch target          (default: steam desktop UI)
+#   PS_MOUSE_INPUT  enabled → Sunshine injects the client's mouse + keyboard
+#       (patched cage keeps pointer focus/cursor inert until deliberate use
+#        and hides the cursor 3 s after the last use)
 #   PS_POINTER_ACCEL  flat → seat-shim forces flat (1:1) libinput accel on
 #       pointers (desktop-mode default; anything else keeps libinput defaults)
 #   PS_SUNSHINE_PORT  base port                                    (default 47989)

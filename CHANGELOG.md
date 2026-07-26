@@ -8,11 +8,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Mouse & keyboard streaming** (Setup toggle, off by default; leave off
-  for controller-only clients): pointer + keyboard injection into Big
-  Picture; patched `cage` adds pointer-constraints (games lock the mouse,
-  stutter-free mouse look) and keeps cursor and pointer focus inert until
-  real mouse motion, flat 1:1 libinput accel, cursor theme baked in.
+- **Mouse & keyboard streaming** (Setup toggle, off by default): pointer +
+  keyboard injection into Big Picture. The patched `cage` adds
+  pointer-constraints (games lock the mouse, stutter-free mouse look), flat
+  1:1 libinput accel, and a baked-in cursor theme. Pointer focus and cursor
+  stay inert until deliberate mouse use (motion, click or scroll; the
+  client's stream-start nudge is filtered out), and the cursor hides 3 s
+  after the last use, so gamepad-only streams never show a parked cursor.
 - **Desktop mode** (experimental, `--mode desktop` / Session page): streams
   the Steam desktop UI directly under cage (Steam forces the gamepad UI
   under gamescope). Known limit: X11 dropdowns position wrong.

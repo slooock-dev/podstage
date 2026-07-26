@@ -10,7 +10,7 @@ on Vulkan; there is no virtual DRM display involved.
 
 | Baked into the image (host-independent) | Provided at runtime |
 |---|---|
-| gamescope, cage (built from source with a vendored pointer-constraints patch, see `patches/`), wlroots, Vulkan loader (64+32-bit), mesa (RADV/ANV Vulkan, Mesa/iHD VAAPI) | GPU access: NVIDIA userspace via **CDI** (`--device nvidia.com/gpu=all`), matching the host driver; or `/dev/dri` on AMD/Intel |
+| gamescope, cage (built from source with a vendored input patch: pointer constraints plus pointer/cursor gating, see `patches/`), wlroots, Vulkan loader (64+32-bit), mesa (RADV/ANV Vulkan, Mesa/iHD VAAPI) | GPU access: NVIDIA userspace via **CDI** (`--device nvidia.com/gpu=all`), matching the host driver; or `/dev/dri` on AMD/Intel |
 | Steam client, PipeWire stack | **HOME volume** `/home/player`: Steam login, saves, games, downloaded Proton |
 | Sunshine (pinned native Arch package) | |
 
@@ -35,7 +35,7 @@ label, so `doctor` reports the image as stale.
 | `shell` | drop into bash in the container |
 | `steam` | cage → gamescope → Steam, **no** Sunshine (render smoke test) |
 | `pipeline` | full pipeline incl. Sunshine capture (**default**) |
-| `desktop` | experimental: like `pipeline` but no gamescope: Steam desktop UI (or `PS_DESKTOP_CMD`) directly under cage, mouse/keyboard enabled, cursor shown |
+| `desktop` | experimental: like `pipeline` but without gamescope, Steam desktop UI (or `PS_DESKTOP_CMD`) directly under cage, mouse/keyboard enabled, cursor shown |
 
 Examples:
 
@@ -51,7 +51,9 @@ the GUI's Steam-login bootstrap (or `podstage session setup`).
 Dynamic resolution is the default (`PS_DYNAMIC_RES=disabled` opts out): the
 pipeline launches on the first connect at that client's WxH@R, locked until
 restart; other clients get scaled. `PS_MOUSE_INPUT=enabled` injects the
-client's mouse + keyboard (Setup-page toggle, off by default). Experimental:
+client's mouse + keyboard (Setup-page toggle, off by default); pointer focus
+and cursor stay inert until deliberate mouse use, and the cursor hides 3 s
+after the last use (see below). Experimental:
 `PS_HDR=enabled` adds gamescope `--hdr-enabled` plus `DXVK_HDR=1`
 (unverified end to end).
 
@@ -114,6 +116,12 @@ undisturbed.
   and `SDL_JOYSTICK_DISABLE_UDEV=1` makes Steam/SDL discover gamepads via its
   own inotify fallback. Steam Input works because Steam's virtual X360 pad
   lives on the real uinput, with no proxy in between.
+- **Gamepad-only streams stay cursor-free.** With mouse input enabled,
+  Sunshine creates virtual mice for every stream and the client nudges the
+  relative mouse at stream start. The patched cage therefore keeps pointer
+  focus and cursor invisible until deliberate mouse use (net motion >= 3 px,
+  a click, or a scroll) and hides the cursor 3 s after the last use;
+  gamescope's own cursor follows via `-C 3000`.
 - **mDNS discovery.** There is no avahi in the container; discovery is
   announced host-side (open the `mdns` firewall service). Pairing by IP always
   works.
