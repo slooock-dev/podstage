@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -80,3 +81,45 @@ def test_clear_overlays_removes_only_overlay_storage(tmp_path: Path, monkeypatch
     assert not root.exists()
     assert sandbox.overlay_size_bytes(home) == 0
     assert home.exists()  # the sandbox HOME itself is untouched
+
+
+def test_du_bytes_tolerates_unreadable_subdirs(tmp_path: Path):
+    # Overlay work/work dirs are sub-UID owned: du exits nonzero but still
+    # prints a valid total, which must not be discarded.
+    sub = tmp_path / "work"
+    sub.mkdir()
+    (tmp_path / "payload").write_bytes(b"x" * 100)
+    sub.chmod(0)
+    try:
+        size = sandbox._du_bytes(tmp_path)
+    finally:
+        sub.chmod(0o755)
+    assert size is not None and size >= 100
+
+
+def test_clear_overlays_falls_back_to_podman_unshare(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    home = tmp_path / "homes" / "deck"
+    home.mkdir(parents=True)
+    root = config.overlay_root(home)
+    work = root / "lib-x" / "work" / "work"
+    work.mkdir(parents=True)
+    work.chmod(0)  # like the sub-UID-owned kernel dir: rmtree can't remove it
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        work.chmod(0o755)
+        import shutil as _sh
+        _sh.rmtree(root)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    try:
+        sandbox.clear_overlays(home)
+    finally:
+        if work.exists():
+            work.chmod(0o755)
+    assert calls and calls[0][:3] == ["podman", "unshare", "rm"]
+    assert not root.exists()

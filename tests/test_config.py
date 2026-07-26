@@ -14,13 +14,26 @@ def test_dimensions_custom_string():
     assert SessionConfig(name="s", resolution="1600x900@75").dimensions() == (1600, 900, 75)
 
 
-def test_ask_profile_is_dynamic():
+def test_ask_profile():
     ask = SessionConfig(name="s", resolution="ask")
-    assert ask.is_dynamic() is True
-    assert SessionConfig(name="s", resolution="deck").is_dynamic() is False
+    assert ask.is_ask() is True
+    assert SessionConfig(name="s", resolution="deck").is_ask() is False
     with pytest.raises(ValueError):
         ask.dimensions()  # no fixed resolution: needs one passed at start
     assert ask.dimensions("1920x1080@60") == (1920, 1080, 60)
+
+
+def test_dynamic_resolution_default_and_roundtrip(tmp_path: Path):
+    # Default on, also for configs written before the field existed.
+    assert SessionConfig(name="s").dynamic_resolution is True
+    path = tmp_path / "config.toml"
+    AppConfig(sessions=[
+        SessionConfig(name="fixed", dynamic_resolution=False),
+        SessionConfig(name="dyn"),
+    ]).save(path)
+    loaded = AppConfig.load(path)
+    assert loaded.get("fixed").dynamic_resolution is False
+    assert loaded.get("dyn").dynamic_resolution is True
 
 
 def test_dimensions_custom_default_refresh():

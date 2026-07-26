@@ -120,7 +120,12 @@ def _resolve_session(name: str) -> Session | None:
 def cmd_session_list(_args: argparse.Namespace) -> int:
     cfg = _load_or_seed_config()
     for sc in cfg.sessions:
-        res = "pick at startup" if sc.is_dynamic() else "{}x{}@{}".format(*sc.dimensions())
+        if sc.dynamic_resolution:
+            res = "client (auto)"
+        elif sc.is_ask():
+            res = "pick at startup"
+        else:
+            res = "{}x{}@{}".format(*sc.dimensions())
         state = Session(sc).status()
         library = "whole library" if not sc.app_ids else ",".join(map(str, sc.app_ids))
         print(f"  {sc.name:10} {state:8} {res:16}  {library}  port={sc.sunshine_port_base}")
@@ -152,9 +157,12 @@ def cmd_session_add(args: argparse.Namespace) -> int:
         return 1
     app_ids = [int(a) for a in args.apps.split(",")] if args.apps else []
     cfg.upsert(SessionConfig(name=args.name, resolution=args.resolution,
+                             dynamic_resolution=not args.fixed_resolution,
                              sunshine_port_base=port, app_ids=app_ids))
     cfg.save()
-    print(f"Session '{args.name}' created (resolution={args.resolution}, port={port}).")
+    res_note = (args.resolution if args.fixed_resolution
+                else f"client-driven, fallback {args.resolution}")
+    print(f"Session '{args.name}' created (resolution={res_note}, port={port}).")
     print(f"Next: podstage session setup {args.name}   (first Steam login)")
     return 0
 
@@ -202,7 +210,11 @@ def cmd_session_clear_overlay(args: argparse.Namespace) -> int:
     if st.running and st.client == args.name:
         print(f"session '{args.name}' is running; stop it first", file=sys.stderr)
         return 1
-    sandbox.clear_overlays(sc.home_dir())
+    try:
+        sandbox.clear_overlays(sc.home_dir())
+    except RuntimeError as e:
+        print(e, file=sys.stderr)
+        return 1
     print(f"Overlay writes of '{args.name}' cleared; Steam re-applies game "
           f"updates on the next session.")
     return 0
@@ -502,6 +514,9 @@ def build_parser() -> argparse.ArgumentParser:
                             help="Sunshine base port (default: first free block)")
             sp.add_argument("--apps", metavar="ID[,ID…]",
                             help="share only these Steam AppIDs (default: whole library)")
+            sp.add_argument("--fixed-resolution", action="store_true",
+                            help="always render at the profile resolution instead "
+                                 "of the first client's")
         if action == "remove":
             sp.add_argument("--data", action="store_true",
                             help="also delete the sandbox HOME (Steam login, saves) and overlays")

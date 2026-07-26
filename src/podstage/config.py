@@ -151,9 +151,10 @@ class SessionConfig:
     resolution:
       * a preset key ("deck", "1080p60", …) or "WxH@R", or
       * "ask" → chosen when you start the session.
-      The session renders at the FIRST client's resolution (locked until
-      restart); the profile resolution is the pre-connect canvas and the
-      PS_DYNAMIC_RES=disabled fallback.
+      With dynamic_resolution (default) the session renders at the FIRST
+      client's resolution (locked until restart) and the profile resolution
+      is only the pre-connect canvas; without it, the session renders at the
+      profile resolution.
     app_ids:
       * empty (default) → the *whole* installed library is shared into the sandbox
         (games are picked inside Big Picture), or
@@ -164,6 +165,9 @@ class SessionConfig:
 
     name: str
     resolution: str = "deck"
+    # Render at the first client's resolution (PS_DYNAMIC_RES). Off = fixed
+    # profile resolution.
+    dynamic_resolution: bool = True
     app_ids: list[int] = field(default_factory=list)
     sunshine_port_base: int = 47989
     home: str = ""
@@ -175,7 +179,7 @@ class SessionConfig:
     # preview. Applied at container start via PS_THUMBNAIL(_INTERVAL).
     preview_interval_s: int = 10
 
-    def is_dynamic(self) -> bool:
+    def is_ask(self) -> bool:
         """True for an "ask" profile (resolution chosen at start, not fixed)."""
         return self.resolution == "ask"
 
@@ -187,7 +191,7 @@ class SessionConfig:
         """
         if override:
             return parse_dimensions(override)
-        if self.is_dynamic():
+        if self.is_ask():
             raise ValueError(
                 f"Profile '{self.name}' has no fixed resolution; pass one when starting"
             )

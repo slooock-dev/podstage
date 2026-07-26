@@ -48,7 +48,8 @@ Examples:
 `homes/deck` is an isolated, already-logged-in Steam sandbox HOME as created by
 the GUI's Steam-login bootstrap (or `podstage session setup`).
 
-Dynamic resolution is the default (`PS_DYNAMIC_RES=disabled` opts out): the
+Dynamic resolution is the default (`PS_DYNAMIC_RES=disabled` opts out, set
+per profile by the host GUI/CLI): the
 pipeline launches on the first connect at that client's WxH@R, locked until
 restart; other clients get scaled. `PS_MOUSE_INPUT=enabled` injects the
 client's mouse + keyboard (Setup-page toggle, off by default); pointer focus

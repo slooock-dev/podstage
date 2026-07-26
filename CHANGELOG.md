@@ -27,9 +27,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Dynamic resolution is the default**: the pipeline launches on the first
   connect and renders at that client's resolution + refresh rate (locked
   until restart; other clients get scaled). Previously only the canvas was
-  resized. Opt-out: `PS_DYNAMIC_RES=disabled`; the experimental toggle is
-  gone.
+  resized. Per-profile toggle (Sandboxes dialog / `session add
+  --fixed-resolution`), state visible in the sandbox table; the experimental
+  toggle is gone.
 - First use seeds one generic profile (`sandbox_steam`) instead of two.
+
+### Fixed
+
+- The sandbox table's overlay/size columns showed nothing once a session had
+  streamed: the kernel-created overlay work dirs are unreadable from the
+  host, `du` exits nonzero, and the (valid) total was discarded.
+- "Clear overlay" left those work dirs behind for the same reason; removal
+  now falls back to `podman unshare`.
 
 ## [0.1.4] - 2026-07-25
 

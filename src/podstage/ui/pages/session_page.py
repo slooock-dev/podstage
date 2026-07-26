@@ -570,7 +570,7 @@ class SessionPage(QWidget):
                 return
             close_sandbox_steam = True
         resolution = None
-        if sc.is_dynamic():
+        if sc.is_ask():
             resolution = self._ask_resolution(sc.name)
             if resolution is None:
                 return

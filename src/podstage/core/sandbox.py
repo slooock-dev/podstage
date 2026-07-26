@@ -75,7 +75,9 @@ def _du_bytes(path: Path) -> int | None:
     try:
         p = subprocess.run(["du", "-sb", str(path)], capture_output=True,
                            text=True, timeout=120, check=False)
-        return int(p.stdout.split()[0]) if p.returncode == 0 else None
+        # du exits nonzero when parts are unreadable (overlay work dirs are
+        # owned by the container root's sub-UID) but still prints the total.
+        return int(p.stdout.split()[0]) if p.stdout.strip() else None
     except (OSError, subprocess.SubprocessError, ValueError, IndexError):
         return None
 
@@ -99,7 +101,15 @@ def clear_overlays(home: Path) -> None:
     """Drop the sandbox's overlay writes; the read-only host libraries stay
     untouched, Steam re-applies updates next session. The caller must ensure
     no session is running on this sandbox."""
-    shutil.rmtree(config.overlay_root(home), ignore_errors=True)
+    root = config.overlay_root(home)
+    shutil.rmtree(root, ignore_errors=True)
+    if root.exists():
+        # The kernel creates work/work owned by the container root's sub-UID;
+        # deleting it needs the user namespace.
+        subprocess.run(["podman", "unshare", "rm", "-rf", "--", str(root)],
+                       capture_output=True, text=True, timeout=120, check=False)
+    if root.exists():
+        raise RuntimeError(f"could not clear the overlay storage at {root}")
 
 
 def _guard(home: Path) -> Path:
@@ -119,7 +129,7 @@ def delete(home: Path) -> None:
     """
     target = _guard(home)
     # Overlay uppers (the sandbox's writes onto shared libraries) die with it.
-    shutil.rmtree(config.overlay_root(target), ignore_errors=True)
+    clear_overlays(target)
     if not target.exists():
         return
     try:

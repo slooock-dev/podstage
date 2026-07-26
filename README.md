@@ -69,6 +69,8 @@ host GUI.
 - **Resolution follows the client.** The pipeline launches on the first
   Moonlight connect and renders at that client's resolution and refresh
   rate (locked until the session restarts; other clients get scaled).
+  Per-profile toggle on the Sandboxes page, on by default; off renders at
+  the profile resolution.
 - **Shared games, separate prefixes.** Game files are symlinked from your main
   Steam libraries, so nothing is downloaded twice. The libraries are mounted
   as read-only overlay lowerdirs: a session can never modify host game
@@ -239,7 +241,7 @@ podstage setup                     # print guided (sudo) setup commands
 podstage runtime build             # (re)build the runtime image
 podstage runtime start|stop|status # drive the container directly (by HOME dir)
 podstage session list
-podstage session add <name> [--resolution R] [--port N] [--apps ID,…]
+podstage session add <name> [--resolution R] [--port N] [--apps ID,…] [--fixed-resolution]
 podstage session setup|start|stop|status <name>   # start: --mode desktop, --resolution, --app
 podstage session pair <name> <PIN>    # complete a Moonlight pairing
 podstage session remove <name> [--data] | clear-overlay <name>

@@ -74,3 +74,10 @@ def test_setup_refuses_while_session_running(monkeypatch):
     monkeypatch.setattr(runtime, "is_running", lambda: True)
     with pytest.raises(RuntimeError, match="streaming session is running"):
         Session(SessionConfig(name="deck")).setup()
+
+
+def test_options_forward_dynamic_resolution():
+    on = Session(SessionConfig(name="deck"))._options().env
+    assert on["PS_DYNAMIC_RES"] == "enabled"
+    off = Session(SessionConfig(name="deck", dynamic_resolution=False))._options().env
+    assert off["PS_DYNAMIC_RES"] == "disabled"

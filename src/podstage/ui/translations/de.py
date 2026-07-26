@@ -408,4 +408,14 @@ TEXTS: dict[str, str] = {
     "the 'Sandboxes' page first.":
         "»{name}« hat noch keinen Steam-Login. Zuerst über die Seite "
         "»Sandboxen« anmelden.",
+    "Follow the client's resolution":
+        "Auflösung folgt dem Client",
+    "Render at the first connecting client's resolution, locked until "
+    "the session restarts. The profile resolution above is only the "
+    "fallback. Off: always render at the profile resolution.":
+        "Rendert in der Auflösung des zuerst verbindenden Clients, fixiert "
+        "bis zum Neustart der Session. Die Profil-Auflösung oben ist nur der "
+        "Fallback. Aus: es wird immer in der Profil-Auflösung gerendert.",
+    "Client (auto)":
+        "Client (auto)",
 }
