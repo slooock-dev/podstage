@@ -123,13 +123,14 @@ class WebUiDialog(QDialog):
         buttons = QDialogButtonBox()
         copy_btn = buttons.addButton(tr("Copy password"),
                                      QDialogButtonBox.ButtonRole.ActionRole)
-        buttons.addButton(tr("Open in browser"),
-                          QDialogButtonBox.ButtonRole.AcceptRole)
+        open_btn = buttons.addButton(tr("Open in browser"),
+                                     QDialogButtonBox.ButtonRole.ActionRole)
         buttons.addButton(tr("Close"), QDialogButtonBox.ButtonRole.RejectRole)
         copy_btn.clicked.connect(
             lambda: QGuiApplication.clipboard().setText(password))
-        buttons.accepted.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
-        buttons.accepted.connect(self.accept)
+        # Must not close the dialog: on Wayland openUrl goes through the
+        # desktop portal and the request dies with the parent window.
+        open_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
 
