@@ -75,8 +75,12 @@ host GUI.
 - **Input isolation.** The client's virtual input devices live on a dedicated
   seat and never touch the desktop, in either direction. That isolates input
   routing, not malware (see [Security notes](#security-notes)).
-- **Light host footprint.** No daemons, no system services, nothing running as
-  root. Setup installs two udev rules, the only sudo podstage ever needs.
+- **Light on the host, not on disk.** No daemons, no system services, nothing
+  running as root; setup installs two udev rules, the only sudo podstage ever
+  needs. Disk is the trade-off: about 2.7 GB for the runtime image, plus each
+  sandbox's own Steam data and overlay writes, where tens of gigabytes are
+  normal. Only the game files are shared instead of duplicated, and where the
+  sandboxes live is configurable.
 - **Management GUI.** One-click setup fixes, sandbox management, live
   CPU/GPU/VRAM/encoder telemetry, a stream preview, pairing, and encoder
   settings that follow the GPU. English and German, following the system
