@@ -18,8 +18,10 @@ perf probe and the entrypoint starts it.
   both sides share for the GUI. Compositor-side, so it reads the same on
   NVIDIA, AMD and Intel, unlike the NVIDIA-only encoder counters. The Load card
   is now the Performance card; the FPS row exists only while the feature is on.
-  Needs gamescope 3.16+; the entrypoint flips its `mangoapp_use_output_timing`
-  ConVar, without which no perf query is answered.
+  gamescope reports a frametime only for a new present, so a static Big Picture
+  page reads "no new frames" rather than a rate. Needs gamescope 3.16+; the
+  entrypoint flips its `mangoapp_use_output_timing` ConVar, without which no
+  perf query is answered.
 
 ### Fixed
 
