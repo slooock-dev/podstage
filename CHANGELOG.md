@@ -4,10 +4,10 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.2] - 2026-07-26
 
 Needs a runtime image rebuild (`podstage runtime build`): the image gained the
-perf probe and the entrypoint starts it.
+perf probe and the focus watchdog, and the entrypoint starts both.
 
 ### Added
 
@@ -27,7 +27,7 @@ perf probe and the entrypoint starts it.
 
 - **Big Picture lost its gamepad navigation** after a game exited (and
   occasionally right after session start): controller input still arrived but no
-  element could be focused, until holding B opened the side menu. Diagnosed live
+  element could be focused, until pressing B repeatedly opened the side menu. Diagnosed live
   — gamescope's focus, the X input focus and Steam's own `STEAM_INPUT_FOCUS` all
   point at the right window, and a dump before and after the B workaround is
   identical, so the stuck state is inside Steam's UI and invisible from outside.

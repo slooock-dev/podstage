@@ -82,9 +82,9 @@ host GUI.
   normal. Only the game files are shared instead of duplicated, and where the
   sandboxes live is configurable.
 - **Management GUI.** One-click setup fixes, sandbox management, live
-  CPU/GPU/VRAM/encoder telemetry plus game FPS straight from the compositor
-  (experimental), a stream preview, pairing, and encoder
-  settings that follow the GPU. English and German, following the system
+  CPU/GPU/VRAM/encoder telemetry plus game FPS from the compositor
+  (experimental), a stream preview, pairing, and encoder settings that follow
+  the GPU. English and German, following the system
   locale (override in Setup or via `PS_LANG`).
 
 ## Requirements
@@ -189,7 +189,7 @@ streaming needs the Moonlight pairing PIN. The image is built locally
 
 | Page | What it does |
 |------|--------------|
-| **Session** | Start/stop the stream (Big Picture or the experimental desktop mode), the active game, CPU/GPU/VRAM/encoder meters, a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
+| **Session** | Start/stop the stream (Big Picture or the experimental desktop mode), the active game, the Performance card (game FPS plus CPU/GPU/VRAM/encoder), a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
 | **Sandboxes** | Sandbox profiles, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
 | **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, streaming toggles (mouse & keyboard, preview behavior), experimental features, an on-demand update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
@@ -264,7 +264,9 @@ that:
 - The 32-bit NVIDIA GL libraries and the Xwayland GLX module are bind-mounted
   from the host by absolute path. podstage searches the Fedora/Bazzite/Arch and
   Debian/Ubuntu locations; a distro that stores them elsewhere would leave
-  Steam's 32-bit client UI without hardware GL.
+  Steam's 32-bit client UI without hardware GL. The driver's NGX DLLs
+  (`nvidia/wine`) are mounted the same way, which is what makes DLSS work
+  inside the sandbox.
 - CDI GPU injection expects a spec at `/etc/cdi/nvidia.yaml`
   (`nvidia-ctk cdi generate`).
 - AMD uses `/dev/dri` and VAAPI instead of CDI/NVENC. The GUI follows suit:
@@ -297,6 +299,10 @@ Patches widening distro and GPU support are very welcome.
 - **Big Picture is a black or flashing screen.** Steam's CEF needs ~450 MB of
   shared memory; podman's default `/dev/shm` is 64 MB, which crash-loops the
   renderer. The runtime sets `--shm-size=1g`. Keep it.
+- **Big Picture takes controller input but focuses nothing.** Steam's UI lost
+  its navigation focus, usually right after a game exits. A watchdog in the
+  container re-focuses Steam's window and normally heals it; otherwise press B
+  until the side menu opens. `PS_FOCUS_NUDGE=disabled` turns it off.
 - **Client input controls the desktop, or the stream has no input.** Both udev
   rules must be installed: the seat rule pins the streaming devices to a
   dedicated seat, the generated owner rule makes them and `/dev/uinput`
