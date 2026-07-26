@@ -49,6 +49,18 @@ def test_write_requires_launcher(paths):
         desktop.autostart_enable()
 
 
+def test_remove_all_clears_entries_and_icon(paths, monkeypatch):
+    monkeypatch.setattr(desktop, "_refresh_menu", lambda: None)
+    assert desktop.remove_all() == []          # nothing installed yet
+    assert desktop.installed_paths() == []
+    desktop.menu_install()
+    desktop.autostart_enable()
+    assert desktop.installed_paths() == [desktop.MENU_FILE, desktop.AUTOSTART_FILE,
+                                         desktop.ICON_DEST]
+    assert desktop.remove_all() == ["menu entry", "autostart", "icon"]
+    assert desktop.installed_paths() == []
+
+
 def test_entry_variants():
     assert "X-KDE-autostart-after" in desktop.desktop_entry(autostart=True)
     assert "Categories" in desktop.desktop_entry(autostart=False)

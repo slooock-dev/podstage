@@ -8,7 +8,8 @@ files pointing at ``ui.sh``:
   * application menu — ~/.local/share/applications/podstage.desktop → the
     GUI shows up in the distribution's app launcher.
 
-Toggled from the GUI's setup page.
+Toggled from the GUI's setup page or with ``podstage desktop``; removed again
+by ``podstage uninstall`` (see :mod:`podstage.core.teardown`).
 """
 
 import shutil
@@ -99,3 +100,27 @@ def _refresh_menu() -> None:
     if shutil.which("update-desktop-database"):
         subprocess.run(["update-desktop-database", str(MENU_DIR)],
                        capture_output=True, timeout=30, check=False)
+
+
+# -- teardown ---------------------------------------------------------------
+
+def installed_paths() -> list[Path]:
+    """The integration files currently on disk, in removal order. All three
+    live under podstage-specific names, so uninstall can drop them blindly."""
+    return [p for p in (MENU_FILE, AUTOSTART_FILE, ICON_DEST) if p.exists()]
+
+
+def remove_all() -> list[str]:
+    """Remove both entries and the installed icon. Returns the labels of what
+    was actually there."""
+    removed = []
+    if menu_is_installed():
+        menu_remove()
+        removed.append("menu entry")
+    if autostart_is_enabled():
+        autostart_disable()
+        removed.append("autostart")
+    if ICON_DEST.exists():
+        ICON_DEST.unlink(missing_ok=True)
+        removed.append("icon")
+    return removed

@@ -4,6 +4,23 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-07-26
+
+No image rebuild needed.
+
+### Added
+
+- **`podstage desktop`**: the application-menu entry and the login autostart
+  (so far GUI-only) are now switchable headlessly, `podstage desktop
+  [menu|autostart [on|off]]`, on the same files the Setup card writes.
+
+### Fixed
+
+- `podstage uninstall` / Setup → *Remove podstage* left the desktop
+  integration behind (menu entry, autostart entry, installed icon) while
+  reporting "no residues found"; both are now part of the inventory and the
+  removal.
+
 ## [0.2.0] - 2026-07-26
 
 Needs a runtime image rebuild (`podstage runtime build`): the cage input
@@ -213,6 +230,7 @@ Steam Deck.
   AppImage, whose bundled libva can't load the image's Mesa VAAPI driver).
   Validated on a Rembrandt iGPU; it still sees far less mileage than NVIDIA.
 
+[0.2.1]: https://github.com/slooock-dev/podstage/releases/tag/v0.2.1
 [0.2.0]: https://github.com/slooock-dev/podstage/releases/tag/v0.2.0
 [0.1.4]: https://github.com/slooock-dev/podstage/releases/tag/v0.1.4
 [0.1.3]: https://github.com/slooock-dev/podstage/releases/tag/v0.1.3

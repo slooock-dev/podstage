@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
-from . import runtime, sandbox, udev
+from . import desktop, runtime, sandbox, udev
 from .doctor import _STREAM_TCP, _STREAM_UDP, CDI_SPEC
 
 
@@ -68,6 +68,7 @@ def sandbox_dirs() -> list[Path]:
 def inventory() -> list[Artifact]:
     ports = _open_stream_ports()
     boxes = sandbox_dirs()
+    integration = desktop.installed_paths()
     return [
         Artifact("udev", "udev rules",
                  udev.STATIC_DEST.exists() or udev.OWNER_DEST.exists(),
@@ -85,6 +86,8 @@ def inventory() -> list[Artifact]:
                  str(config.DATA_DIR)),
         Artifact("config", "configuration", config.CONFIG_DIR.exists(),
                  str(config.CONFIG_DIR)),
+        Artifact("desktop", "desktop integration", bool(integration),
+                 ", ".join(str(p) for p in integration)),
     ]
 
 
@@ -137,6 +140,13 @@ def remove_user_artifacts(keep_sandboxes: bool = False) -> list[tuple[str, str]]
         if path.exists():
             shutil.rmtree(path, ignore_errors=True)
             results.append((label, "removed"))
+    try:
+        gone = desktop.remove_all()
+    except OSError as e:
+        results.append(("desktop integration", str(e)))
+    else:
+        if gone:
+            results.append(("desktop integration", "removed " + ", ".join(gone)))
     return results
 
 

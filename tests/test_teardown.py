@@ -3,11 +3,18 @@
 from pathlib import Path
 
 from podstage import config
-from podstage.core import teardown, udev
+from podstage.core import desktop, teardown, udev
 
 
 def _fake_system(monkeypatch, tmp_path: Path, *, udev_present=True, ports=None,
-                 mdns=False, cdi=False, image=False):
+                 mdns=False, cdi=False, image=False, integration=False):
+    # conftest already redirects the desktop paths into tmp_path
+    monkeypatch.setattr(desktop, "_refresh_menu", lambda: None)
+    if integration:
+        desktop.MENU_FILE.parent.mkdir(parents=True)
+        desktop.MENU_FILE.write_text("[Desktop Entry]\n")
+        desktop.ICON_DEST.parent.mkdir(parents=True)
+        desktop.ICON_DEST.write_text("<svg/>")
     monkeypatch.setattr(udev, "STATIC_DEST", tmp_path / "99.rules")
     monkeypatch.setattr(udev, "OWNER_DEST", tmp_path / "71.rules")
     if udev_present:
@@ -86,6 +93,20 @@ def test_remove_keeps_sandboxes_on_request(monkeypatch, tmp_path):
     assert box.exists()
     left = teardown.leftovers()
     assert [a.key for a in left] == ["sandboxes"]
+
+
+def test_desktop_integration_is_detected_and_removed(monkeypatch, tmp_path):
+    _fake_system(monkeypatch, tmp_path, udev_present=False, integration=True)
+    monkeypatch.setattr(teardown.runtime, "stop", lambda: False)
+    art = {a.key: a for a in teardown.inventory()}["desktop"]
+    assert art.present and not art.root and not art.shared
+    assert "podstage.desktop" in art.detail
+
+    results = dict(teardown.remove_user_artifacts())
+
+    assert results["desktop integration"] == "removed menu entry, icon"
+    assert not desktop.MENU_FILE.exists() and not desktop.ICON_DEST.exists()
+    assert not teardown.leftovers()
 
 
 def test_leftovers_exclude_shared_by_default(monkeypatch, tmp_path):

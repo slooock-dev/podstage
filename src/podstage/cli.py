@@ -335,6 +335,35 @@ def cmd_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_desktop(args: argparse.Namespace) -> int:
+    """Install or remove the two user-level .desktop integrations headlessly
+    (same files as the GUI's Desktop integration card): the application-menu
+    entry and the login autostart. Bare ``desktop`` prints both states."""
+    from .core import desktop
+
+    ops = {
+        "menu": (desktop.menu_is_installed, desktop.menu_install,
+                 desktop.menu_remove, desktop.MENU_FILE),
+        "autostart": (desktop.autostart_is_enabled, desktop.autostart_enable,
+                      desktop.autostart_disable, desktop.AUTOSTART_FILE),
+    }
+    if args.target == "status":
+        for name, (is_on, _e, _d, path) in ops.items():
+            print(f"  {name:10} {'on ' if is_on() else 'off'}  ({path})")
+        return 0
+    is_on, enable, disable, path = ops[args.target]
+    if args.value is None:
+        print("on" if is_on() else "off")
+        return 0
+    try:
+        enable() if args.value == "on" else disable()
+    except (OSError, RuntimeError) as e:
+        print(f"{args.target} {args.value} failed: {e}", file=sys.stderr)
+        return 1
+    print(f"{args.target} {args.value} ({path})")
+    return 0
+
+
 def cmd_runtime_start(args: argparse.Namespace) -> int:
     """Profile-less container start (what run.sh wraps): takes a HOME dir
     directly instead of resolving a configured session profile."""
@@ -506,6 +535,14 @@ def build_parser() -> argparse.ArgumentParser:
     cf.add_argument("value", nargs="?", choices=["on", "off"],
                     help="omit to print the current state")
     cf.set_defaults(func=cmd_config)
+
+    dt = sub.add_parser("desktop",
+                        help="application-menu entry and login autostart for the GUI")
+    dt.add_argument("target", nargs="?", default="status",
+                    choices=["status", "menu", "autostart"])
+    dt.add_argument("value", nargs="?", choices=["on", "off"],
+                    help="omit to print the current state")
+    dt.set_defaults(func=cmd_desktop)
 
     prov = sub.add_parser("provision", help="make a Steam app available in a streaming session")
     prov.add_argument("app_id", type=int)

@@ -250,6 +250,7 @@ podstage session pair <name> <PIN>    # complete a Moonlight pairing
 podstage session remove <name> [--data] | clear-overlay <name>
 podstage experimental [enable|disable <feature>]
 podstage config mouse-keyboard [on|off]
+podstage desktop [menu|autostart [on|off]]   # menu entry / login autostart for the GUI
 podstage provision <app_id> <session>
 ```
 
@@ -334,7 +335,8 @@ Live container logs: `journalctl -f CONTAINER_NAME=podstage-runtime`.
 
 `podstage uninstall` (or Setup → *Remove podstage*) detects and removes
 everything setup created: udev rules, firewall ports, the runtime image,
-sandboxes, data and configuration. Shared pieces (the mDNS firewall service,
+sandboxes, data, configuration, and the desktop integration (menu entry,
+autostart, icon). Shared pieces (the mDNS firewall service,
 the NVIDIA CDI spec) are kept unless `--all`, since other software uses them too.
 
 ## Roadmap
