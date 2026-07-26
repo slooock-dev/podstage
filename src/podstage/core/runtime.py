@@ -78,13 +78,18 @@ def _glxserver() -> Path | None:
     return next((p for p in _GLXSERVER_CANDIDATES if p.exists()), None)
 
 # Environment variables forwarded from the caller into the container (with
-# defaults where the pipeline needs one). PS_MOUSE_INPUT/PS_SHOW_CURSOR exist
-# for pointer experiments only — gamepad is the supported input path.
+# defaults where the pipeline needs one). PS_MOUSE_INPUT is driven by the
+# mouse & keyboard setting; gamepad stays the default input path.
 _FORWARD_ENV: dict[str, str | None] = {
     "PS_STEAM_FLAGS": "-gamepadui",
     "PS_NATIVE_TOUCH": "disabled",
     "PS_MOUSE_INPUT": "disabled",
     "PS_SHOW_CURSOR": "",
+    # Desktop-mode launch target (entrypoint default: Steam desktop UI).
+    "PS_DESKTOP_CMD": None,
+    # Pointer accel profile for the seat-shim ("flat" is the desktop-mode
+    # entrypoint default; only forwarded when the caller pins it).
+    "PS_POINTER_ACCEL": None,
     # Web-UI login: no fixed default — container_env() fills these from the
     # per-install random credentials (config.sunshine_web_credentials) unless
     # the caller/environment sets them explicitly.
@@ -97,9 +102,9 @@ _FORWARD_ENV: dict[str, str | None] = {
     # In-container thumbnail loop (entrypoint defaults: enabled, every 10s).
     "PS_THUMBNAIL": None,
     "PS_THUMBNAIL_INTERVAL": None,
-    # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each:
-    # client-resolution follow and gamescope HDR — see the entrypoint.
+    # Entrypoint default enabled; forwarded only to opt out (=disabled).
     "PS_DYNAMIC_RES": None,
+    # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each.
     "PS_HDR": None,
 }
 
@@ -114,7 +119,7 @@ class RuntimeOptions:
 
     home_dir: Path
     resolution: str = "1280x800@60"
-    mode: str = "pipeline"  # pipeline|steam|probe|shell
+    mode: str = "pipeline"  # pipeline|desktop|steam|probe|shell
     app: str = ""  # Steam AppID → boot straight into the game
     image: str = DEFAULT_IMAGE
     sunshine_port: int = DEFAULT_SUNSHINE_PORT
@@ -284,6 +289,11 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
     if opts.env.get("PS_GAMESCOPE_WSI", os.environ.get("PS_GAMESCOPE_WSI")) != "enabled":
         env["DISABLE_GAMESCOPE_WSI"] = "1"
     env.update(_forwarded_env(opts))
+    # Desktop mode is pointer-driven; flip the defaults unless pinned.
+    if opts.mode == "desktop":
+        for key, val in (("PS_MOUSE_INPUT", "enabled"), ("PS_SHOW_CURSOR", "1")):
+            if key not in opts.env and not os.environ.get(key):
+                env[key] = val
     if "PS_WEB_USER" not in env or "PS_WEB_PASS" not in env:
         user, password = config.sunshine_web_credentials()
         env.setdefault("PS_WEB_USER", user)
@@ -557,7 +567,7 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     ensure_overlay_dirs(opts.home_dir, library_paths)
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)
     publisher_pid = None
-    if opts.mode == "pipeline":
+    if opts.mode in ("pipeline", "desktop"):
         publisher_pid = start_publisher(port=opts.sunshine_port)
     save_state(opts, publisher_pid)
     try:

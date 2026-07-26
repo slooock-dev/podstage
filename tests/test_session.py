@@ -22,12 +22,12 @@ def test_options_forward_sunshine_extra_env():
 
 def test_options_forward_experimental_env():
     sc = SessionConfig(name="deck")
-    on = AppConfig(experimental={"dynamic_resolution": True, "hdr": True})
+    on = AppConfig(experimental={"hdr": True}, mouse_keyboard=True)
     env = Session(sc, app_config=on)._options().env
-    assert env["PS_DYNAMIC_RES"] == "enabled"
     assert env["PS_HDR"] == "enabled"
+    assert env["PS_MOUSE_INPUT"] == "enabled"
     off = Session(sc, app_config=AppConfig())._options().env
-    assert "PS_DYNAMIC_RES" not in off and "PS_HDR" not in off
+    assert "PS_MOUSE_INPUT" not in off and "PS_HDR" not in off
 
 
 def test_start_requires_steam_login(monkeypatch):
@@ -74,3 +74,10 @@ def test_setup_refuses_while_session_running(monkeypatch):
     monkeypatch.setattr(runtime, "is_running", lambda: True)
     with pytest.raises(RuntimeError, match="streaming session is running"):
         Session(SessionConfig(name="deck")).setup()
+
+
+def test_options_forward_dynamic_resolution():
+    on = Session(SessionConfig(name="deck"))._options().env
+    assert on["PS_DYNAMIC_RES"] == "enabled"
+    off = Session(SessionConfig(name="deck", dynamic_resolution=False))._options().env
+    assert off["PS_DYNAMIC_RES"] == "disabled"

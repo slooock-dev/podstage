@@ -4,6 +4,44 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Mouse & keyboard streaming** (Setup toggle, off by default): pointer +
+  keyboard injection into Big Picture. The patched `cage` adds
+  pointer-constraints (games lock the mouse, stutter-free mouse look), flat
+  1:1 libinput accel, and a baked-in cursor theme. Pointer focus and cursor
+  stay inert until deliberate mouse use (motion, click or scroll; the
+  client's stream-start nudge is filtered out), and the cursor hides 3 s
+  after the last use, so gamepad-only streams never show a parked cursor.
+- **Desktop mode** (experimental, `--mode desktop` / Session page): streams
+  the Steam desktop UI directly under cage (Steam forces the gamepad UI
+  under gamescope). Known limit: X11 dropdowns position wrong.
+- **CLI**: `session add/remove/clear-overlay` (headless profile management),
+  `session pair` (verified against the sandbox pairing state),
+  `experimental list/enable/disable`.
+
+### Changed
+
+- **Dynamic resolution is the default**: the pipeline launches on the first
+  connect and renders at that client's resolution + refresh rate (locked
+  until restart; other clients get scaled). Previously only the canvas was
+  resized. Per-profile toggle (Sandboxes dialog / `session add
+  --fixed-resolution`), state visible in the sandbox table; the Session page
+  shows the locked client resolution, or that the session still waits for
+  the first client; the experimental toggle is gone. "Pick at startup"
+  profiles are always fixed (the choice would be meaningless otherwise).
+- First use seeds one generic profile (`sandbox_steam`) instead of two.
+
+### Fixed
+
+- The sandbox table's overlay/size columns showed nothing once a session had
+  streamed: the kernel-created overlay work dirs are unreadable from the
+  host, `du` exits nonzero, and the (valid) total was discarded.
+- "Clear overlay" left those work dirs behind for the same reason; removal
+  now falls back to `podman unshare`.
+
 ## [0.1.4] - 2026-07-25
 
 ### Added

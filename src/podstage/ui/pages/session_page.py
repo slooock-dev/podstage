@@ -32,7 +32,7 @@ from ...core import monitor, runtime, sandbox, sunshine_api
 from ...core.session import Session
 from .. import theme
 from ..i18n import tr
-from ..widgets import AspectPixmapLabel, InfoRow, Meter, card
+from ..widgets import AspectPixmapLabel, InfoRow, Meter, align_captions, card
 from ..workers import start_action
 
 _NCPU = os.cpu_count() or 1
@@ -123,13 +123,14 @@ class WebUiDialog(QDialog):
         buttons = QDialogButtonBox()
         copy_btn = buttons.addButton(tr("Copy password"),
                                      QDialogButtonBox.ButtonRole.ActionRole)
-        buttons.addButton(tr("Open in browser"),
-                          QDialogButtonBox.ButtonRole.AcceptRole)
+        open_btn = buttons.addButton(tr("Open in browser"),
+                                     QDialogButtonBox.ButtonRole.ActionRole)
         buttons.addButton(tr("Close"), QDialogButtonBox.ButtonRole.RejectRole)
         copy_btn.clicked.connect(
             lambda: QGuiApplication.clipboard().setText(password))
-        buttons.accepted.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
-        buttons.accepted.connect(self.accept)
+        # Must not close the dialog: on Wayland openUrl goes through the
+        # desktop portal and the request dies with the parent window.
+        open_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
 
@@ -165,6 +166,12 @@ class SessionPage(QWidget):
         top.setSpacing(8)
         self._client = QComboBox()
         self._client.currentTextChanged.connect(self._on_profile_selected)
+        self._mode = QComboBox()
+        self._mode.addItem(tr("Big Picture"), "pipeline")
+        self._mode.addItem(tr("Desktop (experimental)"), "desktop")
+        self._mode.setToolTip(tr(
+            "Big Picture (gamepad) or the Steam desktop UI with mouse and "
+            "keyboard (experimental). Applies at the next start."))
         self._start_btn = QPushButton(tr("Start"))
         self._start_btn.setProperty("primary", True)
         self._start_btn.clicked.connect(self._on_start)
@@ -178,6 +185,7 @@ class SessionPage(QWidget):
         self._pair_btn.clicked.connect(self._on_pair)
         top.addWidget(QLabel(tr("Client")))
         top.addWidget(self._client, 1)
+        top.addWidget(self._mode)
         top.addWidget(self._start_btn)
         top.addWidget(self._stop_btn)
         top.addWidget(self._pair_btn)
@@ -192,8 +200,10 @@ class SessionPage(QWidget):
         lay.addWidget(self._detail)
 
         self._game = InfoRow(tr("Game"))
+        self._resolution = InfoRow(tr("Resolution"))
         self._backend = InfoRow(tr("Backend"))
-        for w in (self._game, self._backend):
+        align_captions(self._game, self._resolution, self._backend)
+        for w in (self._game, self._resolution, self._backend):
             lay.addWidget(w)
         return frame
 
@@ -450,14 +460,37 @@ class SessionPage(QWidget):
             self._detail.setText("")
 
         self._start_btn.setEnabled(not busy and not snap.running)
+        self._mode.setEnabled(not busy and not snap.running)
         self._stop_btn.setEnabled(not busy and snap.running)
         self._pair_btn.setEnabled(not busy and snap.running)
 
         self._game.set(snap.game.name if snap.game else
                        (tr("Big Picture / menu") if snap.running else None))
+        self._update_resolution(snap.running)
         self._backend.set(snap.detail if snap.running else None)
         self._update_load(snap)
         self._update_thumbnail(snap.running)
+
+    def _update_resolution(self, running: bool) -> None:
+        """With dynamic resolution the render size is only known once the
+        first client connects (the entrypoint drops it into the mounted HOME)
+        and stays locked until the session restarts."""
+        sc = self._profile()
+        if not running or sc is None:
+            self._resolution.set(None)
+            return
+        # Desktop mode has no gamescope lock; the output follows each client.
+        if not sc.dynamic_resolution or self._mode.currentData() == "desktop":
+            self._resolution.set(None if sc.is_ask() else sc.resolution)
+            return
+        try:
+            w, h, r = (sc.home_dir() / ".cache/podstage/client-mode") \
+                .read_text().split()
+            self._resolution.set(tr(
+                "{w}x{h}@{r} · locked until the session restarts",
+                w=w, h=h, r=r))
+        except (OSError, ValueError):
+            self._resolution.set(tr("waiting for the first client …"))
 
     def _update_thumbnail(self, running: bool) -> None:
         """Show the preview frame the in-container loop drops into the mounted
@@ -562,16 +595,18 @@ class SessionPage(QWidget):
                 return
             close_sandbox_steam = True
         resolution = None
-        if sc.is_dynamic():
+        if sc.is_ask():
             resolution = self._ask_resolution(sc.name)
             if resolution is None:
                 return
+
+        mode = self._mode.currentData()
 
         def _launch() -> runtime.RuntimeStatus:
             if close_sandbox_steam and not session.close_sandbox_steam():
                 raise RuntimeError(tr(
                     "Could not close the sandbox Steam; close it manually."))
-            return session.start(resolution=resolution)
+            return session.start(resolution=resolution, mode=mode)
 
         self._last_error = ""
         self._pending = "start"
@@ -595,7 +630,8 @@ class SessionPage(QWidget):
                      f"Stop {sc.name}", self._on_action_done)
 
     def _ask_resolution(self, name: str) -> str | None:
-        presets = ["1920x1080@60", "1280x800@60", "2560x1440@60", "3840x2160@60"]
+        presets = ["{}x{}@{}".format(*dims)
+                   for dims in config.RESOLUTION_PRESETS.values()]
         value, ok = QInputDialog.getItem(
             self, tr("Resolution"),
             tr("'{name}' picks its resolution at startup.\nResolution for this "
@@ -620,11 +656,13 @@ class SessionPage(QWidget):
         pin = dlg.pin.text().strip()
         name = dlg.name.text().strip() or sc.name
         web_port = sc.sunshine_port_base + 1
+        home = sc.home_dir()
         self._pair_btn.setEnabled(False)
 
         def _pair() -> str:
-            if not sunshine_api.pair(pin, name, web_port):
-                raise RuntimeError(tr("Sunshine rejected the PIN. Reconnect in "
+            if not sunshine_api.pair_verified(pin, name, home, web_port):
+                raise RuntimeError(tr("The PIN was submitted but no pairing "
+                                      "completed. Restart the pairing in "
                                       "Moonlight and enter the new PIN."))
             return tr("Client '{name}' paired. Moonlight can stream now.", name=name)
 

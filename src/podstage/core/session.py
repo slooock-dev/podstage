@@ -122,6 +122,10 @@ class Session:
         else:
             env["PS_THUMBNAIL_INTERVAL"] = str(self.cfg.preview_interval_s)
         env.update(self.app_config().experimental_env())
+        if self.app_config().mouse_keyboard:
+            env["PS_MOUSE_INPUT"] = "enabled"
+        env["PS_DYNAMIC_RES"] = ("enabled" if self.cfg.dynamic_resolution
+                                 else "disabled")
         return runtime.RuntimeOptions(
             home_dir=self.home,
             resolution=self._resolution_str(resolution),
@@ -201,6 +205,8 @@ class Session:
                 "before starting the stream"
             )
         opts = self._options(resolution, app=app, attach=attach, mode=mode)
+        # Stale from the previous session until the entrypoint rewrites it.
+        (self.home / ".cache/podstage/client-mode").unlink(missing_ok=True)
         self.close_host_steam()
         return runtime.start(opts)  # raises if another session already runs
 

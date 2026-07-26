@@ -82,8 +82,31 @@ RUN pacman -Sy --noconfirm --needed \
         wf-recorder ffmpeg \
         vulkan-radeon lib32-vulkan-radeon \
         vulkan-intel lib32-vulkan-intel intel-media-driver \
-        libva-mesa-driver lib32-libva-mesa-driver libva-utils && \
+        libva-mesa-driver lib32-libva-mesa-driver libva-utils \
+        adwaita-cursors && \
     pacman -Scc --noconfirm
+
+# --- patched cage: pointer-constraints support -----------------------------
+# Stock cage lacks zwp_pointer_constraints_v1, so games can't lock the mouse
+# (cursor drifts to the edge, mouse-look stutters). The vendored patch wires
+# wlroots' implementation in; built from the sha256-pinned release tarball
+# into /usr/local/bin (shadows the Arch package binary, kept for its deps).
+ARG CAGE_VERSION=v0.3.1
+ARG CAGE_SHA256=6dc1619665acd367e0174c93b234002549a66f55f1de9197d67f0305415babc8
+COPY patches/cage-pointer-constraints.patch /tmp/
+RUN curl -fL "https://github.com/cage-kiosk/cage/archive/refs/tags/${CAGE_VERSION}.tar.gz" \
+        -o /tmp/cage.tar.gz && \
+    echo "${CAGE_SHA256}  /tmp/cage.tar.gz" | sha256sum -c - && \
+    pacman -S --noconfirm --needed gcc meson ninja pkgconf wayland-protocols scdoc patch && \
+    mkdir /tmp/cage-src && \
+    tar -C /tmp/cage-src --strip-components=1 -xf /tmp/cage.tar.gz && \
+    cd /tmp/cage-src && \
+    patch -p1 < /tmp/cage-pointer-constraints.patch && \
+    meson setup build --buildtype=release && \
+    ninja -C build && \
+    install -m 755 build/cage /usr/local/bin/cage && \
+    cd / && rm -rf /tmp/cage* /tmp/cage-pointer-constraints.patch && \
+    pacman -Rns --noconfirm meson ninja scdoc patch && pacman -Scc --noconfirm
 
 # Seat shim: cage must enumerate the STREAMING seat ("seat9" — where the host
 # udev rule puts Sunshine's virtual devices) instead of seatd's hardcoded

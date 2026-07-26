@@ -105,7 +105,6 @@ def sunshine_web_credentials() -> tuple[str, str]:
 # start). Single registry — the Setup page renders its card from this, the
 # labels live in ui/pages/setup_page.py. Add/remove features HERE.
 EXPERIMENTAL_FEATURES: dict[str, str] = {
-    "dynamic_resolution": "PS_DYNAMIC_RES",  # follow the client's resolution
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
 }
 
@@ -150,8 +149,12 @@ class SessionConfig:
     """A client profile: a sandboxed Steam Big Picture stream for one client.
 
     resolution:
-      * a preset key ("deck", "1080p60", …) or "WxH@R" → fixed resolution, or
-      * "ask" → no fixed resolution; you choose it when you start the session.
+      * a preset key ("deck", "1080p60", …) or "WxH@R", or
+      * "ask" → chosen when you start the session.
+      With dynamic_resolution (default) the session renders at the FIRST
+      client's resolution (locked until restart) and the profile resolution
+      is only the pre-connect canvas; without it, the session renders at the
+      profile resolution.
     app_ids:
       * empty (default) → the *whole* installed library is shared into the sandbox
         (games are picked inside Big Picture), or
@@ -162,6 +165,9 @@ class SessionConfig:
 
     name: str
     resolution: str = "deck"
+    # Render at the first client's resolution (PS_DYNAMIC_RES). Off = fixed
+    # profile resolution.
+    dynamic_resolution: bool = True
     app_ids: list[int] = field(default_factory=list)
     sunshine_port_base: int = 47989
     home: str = ""
@@ -173,7 +179,13 @@ class SessionConfig:
     # preview. Applied at container start via PS_THUMBNAIL(_INTERVAL).
     preview_interval_s: int = 10
 
-    def is_dynamic(self) -> bool:
+    def __post_init__(self) -> None:
+        # "ask" is an explicit resolution choice at start; the dynamic
+        # override would make that choice meaningless.
+        if self.resolution == "ask":
+            self.dynamic_resolution = False
+
+    def is_ask(self) -> bool:
         """True for an "ask" profile (resolution chosen at start, not fixed)."""
         return self.resolution == "ask"
 
@@ -185,7 +197,7 @@ class SessionConfig:
         """
         if override:
             return parse_dimensions(override)
-        if self.is_dynamic():
+        if self.is_ask():
             raise ValueError(
                 f"Profile '{self.name}' has no fixed resolution; pass one when starting"
             )
@@ -217,6 +229,9 @@ class AppConfig:
     # Keep the last preview frame during static scenes (wlr-screencopy only
     # delivers frames while the picture changes). Off hides it after ~45 s.
     preview_keep_last: bool = True
+    # Stream the client's mouse AND keyboard into the session
+    # (PS_MOUSE_INPUT). Off for controller-only setups (default).
+    mouse_keyboard: bool = False
     # Enabled experimental features (keys from EXPERIMENTAL_FEATURES),
     # toggled on the Setup page, applied at the next session start.
     experimental: dict[str, bool] = field(default_factory=dict)
@@ -246,17 +261,21 @@ class AppConfig:
                    sessions_home_root=data.get("sessions_home_root", ""),
                    close_desktop_steam=data.get("close_desktop_steam", True),
                    preview_keep_last=data.get("preview_keep_last", True),
+                   # mouse_input was experimental before it graduated
+                   mouse_keyboard=bool(data.get(
+                       "mouse_keyboard",
+                       data.get("experimental", {}).get("mouse_input", False))),
                    experimental=experimental)
 
     @classmethod
     def load_or_seed(cls, path: Path = CONFIG_FILE) -> "AppConfig":
-        """Load the config, seeding the two bring-up profiles on first use:
-        'deck' (fixed Deck resolution) and 'laptop' (resolution chosen at start)."""
+        """Load the config, seeding one generic bring-up profile on first use
+        (the session renders at whatever client connects first)."""
         cfg = cls.load(path)
         if not cfg.sessions:
             cfg = cls(sessions=[
-                SessionConfig(name="deck", resolution="deck", sunshine_port_base=47989),
-                SessionConfig(name="laptop", resolution="ask", sunshine_port_base=48989),
+                SessionConfig(name="sandbox_steam", resolution="1080p60",
+                              sunshine_port_base=47989),
             ])
             cfg.save(path)
         return cfg
@@ -280,6 +299,8 @@ class AppConfig:
             data["close_desktop_steam"] = False
         if not self.preview_keep_last:
             data["preview_keep_last"] = False
+        if self.mouse_keyboard:
+            data["mouse_keyboard"] = True
         enabled = {k: True for k, v in self.experimental.items() if v}
         if enabled:
             data["experimental"] = enabled

@@ -113,6 +113,7 @@ class MainWindow(QMainWindow):
         side.addWidget(self._nav, 1)
         self._global_state = QLabel(tr("○ stopped"))
         self._global_state.setObjectName("globalState")
+        self._global_state.setWordWrap(True)  # "running · <profile>" exceeds 160 px
         side.addWidget(self._global_state)
         version = QLabel(f"v{__version__}")
         version.setProperty("muted", True)

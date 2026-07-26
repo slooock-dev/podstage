@@ -69,7 +69,7 @@ QPushButton {{
     background: #22262c; border: 1px solid {BORDER}; border-radius: 6px;
     padding: 5px 14px; color: {FG};
 }}
-QPushButton:hover {{ background: #2a2f36; }}
+QPushButton:hover {{ background: #2e343c; border-color: #3c434c; }}
 QPushButton:pressed {{ background: #1e2227; }}
 QPushButton:disabled {{ background: #1c1f24; color: {FAINT}; border-color: #22262c; }}
 QPushButton[primary="true"] {{ background: {ACCENT}; border-color: {ACCENT}; color: white; font-weight: 600; }}
@@ -83,6 +83,7 @@ QComboBox, QSpinBox, QLineEdit {{
     background: #1e2227; border: 1px solid {BORDER}; border-radius: 6px;
     padding: 4px 8px; color: {FG}; selection-background-color: {ACCENT};
 }}
+QComboBox:hover, QSpinBox:hover, QLineEdit:hover {{ border-color: #3c434c; }}
 QComboBox:focus, QSpinBox:focus, QLineEdit:focus {{ border-color: {ACCENT}; }}
 QComboBox::drop-down {{ border: none; width: 20px; }}
 QComboBox QAbstractItemView {{

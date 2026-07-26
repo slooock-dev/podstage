@@ -14,13 +14,34 @@ def test_dimensions_custom_string():
     assert SessionConfig(name="s", resolution="1600x900@75").dimensions() == (1600, 900, 75)
 
 
-def test_ask_profile_is_dynamic():
+def test_ask_profile():
     ask = SessionConfig(name="s", resolution="ask")
-    assert ask.is_dynamic() is True
-    assert SessionConfig(name="s", resolution="deck").is_dynamic() is False
+    assert ask.is_ask() is True
+    assert SessionConfig(name="s", resolution="deck").is_ask() is False
     with pytest.raises(ValueError):
         ask.dimensions()  # no fixed resolution: needs one passed at start
     assert ask.dimensions("1920x1080@60") == (1920, 1080, 60)
+
+
+def test_ask_profile_forces_fixed_resolution():
+    # "ask" means the resolution is chosen explicitly at start; the dynamic
+    # override would make that choice meaningless.
+    assert SessionConfig(name="s", resolution="ask").dynamic_resolution is False
+    assert SessionConfig(name="s", resolution="ask",
+                         dynamic_resolution=True).dynamic_resolution is False
+
+
+def test_dynamic_resolution_default_and_roundtrip(tmp_path: Path):
+    # Default on, also for configs written before the field existed.
+    assert SessionConfig(name="s").dynamic_resolution is True
+    path = tmp_path / "config.toml"
+    AppConfig(sessions=[
+        SessionConfig(name="fixed", dynamic_resolution=False),
+        SessionConfig(name="dyn"),
+    ]).save(path)
+    loaded = AppConfig.load(path)
+    assert loaded.get("fixed").dynamic_resolution is False
+    assert loaded.get("dyn").dynamic_resolution is True
 
 
 def test_dimensions_custom_default_refresh():
@@ -124,7 +145,7 @@ def test_preview_keep_last_roundtrip(tmp_path: Path):
 def test_experimental_roundtrip_and_env(tmp_path: Path):
     path = tmp_path / "config.toml"
     AppConfig(sessions=[SessionConfig(name="s")],
-              experimental={"hdr": True, "dynamic_resolution": False}).save(path)
+              experimental={"hdr": True}).save(path)
     loaded = AppConfig.load(path)
     assert loaded.experimental == {"hdr": True}  # only enabled keys persist
     assert loaded.experimental_env() == {"PS_HDR": "enabled"}
@@ -138,6 +159,16 @@ def test_experimental_unknown_keys_dropped(tmp_path: Path):
     path = tmp_path / "config.toml"
     path.write_text('[experimental]\nhdr = true\nremoved_feature = true\n')
     assert AppConfig.load(path).experimental == {"hdr": True}
+
+
+def test_mouse_keyboard_migrates_from_experimental(tmp_path: Path):
+    path = tmp_path / "config.toml"
+    path.write_text('[experimental]\nmouse_input = true\n')
+    cfg = AppConfig.load(path)
+    assert cfg.mouse_keyboard is True
+    assert cfg.experimental == {}  # legacy key not kept as experimental
+    cfg.save(path)
+    assert AppConfig.load(path).mouse_keyboard is True  # persists natively
 
 
 def test_preview_interval_roundtrip(tmp_path: Path):
@@ -205,12 +236,12 @@ def test_set_sessions_home_root_moves(tmp_path: Path, monkeypatch):
     assert AppConfig.load(tmp_path / "config.toml").sessions_home_root == str(new.resolve())
 
 
-def test_load_or_seed_creates_defaults(tmp_path: Path):
+def test_load_or_seed_creates_default(tmp_path: Path):
     path = tmp_path / "config.toml"
     cfg = AppConfig.load_or_seed(path)
-    assert {s.name for s in cfg.sessions} == {"deck", "laptop"}
+    assert [s.name for s in cfg.sessions] == ["sandbox_steam"]
     assert path.exists()
     # second load returns the saved config, not a fresh seed
-    cfg.remove("laptop")
+    cfg.sessions[0].resolution = "1440p60"
     cfg.save(path)
-    assert [s.name for s in AppConfig.load_or_seed(path).sessions] == ["deck"]
+    assert [s.resolution for s in AppConfig.load_or_seed(path).sessions] == ["1440p60"]

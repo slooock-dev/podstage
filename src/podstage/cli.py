@@ -10,9 +10,9 @@ import os
 import sys
 from pathlib import Path
 
-from . import __version__
-from .config import AppConfig
-from .core import doctor, provisioner, runtime
+from . import __version__, config
+from .config import AppConfig, SessionConfig
+from .core import doctor, provisioner, runtime, sunshine_api
 from .core.session import Session
 
 # ANSI colours; disabled when stdout is not a TTY.
@@ -120,10 +120,118 @@ def _resolve_session(name: str) -> Session | None:
 def cmd_session_list(_args: argparse.Namespace) -> int:
     cfg = _load_or_seed_config()
     for sc in cfg.sessions:
-        res = "pick at startup" if sc.is_dynamic() else "{}x{}@{}".format(*sc.dimensions())
+        if sc.dynamic_resolution:
+            res = "client (auto)"
+        elif sc.is_ask():
+            res = "pick at startup"
+        else:
+            res = "{}x{}@{}".format(*sc.dimensions())
         state = Session(sc).status()
         library = "whole library" if not sc.app_ids else ",".join(map(str, sc.app_ids))
         print(f"  {sc.name:10} {state:8} {res:16}  {library}  port={sc.sunshine_port_base}")
+    return 0
+
+
+def cmd_session_add(args: argparse.Namespace) -> int:
+    """Create a client profile headlessly (CLI counterpart of the Sandboxes
+    page dialog)."""
+    cfg = _load_or_seed_config()
+    try:
+        config.validate_client_name(args.name)
+        if args.resolution != "ask":
+            config.parse_dimensions(args.resolution)  # raises on garbage
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 1
+    if cfg.get(args.name) is not None:
+        print(f"session '{args.name}' already exists", file=sys.stderr)
+        return 1
+    used = {s.sunshine_port_base for s in cfg.sessions}
+    port = args.port
+    if port is None:
+        port = 47989
+        while port in used:  # each instance needs its own port block
+            port += 1000
+    elif port in used:
+        print(f"port {port} is already used by another profile", file=sys.stderr)
+        return 1
+    try:
+        app_ids = [int(a) for a in args.apps.split(",") if a.strip()] if args.apps else []
+    except ValueError:
+        print(f"invalid --apps value {args.apps!r}; expected comma-separated "
+              "Steam AppIDs", file=sys.stderr)
+        return 1
+    cfg.upsert(SessionConfig(name=args.name, resolution=args.resolution,
+                             dynamic_resolution=not args.fixed_resolution,
+                             sunshine_port_base=port, app_ids=app_ids))
+    cfg.save()
+    if args.resolution == "ask":
+        res_note = "chosen at start (dynamic resolution off)"
+    elif args.fixed_resolution:
+        res_note = args.resolution
+    else:
+        res_note = f"client-driven, fallback {args.resolution}"
+    print(f"Session '{args.name}' created (resolution={res_note}, port={port}).")
+    print(f"Next: podstage session setup {args.name}   (first Steam login)")
+    return 0
+
+
+def cmd_session_remove(args: argparse.Namespace) -> int:
+    from .core import sandbox
+
+    cfg = _load_or_seed_config()
+    sc = cfg.get(args.name)
+    if sc is None:
+        print(f"No session '{args.name}'.", file=sys.stderr)
+        return 1
+    st = runtime.status()
+    # Also block on a running container without profile attribution (started
+    # via run.sh / runtime start without --client): it may mount this HOME.
+    if st.running and st.client in (None, "", args.name):
+        print(f"a session is running (client: {st.client or 'unknown'}); "
+              "stop it first", file=sys.stderr)
+        return 1
+    if args.data:
+        if not args.yes:
+            answer = input(f"Delete the sandbox HOME of '{args.name}' "
+                           f"(Steam login, saves, overlays)? Type the name to confirm: ")
+            if answer.strip() != args.name:
+                print("aborted")
+                return 1
+        try:
+            sandbox.delete(sc.home_dir())
+        except (RuntimeError, ValueError) as e:
+            print(f"data deletion failed: {e}", file=sys.stderr)
+            return 1
+    cfg.remove(args.name)
+    cfg.save()
+    print(f"Session '{args.name}' removed" + (" (including data)." if args.data else
+                                              " (sandbox HOME kept)."))
+    return 0
+
+
+def cmd_session_clear_overlay(args: argparse.Namespace) -> int:
+    from .core import sandbox
+
+    cfg = _load_or_seed_config()
+    sc = cfg.get(args.name)
+    if sc is None:
+        print(f"No session '{args.name}'.", file=sys.stderr)
+        return 1
+    st = runtime.status()
+    # Also block on a running container without profile attribution (started
+    # via run.sh / runtime start without --client): it may mount this HOME.
+    if st.running and st.client in (None, "", args.name):
+        print(f"a session is running (client: {st.client or 'unknown'}); "
+              "stop it first", file=sys.stderr)
+        return 1
+    try:
+        sandbox.clear_overlays(sc.home_dir())
+    except RuntimeError as e:
+        print(e, file=sys.stderr)
+        return 1
+    print(f"Overlay writes of '{args.name}' cleared; Steam re-applies game "
+          f"updates on the next session.")
     return 0
 
 
@@ -146,7 +254,31 @@ def cmd_session_start(args: argparse.Namespace) -> int:
         port = s.cfg.sunshine_port_base
         print(f"Session '{args.name}' started (container podstage-runtime).")
         print(f"  Pair once at https://localhost:{port + 1}  (Sunshine web UI)")
+        print(f"  or: podstage session pair {args.name} <PIN>  (PIN shown by Moonlight)")
         print("  Logs: journalctl -f CONTAINER_NAME=podstage-runtime")
+    return 0
+
+
+def cmd_session_pair(args: argparse.Namespace) -> int:
+    """Complete a Moonlight pairing (verified against the sandbox pairing
+    state; see sunshine_api.pair_verified)."""
+    s = _resolve_session(args.name)
+    if s is None:
+        return 1
+    device = args.device or args.name
+    try:
+        ok = sunshine_api.pair_verified(args.pin, device, s.home,
+                                        web_port=s.cfg.sunshine_port_base + 1)
+    except sunshine_api.SunshineApiError as e:
+        print(f"pair failed: {e} (is the session running?)", file=sys.stderr)
+        return 1
+    if not ok:
+        print("PIN submitted, but no new pairing appeared; wrong/expired PIN, "
+              "or a stale pairing attempt swallowed it (Sunshine answers the "
+              "oldest one). Restart pairing in Moonlight and retry; if it "
+              "keeps failing, restart the session.", file=sys.stderr)
+        return 1
+    print(f"Paired '{device}' with session '{args.name}'.")
     return 0
 
 
@@ -167,6 +299,39 @@ def cmd_session_status(args: argparse.Namespace) -> int:
     if s is None:
         return 1
     print(s.status())
+    return 0
+
+
+def cmd_experimental(args: argparse.Namespace) -> int:
+    """List or toggle the experimental features (config.EXPERIMENTAL_FEATURES).
+    Same store as the GUI's Setup card; changes apply at the next session
+    start."""
+    cfg = _load_or_seed_config()
+    if args.action in ("enable", "disable"):
+        if not args.feature or args.feature not in config.EXPERIMENTAL_FEATURES:
+            print(f"unknown feature {args.feature!r}, known: "
+                  f"{', '.join(config.EXPERIMENTAL_FEATURES)}", file=sys.stderr)
+            return 1
+        cfg.experimental[args.feature] = args.action == "enable"
+        cfg.save()
+        print(f"{args.feature} {args.action}d (applies at the next session start)")
+        return 0
+    for key, env_var in config.EXPERIMENTAL_FEATURES.items():
+        state = "enabled " if cfg.experimental.get(key) else "disabled"
+        print(f"  {key:20} {state}  ({env_var})")
+    return 0
+
+
+def cmd_config(args: argparse.Namespace) -> int:
+    """Get or set app settings headlessly (currently: mouse-keyboard). Same
+    store as the GUI's Setup page; applies at the next session start."""
+    cfg = _load_or_seed_config()
+    if args.value is None:
+        print("on" if cfg.mouse_keyboard else "off")
+        return 0
+    cfg.mouse_keyboard = args.value == "on"
+    cfg.save()
+    print(f"mouse-keyboard {args.value} (applies at the next session start)")
     return 0
 
 
@@ -314,7 +479,7 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--home", required=True, help="host dir holding the isolated Steam HOME")
     rs.add_argument("--resolution", default="1280x800@60", metavar="WxH@R")
     rs.add_argument("--mode", default="pipeline",
-                    choices=["pipeline", "steam", "probe", "shell"])
+                    choices=["pipeline", "desktop", "steam", "probe", "shell"])
     rs.add_argument("--app", metavar="APPID", help="Steam AppID — boot straight into the game")
     rs.add_argument("--attach", action="store_true", help="stay attached in the foreground")
     rs.add_argument("--no-provision", action="store_true",
@@ -327,6 +492,21 @@ def build_parser() -> argparse.ArgumentParser:
     rt_sub.add_parser("stop", help="stop the runtime container").set_defaults(func=cmd_runtime_stop)
     rt_sub.add_parser("status", help="show runtime container status").set_defaults(func=cmd_runtime_status)
 
+    ex = sub.add_parser("experimental",
+                        help="list or toggle experimental features (Setup-card equivalent)")
+    ex.add_argument("action", nargs="?", default="list",
+                    choices=["list", "enable", "disable"])
+    ex.add_argument("feature", nargs="?",
+                    help="feature key, e.g. hdr (see 'list')")
+    ex.set_defaults(func=cmd_experimental)
+
+    cf = sub.add_parser("config",
+                        help="get/set app settings (Setup-page equivalent)")
+    cf.add_argument("key", choices=["mouse-keyboard"])
+    cf.add_argument("value", nargs="?", choices=["on", "off"],
+                    help="omit to print the current state")
+    cf.set_defaults(func=cmd_config)
+
     prov = sub.add_parser("provision", help="make a Steam app available in a streaming session")
     prov.add_argument("app_id", type=int)
     prov.add_argument("session")
@@ -336,10 +516,14 @@ def build_parser() -> argparse.ArgumentParser:
     sess_sub = sess.add_subparsers(dest="action", required=True)
     sess_sub.add_parser("list").set_defaults(func=cmd_session_list)
     handlers = {
+        "add": cmd_session_add,
+        "remove": cmd_session_remove,
         "setup": cmd_session_setup,
         "start": cmd_session_start,
         "stop": cmd_session_stop,
         "status": cmd_session_status,
+        "pair": cmd_session_pair,
+        "clear-overlay": cmd_session_clear_overlay,
     }
     for action, handler in handlers.items():
         sp = sess_sub.add_parser(action)
@@ -352,8 +536,27 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--attach", action="store_true",
                             help="stay attached in the foreground instead of detaching")
             sp.add_argument("--mode", default="pipeline",
-                            choices=["pipeline", "steam", "probe", "shell"],
+                            choices=["pipeline", "desktop", "steam", "probe", "shell"],
                             help="container mode (default: pipeline)")
+        if action == "pair":
+            sp.add_argument("pin", help="4-digit PIN shown by Moonlight")
+            sp.add_argument("--device",
+                            help="client name recorded by Sunshine (default: profile name)")
+        if action == "add":
+            sp.add_argument("--resolution", default="1080p60", metavar="PRESET|WxH@R|ask",
+                            help="pre-connect canvas + fallback size (default: 1080p60)")
+            sp.add_argument("--port", type=int,
+                            help="Sunshine base port (default: first free block)")
+            sp.add_argument("--apps", metavar="ID[,ID…]",
+                            help="share only these Steam AppIDs (default: whole library)")
+            sp.add_argument("--fixed-resolution", action="store_true",
+                            help="always render at the profile resolution instead "
+                                 "of the first client's")
+        if action == "remove":
+            sp.add_argument("--data", action="store_true",
+                            help="also delete the sandbox HOME (Steam login, saves) and overlays")
+            sp.add_argument("--yes", action="store_true",
+                            help="skip the confirmation prompt (with --data)")
         sp.set_defaults(func=handler)
 
     return p

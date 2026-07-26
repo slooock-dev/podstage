@@ -7,14 +7,22 @@
 #
 # Env:
 #   PS_RESOLUTION   WxH@R              client resolution           (default 1280x800@60)
-#   PS_MODE         pipeline|shell|probe|steam  what to run        (default pipeline)
+#   PS_MODE         pipeline|desktop|shell|probe|steam  what to run (default pipeline)
+#       desktop (experimental): no gamescope, target runs under cage, pointer on
+#   PS_DESKTOP_CMD  desktop-mode launch target          (default: steam desktop UI)
+#   PS_MOUSE_INPUT  enabled → Sunshine injects the client's mouse + keyboard
+#       (patched cage keeps pointer focus/cursor inert until deliberate use
+#        and hides the cursor 3 s after the last use)
+#   PS_POINTER_ACCEL  flat → seat-shim forces flat (1:1) libinput accel on
+#       pointers (desktop-mode default; anything else keeps libinput defaults)
 #   PS_SUNSHINE_PORT  base port                                    (default 47989)
 #   PS_WEB_USER / PS_WEB_PASS   Sunshine web-manager login
 #       (normally passed in by the host runtime; unset PS_WEB_PASS falls back
 #        to a random per-sandbox password persisted in the mounted HOME —
 #        there is deliberately no fixed default credential)
 #   PS_CSRF_ORIGINS   comma-sep allowed web-UI origins             (default: auto-detected LAN IPs)
-#   PS_DYNAMIC_RES    enabled → prep-cmd resizes output to the client (experimental)
+#   PS_DYNAMIC_RES  enabled (default): pipeline starts on first connect at that
+#       client's WxH@R, locked until restart. disabled: fixed PS_RESOLUTION.
 #   PS_HDR            enabled → gamescope HDR output + DXVK_HDR (experimental)
 #   PS_FAKE_UDEV      1 → seat-shim fakes the udev hotplug monitor for cage
 #       (required rootless: the kernel delivers no uevents into a user
@@ -34,12 +42,31 @@ set -uo pipefail
 : "${PS_WEB_PASS:=}"
 : "${PS_APP:=}"                       # Steam AppID to launch directly
 : "${PS_STEAM_FLAGS:=-gamepadui}"     # Steam UI mode (-gamepadui | -bigpicture); games-on-whales uses -bigpicture
+: "${PS_DYNAMIC_RES:=enabled}"        # render at the first client's resolution (see header)
 
 # What gamescope runs. With PS_APP set, also boot straight into the game.
 if [ -n "$PS_APP" ]; then
     STEAM_LAUNCH="steam $PS_STEAM_FLAGS steam://rungameid/$PS_APP"
 else
     STEAM_LAUNCH="steam $PS_STEAM_FLAGS"
+fi
+# desktop mode: no gamescope, cage runs the target itself (cage is built with
+# Xwayland, so the X11 Steam desktop UI works). Default is Steam's desktop UI.
+if [ "$PS_MODE" = desktop ]; then
+    STEAM_LAUNCH="${PS_DESKTOP_CMD:-steam}"
+    [ -n "$PS_APP" ] && STEAM_LAUNCH="$STEAM_LAUNCH steam://rungameid/$PS_APP"
+fi
+
+# Cursor theme: without one, Steam's by-name cursor lookups fall back to raw
+# X core-font glyphs (a "sizing" box burned into the frame). Steam/CEF reads
+# the GTK setting, not XCURSOR_* (same fix as SteamOS/ChimeraOS sessions).
+export XCURSOR_THEME=Adwaita
+GTK_INI="$HOME/.config/gtk-3.0/settings.ini"
+mkdir -p "${GTK_INI%/*}"
+if [ ! -s "$GTK_INI" ]; then
+    printf '[Settings]\ngtk-cursor-theme-name=Adwaita\n' > "$GTK_INI"
+elif ! grep -q '^gtk-cursor-theme-name' "$GTK_INI"; then
+    printf 'gtk-cursor-theme-name=Adwaita\n' >> "$GTK_INI"
 fi
 
 # Steam/gamescope env cribbed from games-on-whales (their Steam UI renders on
@@ -147,7 +174,7 @@ if [ "${PS_HDR:-}" = enabled ]; then
     echo 'export DXVK_HDR=1' >> "$RUNNER"
 fi
 
-if [ "$PS_MODE" = pipeline ]; then
+if [ "$PS_MODE" = pipeline ] || [ "$PS_MODE" = desktop ]; then
     # Sunshine config (per-run), then background it so it inherits cage's
     # WAYLAND_DISPLAY and captures the cage output via wlr.
     SUN_CONF_DIR="$XDG_RUNTIME_DIR/sunshine"
@@ -180,23 +207,30 @@ if [ "$PS_MODE" = pipeline ]; then
             case "$ip" in *.*.*.*) PS_CSRF_ORIGINS="$PS_CSRF_ORIGINS,https://${ip}:${web_port}";; esac
         done
     fi
+    APP_NAME="Steam Big Picture"
+    [ "$PS_MODE" = desktop ] && APP_NAME="Desktop"
     cat > "$SUN_CONF_DIR/apps.json" <<JSON
-{"env":{},"apps":[{"name":"Steam Big Picture","image-path":""}]}
+{"env":{},"apps":[{"name":"$APP_NAME","image-path":""}]}
 JSON
     # mouse = disabled kills mouse AND touch injection (Sunshine drops touch
     # when mouse is off). Pointer input is cut by decision: motion reaches
     # cage (cursor visibly moves), but gamescope/Steam -gamepadui never react
     # to clicks — and gamescope's Wayland backend has no wl_touch at all, so
-    # native touch dies even earlier. Gamepad input is the supported path;
-    # PS_MOUSE_INPUT=enabled re-enables the pointer for experiments.
+    # native touch dies even earlier. Gamepad is the default path; the
+    # mouse_input feature sets PS_MOUSE_INPUT=enabled.
     # native_pen_touch stays disabled so any re-enabled pointer arrives as
     # mouse events (the only kind gamescope's Wayland backend understands).
+    # desktop mode has no gamescope in the chain, so none of that applies;
+    # the pointer default flips to enabled there.
+    MOUSE_DEFAULT=disabled
+    [ "$PS_MODE" = desktop ] && MOUSE_DEFAULT=enabled
     cat > "$SUN_CONF_DIR/sunshine.conf" <<CONF
 sunshine_name = podstage
 port = $PS_SUNSHINE_PORT
 encoder = ${PS_ENCODER:-nvenc}
 capture = wlr
-mouse = ${PS_MOUSE_INPUT:-disabled}
+mouse = ${PS_MOUSE_INPUT:-$MOUSE_DEFAULT}
+keyboard = ${PS_MOUSE_INPUT:-$MOUSE_DEFAULT}
 native_pen_touch = ${PS_NATIVE_TOUCH:-disabled}
 origin_web_ui_allowed = lan
 csrf_allowed_origins = $PS_CSRF_ORIGINS
@@ -213,18 +247,30 @@ CONF
         printf '%s\n' "$PS_SUNSHINE_EXTRA" | tr ';' '\n' \
             >> "$SUN_CONF_DIR/sunshine.conf"
     fi
-    # Experimental: a Sunshine prep-cmd resizes cage's output to the client's
-    # WxH (it inherits cage's WAYLAND_DISPLAY); gamescope tracks the resize,
-    # undo restores the profile resolution when the stream ends.
+    # Dynamic resolution via Sunshine prep-cmd (inherits cage's
+    # WAYLAND_DISPLAY): each stream start resizes cage's output to the client;
+    # the first connect additionally wakes the runner (fifo), which launches
+    # gamescope at that client's WxH@R. gamescope can't resize its render
+    # target later; other resolutions get scaled.
     if [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
+        MODE_FIFO="$SUN_CONF_DIR/client-mode.fifo"
+        # Only the pipeline runner waits on the fifo; desktop mode resizes only.
+        [ "$PS_MODE" = pipeline ] && mkfifo "$MODE_FIFO"
         RESIZE="$SUN_CONF_DIR/resize.sh"
         cat > "$RESIZE" <<RESIZE_EOF
 #!/usr/bin/env bash
 # do: client resolution from Sunshine; "reset": back to the profile size.
 W=\${SUNSHINE_CLIENT_WIDTH:-}; H=\${SUNSHINE_CLIENT_HEIGHT:-}
 [ "\${1:-}" = reset ] && { W=${PS_W}; H=${PS_H}; }
-[ -n "\$W" ] && [ -n "\$H" ] && \
-    wlr-randr --output HEADLESS-1 --custom-mode "\${W%%.*}x\${H%%.*}" || true
+[ -n "\$W" ] && [ -n "\$H" ] || exit 0
+wlr-randr --output HEADLESS-1 --custom-mode "\${W%%.*}x\${H%%.*}" || true
+# Wake the runner waiting on the first client (no-op afterwards: without a
+# reader the timeout drops the write).
+if [ "\${1:-}" != reset ] && [ -p "$MODE_FIFO" ]; then
+    FPS=\${SUNSHINE_CLIENT_FPS:-${PS_R}}
+    W2=\${W%%.*}; H2=\${H%%.*}; FPS2=\${FPS%%.*}
+    timeout 1 bash -c "printf '%s %s %s\n' \$W2 \$H2 \$FPS2 > '$MODE_FIFO'" 2>/dev/null || true
+fi
 RESIZE_EOF
         chmod +x "$RESIZE"
         printf 'global_prep_cmd = [{"do":"%s","undo":"%s reset"}]\n' \
@@ -263,18 +309,39 @@ EOF
 ) >/dev/null 2>&1 &
 EOF
     fi
-    cat >> "$RUNNER" <<EOF
-exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
-     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+    if [ "$PS_MODE" = desktop ]; then
+        # No gamescope: cage displays the target directly (and provides
+        # Xwayland for it); pointer/keyboard events go straight to the app.
+        cat >> "$RUNNER" <<EOF
+exec ${STEAM_LAUNCH}
 EOF
+    elif [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
+        # Block until the first client connects, then render at its WxH@R.
+        cat >> "$RUNNER" <<EOF
+echo "[podstage] waiting for the first client (dynamic resolution)" >&2
+read -r CW CH CR < "$SUN_CONF_DIR/client-mode.fifo"
+rm -f "$SUN_CONF_DIR/client-mode.fifo"   # later connects skip the fifo write
+# The locked resolution, readable by the host GUI through the mounted HOME.
+mkdir -p "\$HOME/.cache/podstage"
+printf '%s %s %s\n' "\$CW" "\$CH" "\$CR" > "\$HOME/.cache/podstage/client-mode"
+exec gamescope --backend wayland -W "\$CW" -H "\$CH" -w "\$CW" -h "\$CH" -r "\$CR" \\
+     ${GS_HDR_FLAGS} -C 3000 --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+EOF
+    else
+        cat >> "$RUNNER" <<EOF
+exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
+     ${GS_HDR_FLAGS} -C 3000 --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+EOF
+    fi
 elif [ "$PS_MODE" = steam ]; then
     # No Sunshine — just render Steam in the nested compositor (boot smoke test).
     cat >> "$RUNNER" <<EOF
 exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
-     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+     ${GS_HDR_FLAGS} -C 3000 --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
 fi
 chmod +x "$RUNNER"
+rm -f "$HOME/.cache/podstage/client-mode"   # stale = from a previous session
 
 start_dbus
 start_pipewire
@@ -297,5 +364,19 @@ export WLR_LIBINPUT_NO_DEVICES=1
 SHIM=/usr/local/lib/podstage-seat-shim.so
 [ -e "$SHIM" ] && export LD_PRELOAD="$SHIM" || log "(warning) seat shim missing — cage will use seat0 (desktop input leaks!)"
 
-log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → gamescope ${PS_W}x${PS_H}@${PS_R} → steam  [mode=$PS_MODE]"
+# desktop mode streams a pointer-driven UI, so show the cursor (the shim blanks
+# it by default so Sunshine's dead virtual pointer isn't burned into the
+# gamepad-only capture). PS_SHOW_CURSOR=0 forces it off again.
+# Pointer injected → flat 1:1 accel (client counts arrive raw; adaptive accel
+# on top is far too fast) and visible cursor (nested clients delegate cursor
+# drawing to cage; games hiding the cursor still propagate). Overridable.
+if [ "$PS_MODE" = desktop ] || [ "${PS_MOUSE_INPUT:-}" = enabled ]; then
+    export PS_POINTER_ACCEL="${PS_POINTER_ACCEL:-flat}"
+    export PS_SHOW_CURSOR="${PS_SHOW_CURSOR:-1}"
+fi
+if [ "$PS_MODE" = desktop ]; then
+    log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → ${STEAM_LAUNCH} ${PS_W}x${PS_H}  [mode=desktop]"
+else
+    log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → gamescope ${PS_W}x${PS_H}@${PS_R} → steam  [mode=$PS_MODE]"
+fi
 exec cage -d -- "$RUNNER"

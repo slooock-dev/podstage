@@ -69,9 +69,10 @@ TEXTS: dict[str, str] = {
     "'{name}' picks its resolution at startup.\nResolution for this session:":
         "'{name}' wählt seine Auflösung beim Start.\nAuflösung für diese "
         "Session:",
-    "Sunshine rejected the PIN. Reconnect in Moonlight and enter the new PIN.":
-        "Sunshine hat die PIN abgelehnt. In Moonlight neu verbinden und die "
-        "neue PIN eintragen.",
+    "The PIN was submitted but no pairing completed. Restart the pairing in "
+    "Moonlight and enter the new PIN.":
+        "Die PIN wurde übermittelt, aber kein Pairing abgeschlossen. Pairing "
+        "in Moonlight neu starten und die neue PIN eintragen.",
     "Client '{name}' paired. Moonlight can stream now.":
         "Client '{name}' gepairt. Moonlight kann jetzt streamen.",
     "Pairing failed: {msg}": "Pairing fehlgeschlagen: {msg}",
@@ -329,17 +330,25 @@ TEXTS: dict[str, str] = {
     "features need a current runtime image.":
         "Globale Schalter, gelten ab dem nächsten Session-Start. "
         "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
-    "Follow the client's resolution": "Der Auflösung des Clients folgen",
-    "Resizes the stream output to the connecting Moonlight client's "
-    "resolution; the profile resolution is the startup and fallback size.":
-        "Passt die Stream-Ausgabe an die Auflösung des verbindenden "
-        "Moonlight-Clients an; die Profilauflösung ist Start- und "
-        "Rückfallgröße.",
+    "Desktop (experimental)": "Desktop (experimentell)",
+    "Big Picture (gamepad) or the Steam desktop UI with mouse and "
+    "keyboard (experimental). Applies at the next start.":
+        "Big Picture (Gamepad) oder die Steam-Desktop-UI mit Maus und "
+        "Tastatur (experimentell). Gilt ab dem nächsten Start.",
     "HDR stream": "HDR-Stream",
     "gamescope advertises an HDR output and games see DXVK_HDR. Unverified "
     "end to end.":
         "gamescope meldet einen HDR-Output und Spiele sehen DXVK_HDR. "
         "Ende-zu-Ende unverifiziert.",
+    "Mouse && keyboard input": "Maus- && Tastatur-Eingabe",
+    "Streams the client's mouse and keyboard into the session; games can "
+    "lock the pointer for mouse look.":
+        "Leitet Maus und Tastatur des Clients in die Session; Spiele können "
+        "den Zeiger für Mouse-Look locken.",
+    "Recommended off for controller-only clients. Applies at the next "
+    "session start.":
+        "Für reine Controller-Clients empfohlen: aus. Gilt ab dem nächsten "
+        "Session-Start.",
     "Experimental features apply from the next session start.":
         "Experimentelle Features gelten ab dem nächsten Session-Start.",
     "Checks the GitHub releases for a newer version — only when you click, "
@@ -399,4 +408,18 @@ TEXTS: dict[str, str] = {
     "the 'Sandboxes' page first.":
         "»{name}« hat noch keinen Steam-Login. Zuerst über die Seite "
         "»Sandboxen« anmelden.",
+    "Follow the client's resolution":
+        "Auflösung folgt dem Client",
+    "Render at the first connecting client's resolution, locked until "
+    "the session restarts. The profile resolution above is only the "
+    "fallback. Off: always render at the profile resolution.":
+        "Rendert in der Auflösung des zuerst verbindenden Clients, fixiert "
+        "bis zum Neustart der Session. Die Profil-Auflösung oben ist nur der "
+        "Fallback. Aus: es wird immer in der Profil-Auflösung gerendert.",
+    "Client (auto)":
+        "Client (auto)",
+    "{w}x{h}@{r} · locked until the session restarts":
+        "{w}x{h}@{r} · fixiert bis zum Session-Neustart",
+    "waiting for the first client …":
+        "warte auf den ersten Client …",
 }

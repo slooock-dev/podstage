@@ -127,7 +127,10 @@ class InfoRow(QWidget):
         h.setSpacing(8)
         cap = QLabel(caption)
         cap.setProperty("muted", True)
-        cap.setFixedWidth(48)
+        # Wide enough for its caption ("Auflösung" overflows a fixed 48 px);
+        # align_captions() lines stacked rows up.
+        cap.setFixedWidth(max(48, cap.fontMetrics().horizontalAdvance(caption) + 4))
+        self.caption_label = cap
         self._value = QLabel("—")
         self._value.setProperty("mono", True)
         self._value.setWordWrap(True)
@@ -136,3 +139,10 @@ class InfoRow(QWidget):
 
     def set(self, text: str | None) -> None:
         self._value.setText(text or "—")
+
+
+def align_captions(*rows: InfoRow) -> None:
+    """Give stacked InfoRows one caption column."""
+    width = max(r.caption_label.minimumWidth() for r in rows)
+    for r in rows:
+        r.caption_label.setFixedWidth(width)

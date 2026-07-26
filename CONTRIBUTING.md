@@ -114,3 +114,12 @@ Language selection: `config.language` (`auto`/`en`/`de`, set in the Setup panel)
 - After changing `containers/runtime/`, rebuild the image (Setup → *Build
   image* or `podstage runtime build`); the next start picks it up directly
   from your user's image store. `doctor` warns while the image is stale.
+- The cage patch (`containers/runtime/patches/`) is vendored. To change it:
+  download the tarball pinned in the Containerfile (`CAGE_VERSION` +
+  `CAGE_SHA256`), unpack, `git init && git add -A && git commit`, apply the
+  patch, edit, then regenerate it with `git diff` and rebuild the image.
+- **Updating the pinned versions**: `tools/bump_pins.py` compares the
+  Containerfile pins (Arch base digest, Sunshine release, cage release)
+  against upstream; `--apply` writes them. Then `podstage runtime build`,
+  `podstage doctor`, and one real stream before committing. A cage bump
+  additionally needs the vendored patch re-applied (see above).

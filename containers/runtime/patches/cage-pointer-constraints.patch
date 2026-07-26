@@ -1,0 +1,327 @@
+diff --git a/cage.c b/cage.c
+index f4b661d..48456f5 100644
+--- a/cage.c
++++ b/cage.c
+@@ -33,6 +33,7 @@
+ #include <wlr/types/wlr_output_management_v1.h>
+ #include <wlr/types/wlr_presentation_time.h>
+ #include <wlr/types/wlr_primary_selection_v1.h>
++#include <wlr/types/wlr_pointer_constraints_v1.h>
+ #include <wlr/types/wlr_relative_pointer_v1.h>
+ #include <wlr/types/wlr_scene.h>
+ #include <wlr/types/wlr_screencopy_v1.h>
+@@ -553,6 +554,15 @@ main(int argc, char *argv[])
+ 		goto end;
+ 	}
+ 
++	server.pointer_constraints = wlr_pointer_constraints_v1_create(server.wl_display);
++	if (!server.pointer_constraints) {
++		wlr_log(WLR_ERROR, "Unable to create the pointer constraints manager");
++		ret = 1;
++		goto end;
++	}
++	server.new_constraint.notify = handle_pointer_constraint;
++	wl_signal_add(&server.pointer_constraints->events.new_constraint, &server.new_constraint);
++
+ 	server.foreign_toplevel_manager = wlr_foreign_toplevel_manager_v1_create(server.wl_display);
+ 	if (!server.foreign_toplevel_manager) {
+ 		wlr_log(WLR_ERROR, "Unable to create the foreign toplevel manager");
+diff --git a/seat.c b/seat.c
+index 5f659a4..359fa7d 100644
+--- a/seat.c
++++ b/seat.c
+@@ -12,6 +12,7 @@
+ 
+ #include <assert.h>
+ #include <linux/input-event-codes.h>
++#include <math.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <wayland-server-core.h>
+@@ -23,6 +24,7 @@
+ #include <wlr/types/wlr_idle_notify_v1.h>
+ #include <wlr/types/wlr_keyboard_group.h>
+ #include <wlr/types/wlr_primary_selection.h>
++#include <wlr/types/wlr_pointer_constraints_v1.h>
+ #include <wlr/types/wlr_relative_pointer_v1.h>
+ #include <wlr/types/wlr_scene.h>
+ #include <wlr/types/wlr_seat.h>
+@@ -45,6 +47,8 @@
+ 
+ static void drag_icon_update_position(struct cg_drag_icon *drag_icon);
+ 
++#define CURSOR_HIDE_MS 3000
++
+ /* XDG toplevels may have nested surfaces, such as popup windows for context
+  * menus or tooltips. This function tests if any of those are underneath the
+  * coordinates lx and ly (in output Layout Coordinates). If so, it sets the
+@@ -118,7 +122,11 @@ update_capabilities(struct cg_seat *seat)
+ 	if (!wl_list_empty(&seat->keyboard_groups)) {
+ 		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+ 	}
+-	if (!wl_list_empty(&seat->pointers)) {
++	/* A pointer DEVICE alone doesn't announce the capability: Sunshine
++	 * creates virtual mice for every stream, and nested clients (gamescope)
++	 * react to the capability by compositing a cursor. Announce only once
++	 * activate_pointer() ran. */
++	if (!wl_list_empty(&seat->pointers) && seat->pointer_active) {
+ 		caps |= WL_SEAT_CAPABILITY_POINTER;
+ 	}
+ 	if (!wl_list_empty(&seat->touch)) {
+@@ -126,8 +134,11 @@ update_capabilities(struct cg_seat *seat)
+ 	}
+ 	wlr_seat_set_capabilities(seat->seat, caps);
+ 
+-	/* Hide cursor if the seat doesn't have pointer capability. */
+-	if ((caps & WL_SEAT_CAPABILITY_POINTER) == 0) {
++	/* Hide cursor if the seat doesn't have pointer capability. A pointer
++	 * DEVICE alone doesn't show it either: Sunshine creates virtual mice
++	 * for every stream, gamepad-only clients included; the cursor (and
++	 * pointer focus) waits for activate_pointer(). */
++	if ((caps & WL_SEAT_CAPABILITY_POINTER) == 0 || !seat->pointer_active || !seat->cursor_visible) {
+ 		wlr_cursor_unset_image(seat->cursor);
+ 	} else {
+ 		wlr_cursor_set_xcursor(seat->cursor, seat->xcursor_manager, DEFAULT_XCURSOR);
+@@ -491,8 +502,9 @@ handle_request_set_cursor(struct wl_listener *listener, void *data)
+ 	}
+ 
+ 	/* This can be sent by any client, so we check to make sure
+-	 * this one actually has pointer focus first. */
+-	if (focused_client == event->seat_client->client) {
++	 * this one actually has pointer focus first. No cursor image before
++	 * activation or while idle-hidden (see activate_pointer/cursor_show). */
++	if (focused_client == event->seat_client->client && seat->pointer_active && seat->cursor_visible) {
+ 		wlr_cursor_set_surface(seat->cursor, event->surface, event->hotspot_x, event->hotspot_y);
+ 	}
+ }
+@@ -594,12 +606,17 @@ handle_cursor_frame(struct wl_listener *listener, void *data)
+ 	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+ }
+ 
++static void activate_pointer(struct cg_seat *seat, uint32_t time_msec);
++static void cursor_show(struct cg_seat *seat);
++
+ static void
+ handle_cursor_axis(struct wl_listener *listener, void *data)
+ {
+ 	struct cg_seat *seat = wl_container_of(listener, seat, cursor_axis);
+ 	struct wlr_pointer_axis_event *event = data;
+ 
++	activate_pointer(seat, event->time_msec);
++	cursor_show(seat);
+ 	wlr_seat_pointer_notify_axis(seat->seat, event->time_msec, event->orientation, event->delta,
+ 				     event->delta_discrete, event->source, event->relative_direction);
+ 	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+@@ -611,6 +628,10 @@ handle_cursor_button(struct wl_listener *listener, void *data)
+ 	struct cg_seat *seat = wl_container_of(listener, seat, cursor_button);
+ 	struct wlr_pointer_button_event *event = data;
+ 
++	if (event->state == WL_POINTER_BUTTON_STATE_PRESSED) {
++		activate_pointer(seat, event->time_msec);
++		cursor_show(seat);
++	}
+ 	wlr_seat_pointer_notify_button(seat->seat, event->time_msec, event->button, event->state);
+ 	press_cursor_button(seat, &event->pointer->base, event->time_msec, event->button, event->state, seat->cursor->x,
+ 			    seat->cursor->y);
+@@ -625,6 +646,12 @@ process_cursor_motion(struct cg_seat *seat, uint32_t time_msec, double dx, doubl
+ 	struct wlr_seat *wlr_seat = seat->seat;
+ 	struct wlr_surface *surface = NULL;
+ 
++	/* No pointer focus before activation: nested gamescope composites its
++	 * own cursor as soon as focus + motion arrive. */
++	if (!seat->pointer_active) {
++		return;
++	}
++
+ 	struct cg_view *view = desktop_view_at(seat->server, seat->cursor->x, seat->cursor->y, &surface, &sx, &sy);
+ 	if (!view) {
+ 		wlr_seat_pointer_clear_focus(wlr_seat);
+@@ -647,6 +674,95 @@ process_cursor_motion(struct cg_seat *seat, uint32_t time_msec, double dx, doubl
+ 	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+ }
+ 
++/* A pointer device alone stays invisible: Sunshine creates virtual mice for
++ * every stream, gamepad-only clients included, and every stream start nudges
++ * the relative mouse (measured: REL +1,+1 then -1,-1, twice). Only a
++ * deliberate act (net relative displacement >= 3 px, a button press, or a
++ * scroll) activates capability, cursor image and focus. Absolute motion
++ * alone stays inert: it is indistinguishable from a position sync. */
++static void
++activate_pointer(struct cg_seat *seat, uint32_t time_msec)
++{
++	if (seat->pointer_active) {
++		return;
++	}
++	seat->pointer_active = true;
++	update_capabilities(seat);
++	cursor_show(seat);
++	process_cursor_motion(seat, time_msec, 0, 0, 0, 0);
++}
++
++static int
++handle_cursor_hide_timeout(void *data)
++{
++	struct cg_seat *seat = data;
++
++	seat->cursor_visible = false;
++	wlr_cursor_unset_image(seat->cursor);
++	return 0;
++}
++
++/* A parked idle cursor annoys gamepad streams; show it for CURSOR_HIDE_MS
++ * after each use, like the SteamOS session does. */
++static void
++cursor_show(struct cg_seat *seat)
++{
++	if (!seat->cursor_visible) {
++		seat->cursor_visible = true;
++		wlr_cursor_set_xcursor(seat->cursor, seat->xcursor_manager, DEFAULT_XCURSOR);
++	}
++	if (seat->cursor_hide_timer) {
++		wl_event_source_timer_update(seat->cursor_hide_timer, CURSOR_HIDE_MS);
++	}
++}
++
++/* Pointer constraints: a locked pointer freezes the cursor; clients (games
++ * via Xwayland, nested gamescope) then track motion exclusively through the
++ * relative-pointer events process_cursor_motion() already sends. Confined
++ * constraints keep normal movement: the kiosk view covers the whole output,
++ * so the region is effectively the screen. */
++static bool
++pointer_is_locked(struct cg_seat *seat)
++{
++	return seat->active_constraint != NULL &&
++	       seat->active_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED;
++}
++
++static void
++handle_constraint_destroy(struct wl_listener *listener, void *data)
++{
++	struct cg_seat *seat = wl_container_of(listener, seat, constraint_destroy);
++	struct wlr_pointer_constraint_v1 *constraint = data;
++
++	if (seat->active_constraint == constraint) {
++		seat->active_constraint = NULL;
++	}
++	wl_list_remove(&seat->constraint_destroy.link);
++	wl_list_init(&seat->constraint_destroy.link);
++}
++
++void
++handle_pointer_constraint(struct wl_listener *listener, void *data)
++{
++	struct cg_server *server = wl_container_of(listener, server, new_constraint);
++	struct cg_seat *seat = server->seat;
++	struct wlr_pointer_constraint_v1 *constraint = data;
++
++	/* Kiosk: one client owns the output; activate immediately, replacing
++	 * any previous constraint. */
++	if (seat->active_constraint != NULL) {
++		if (seat->active_constraint == constraint) {
++			return;
++		}
++		wlr_pointer_constraint_v1_send_deactivated(seat->active_constraint);
++		wl_list_remove(&seat->constraint_destroy.link);
++	}
++	seat->active_constraint = constraint;
++	seat->constraint_destroy.notify = handle_constraint_destroy;
++	wl_signal_add(&constraint->events.destroy, &seat->constraint_destroy);
++	wlr_pointer_constraint_v1_send_activated(constraint);
++}
++
+ static void
+ handle_cursor_motion_absolute(struct wl_listener *listener, void *data)
+ {
+@@ -659,7 +775,12 @@ handle_cursor_motion_absolute(struct wl_listener *listener, void *data)
+ 	double dx = lx - seat->cursor->x;
+ 	double dy = ly - seat->cursor->y;
+ 
+-	wlr_cursor_warp_absolute(seat->cursor, &event->pointer->base, event->x, event->y);
++	if (!pointer_is_locked(seat)) {
++		wlr_cursor_warp_absolute(seat->cursor, &event->pointer->base, event->x, event->y);
++	}
++	if (seat->pointer_active && (dx != 0 || dy != 0)) {
++		cursor_show(seat);
++	}
+ 	process_cursor_motion(seat, event->time_msec, dx, dy, dx, dy);
+ 	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+ }
+@@ -670,7 +791,19 @@ handle_cursor_motion_relative(struct wl_listener *listener, void *data)
+ 	struct cg_seat *seat = wl_container_of(listener, seat, cursor_motion_relative);
+ 	struct wlr_pointer_motion_event *event = data;
+ 
+-	wlr_cursor_move(seat->cursor, &event->pointer->base, event->delta_x, event->delta_y);
++	if (!seat->pointer_active) {
++		seat->pointer_net_x += event->delta_x;
++		seat->pointer_net_y += event->delta_y;
++		if (fabs(seat->pointer_net_x) + fabs(seat->pointer_net_y) >= 3.0) {
++			activate_pointer(seat, event->time_msec);
++		}
++	} else if (event->delta_x != 0 || event->delta_y != 0) {
++		cursor_show(seat);
++	}
++
++	if (!pointer_is_locked(seat)) {
++		wlr_cursor_move(seat->cursor, &event->pointer->base, event->delta_x, event->delta_y);
++	}
+ 	process_cursor_motion(seat, event->time_msec, event->delta_x, event->delta_y, event->unaccel_dx,
+ 			      event->unaccel_dy);
+ 	wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+@@ -800,6 +933,12 @@ handle_destroy(struct wl_listener *listener, void *data)
+ 	}
+ 	wl_list_remove(&seat->new_input.link);
+ 
++	if (seat->cursor_hide_timer) {
++		wl_event_source_remove(seat->cursor_hide_timer);
++	}
++	if (seat->active_constraint != NULL) {
++		wl_list_remove(&seat->constraint_destroy.link);
++	}
+ 	wlr_xcursor_manager_destroy(seat->xcursor_manager);
+ 	if (seat->cursor) {
+ 		wlr_cursor_destroy(seat->cursor);
+@@ -835,6 +974,9 @@ seat_create(struct cg_server *server, struct wlr_backend *backend)
+ 	}
+ 	wlr_cursor_attach_output_layout(seat->cursor, server->output_layout);
+ 
++	seat->cursor_hide_timer = wl_event_loop_add_timer(wl_display_get_event_loop(server->wl_display),
++							  handle_cursor_hide_timeout, seat);
++
+ 	if (!seat->xcursor_manager) {
+ 		seat->xcursor_manager = wlr_xcursor_manager_create(NULL, XCURSOR_SIZE);
+ 		if (!seat->xcursor_manager) {
+diff --git a/seat.h b/seat.h
+index 4b7bfda..62bd1ee 100644
+--- a/seat.h
++++ b/seat.h
+@@ -48,8 +48,17 @@ struct cg_seat {
+ 	struct wl_listener request_set_cursor;
+ 	struct wl_listener request_set_selection;
+ 	struct wl_listener request_set_primary_selection;
++
++	struct wlr_pointer_constraint_v1 *active_constraint;
++	struct wl_listener constraint_destroy;
++	bool pointer_active;                 /* saw deliberate pointer use (cursor/hover gate) */
++	double pointer_net_x, pointer_net_y; /* pre-activation net displacement */
++	bool cursor_visible;                 /* idle-hide state (cursor_show) */
++	struct wl_event_source *cursor_hide_timer;
+ };
+ 
++void handle_pointer_constraint(struct wl_listener *listener, void *data);
++
+ struct cg_keyboard_group {
+ 	struct wlr_keyboard_group *wlr_group;
+ 	struct cg_seat *seat;
+diff --git a/server.h b/server.h
+index 27f212a..42c592b 100644
+--- a/server.h
++++ b/server.h
+@@ -67,6 +67,8 @@ struct cg_server {
+ #endif
+ 
+ 	struct wlr_relative_pointer_manager_v1 *relative_pointer_manager;
++	struct wlr_pointer_constraints_v1 *pointer_constraints;
++	struct wl_listener new_constraint;
+ 
+ 	struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_manager;
+ 

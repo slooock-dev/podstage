@@ -87,6 +87,14 @@ class ProfileDialog(QDialog):
         self._resolution.currentTextChanged.connect(self._sync_custom)
         form.addRow(tr("Resolution"), self._resolution)
         form.addRow("", self._custom)
+
+        self._dynamic = QCheckBox(tr("Follow the client's resolution"))
+        self._dynamic.setToolTip(tr(
+            "Render at the first connecting client's resolution, locked until "
+            "the session restarts. The profile resolution above is only the "
+            "fallback. Off: always render at the profile resolution."))
+        self._dynamic.setChecked(existing.dynamic_resolution if existing else True)
+        form.addRow("", self._dynamic)
         self._sync_custom(self._resolution.currentText())
 
         self._port = QSpinBox()
@@ -104,6 +112,11 @@ class ProfileDialog(QDialog):
 
     def _sync_custom(self, choice: str) -> None:
         self._custom.setVisible(choice == self._custom_label)
+        # "ask" is an explicit fixed choice at start (config enforces this).
+        ask = choice == self._pick_label
+        self._dynamic.setEnabled(not ask)
+        if ask:
+            self._dynamic.setChecked(False)
 
     def _build_games(self, existing) -> QWidget:
         """A self-contained games picker: an 'all' toggle above a filterable,
@@ -231,7 +244,8 @@ class ProfileDialog(QDialog):
             return
         base = self._existing or config.SessionConfig(name=name)
         self.result_profile = config.SessionConfig(
-            name=name, resolution=resolution, app_ids=app_ids,
+            name=name, resolution=resolution,
+            dynamic_resolution=self._dynamic.isChecked(), app_ids=app_ids,
             sunshine_port_base=port, home=base.home,
             sunshine_extra=dict(base.sunshine_extra),
             preview_interval_s=base.preview_interval_s,
@@ -376,7 +390,12 @@ class SandboxPage(QWidget):
         self._table.setRowCount(len(sessions))
         for row, sc in enumerate(sessions):
             info = sandbox.inspect(sc)
-            resolution = tr("Pick at startup") if sc.is_dynamic() else sc.resolution
+            if sc.dynamic_resolution:
+                resolution = tr("Client (auto)")
+            elif sc.is_ask():
+                resolution = tr("Pick at startup")
+            else:
+                resolution = sc.resolution
             login = tr("✓ logged in") if info.logged_in else (
                 tr("— empty") if not info.exists else tr("✗ no login"))
             paired = ", ".join(info.paired) if info.paired else "—"

@@ -67,6 +67,20 @@ def test_explicit_env_overrides_win():
     assert env["PS_MOUSE_INPUT"] == "enabled"
 
 
+def test_desktop_mode_flips_pointer_defaults():
+    env = runtime.container_env(_opts(mode="desktop"), LIBS)
+    assert env["PS_MODE"] == "desktop"
+    assert env["PS_MOUSE_INPUT"] == "enabled"   # pointer is the point here
+    assert env["PS_SHOW_CURSOR"] == "1"
+
+
+def test_desktop_mode_respects_explicit_pointer_overrides():
+    env = runtime.container_env(
+        _opts(mode="desktop", env={"PS_MOUSE_INPUT": "disabled", "PS_SHOW_CURSOR": "0"}), LIBS)
+    assert env["PS_MOUSE_INPUT"] == "disabled"
+    assert env["PS_SHOW_CURSOR"] == "0"
+
+
 def test_gamescope_wsi_disabled_by_default():
     # GE/CachyOS-Proton hang on a blocking Zenity box without this.
     assert runtime.container_env(_opts(), LIBS)["DISABLE_GAMESCOPE_WSI"] == "1"
