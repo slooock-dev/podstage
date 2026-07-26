@@ -3,8 +3,8 @@
 Everything here is readable as the plain user (the container is rootless):
 
   * CPU/RAM come from the container's cgroup v2 files (``cpu.stat`` /
-    ``memory.current``), located via the world-readable cmdline of the cage
-    process.
+    ``memory.current``), located via the world-readable cmdline of the
+    session compositor (labwc) process.
   * GPU/NVENC come from ``nvidia-smi`` on NVIDIA, the amdgpu sysfs
     (``gpu_busy_percent`` + ``mem_info_vram_*``) on AMD, or one
     ``intel_gpu_top -J`` sample on Intel (needs a readable GPU PMU).
@@ -222,8 +222,10 @@ def _intel_gpu_stats() -> GpuStats | None:
 
 # -- container CPU / RAM via cgroup v2 --------------------------------------
 
-def _cage_pid() -> int | None:
-    rc, out = _run(["pgrep", "-af", "cage -d"])
+def _compositor_pid() -> int | None:
+    """PID of the session compositor (labwc started with the podstage
+    runner), the one long-lived process in every mode."""
+    rc, out = _run(["pgrep", "-af", "labwc -s /usr/local/bin/podstage-runner"])
     if rc != 0:
         return None
     for line in out.splitlines():
@@ -277,7 +279,7 @@ def container_stats(sample_interval: float = 0.4) -> ContainerStats | None:
     """CPU% (over ``sample_interval``) and RAM of the whole container cgroup.
     Blocks for ``sample_interval`` to take two CPU samples — call off the UI
     thread. Returns None if the container isn't running."""
-    pid = _cage_pid()
+    pid = _compositor_pid()
     if pid is None:
         return None
     cgroup = _cgroup_dir(pid)

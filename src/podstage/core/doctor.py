@@ -4,7 +4,7 @@
 pipeline needs is present *before* anything tries to stream. Checks carry an
 optional ``fix`` — a ready-made (usually sudo) command line; ``podstage
 setup`` aggregates those into a guided one-shot script. Host-side gamescope/
-cage/Sunshine are NOT checked anymore: they live inside the runtime image.
+labwc/Sunshine are NOT checked anymore: they live inside the runtime image.
 """
 
 import getpass

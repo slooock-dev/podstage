@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- labwc config for the streaming session (baked at /etc/xdg/labwc/rc.xml;
+     a sandbox HOME with its own ~/.config/labwc would override it).
+     The stream shows exactly one main window - gamescope (Big Picture) or
+     Steam's desktop UI - so both stay undecorated; dialogs keep the server
+     decorations so they can be dragged in desktop mode. -->
+<labwc_config>
+  <core>
+    <gap>0</gap>
+  </core>
+  <focus>
+    <followMouse>no</followMouse>
+  </focus>
+  <windowRules>
+    <windowRule identifier="gamescope" serverDecoration="no"/>
+    <windowRule identifier="steam" title="Steam" serverDecoration="no"/>
+  </windowRules>
+</labwc_config>

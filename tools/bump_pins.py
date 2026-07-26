@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Show, and with --apply write, updates for the version pins in
-containers/runtime/Containerfile: the Arch base-image digest, the Sunshine
-release (tag + asset sha256) and the cage release (tag + tarball sha256).
+containers/runtime/Containerfile: the Arch base-image digest and the
+Sunshine release (tag + asset sha256).
 
 Stdlib only. After --apply: `podstage runtime build`, `podstage doctor`,
 then stream once against a real client before committing.
@@ -55,12 +55,6 @@ def sunshine_latest() -> tuple[str, str]:
     raise SystemExit(f"Sunshine {tag}: asset {name} not found")
 
 
-def cage_latest() -> tuple[str, str]:
-    tag = gh_latest("cage-kiosk/cage")["tag_name"]
-    tarball = fetch(f"https://github.com/cage-kiosk/cage/archive/refs/tags/{tag}.tar.gz")
-    return tag, hashlib.sha256(tarball).hexdigest()
-
-
 def main() -> int:
     apply = "--apply" in sys.argv
     text = CONTAINERFILE.read_text()
@@ -68,24 +62,18 @@ def main() -> int:
         "base": re.search(r"archlinux:latest@(sha256:[0-9a-f]+)", text).group(1),
         "sunshine": re.search(r"SUNSHINE_VERSION=(\S+)", text).group(1),
         "sunshine_sha": re.search(r"SUNSHINE_SHA256=([0-9a-f]+)", text).group(1),
-        "cage": re.search(r"CAGE_VERSION=(\S+)", text).group(1),
-        "cage_sha": re.search(r"CAGE_SHA256=([0-9a-f]+)", text).group(1),
     }
     new_base = arch_digest()
     sun_tag, sun_sha = sunshine_latest()
-    cage_tag, cage_sha = cage_latest()
 
     rows = [
         ("base image", pins["base"][:19], new_base[:19], pins["base"] != new_base),
         ("sunshine", pins["sunshine"], sun_tag, pins["sunshine"] != sun_tag),
-        ("cage", pins["cage"], cage_tag, pins["cage"] != cage_tag),
     ]
     for name, cur, new, changed in rows:
         print(f"{name:12} {cur:22} -> {new:22} {'UPDATE' if changed else 'current'}")
     if not apply:
-        print("\nDry run; --apply writes the Containerfile. The cage patch must "
-              "still apply: re-run the vendored-patch workflow (CONTRIBUTING) "
-              "on a cage bump.")
+        print("\nDry run; --apply writes the Containerfile.")
         return 0
 
     text = text.replace(pins["base"], new_base)
@@ -93,8 +81,6 @@ def main() -> int:
                         f"SUNSHINE_VERSION={sun_tag}")
     text = text.replace(f"SUNSHINE_SHA256={pins['sunshine_sha']}",
                         f"SUNSHINE_SHA256={sun_sha}")
-    text = text.replace(f"CAGE_VERSION={pins['cage']}", f"CAGE_VERSION={cage_tag}")
-    text = text.replace(f"CAGE_SHA256={pins['cage_sha']}", f"CAGE_SHA256={cage_sha}")
     CONTAINERFILE.write_text(text)
     print("\nContainerfile updated. Next: podstage runtime build && podstage doctor, "
           "then stream once before committing.")

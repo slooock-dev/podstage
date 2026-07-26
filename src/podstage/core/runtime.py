@@ -5,15 +5,15 @@ both drive the exact same ``podman run`` invocation. run.sh remains as a thin
 wrapper calling into this module.
 
 The container runs the full streaming pipeline (see containers/runtime/):
-private PipeWire + session D-Bus → cage(headless, seat9) → gamescope(nested
-wayland) → Steam -gamepadui, plus Sunshine capturing cage via wlr + NVENC.
+private PipeWire + session D-Bus → labwc(headless, seat9) → gamescope(nested
+wayland) → Steam -gamepadui, plus Sunshine capturing labwc via wlr + NVENC.
 
 The container is ROOTLESS (``--userns=keep-id`` — it runs as this user, no
 sudo, no root store). The kernel delivers no udev uevents into a rootless user
 namespace, which historically forced a rootful container for input hotplug.
 Three mechanisms make input work rootless instead:
 
-  * cage/libinput hotplug — the seat-shim fakes the udev monitor via inotify
+  * labwc/libinput hotplug — the seat-shim fakes the udev monitor via inotify
     on the bind-mounted /dev/input (``PS_FAKE_UDEV=1``); device *enumeration*
     works anyway through the mounted /run/udev DB.
   * Steam/SDL gamepads — ``SDL_JOYSTICK_DISABLE_UDEV=1`` switches SDL to its
@@ -300,7 +300,7 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
         "PS_ENCODER": "vaapi" if vendor in MESA_VENDORS else "nvenc",
         "STEAM_COMPAT_MOUNTS": ":".join(str(p) for p in library_paths),
         # Rootless input: no udev uevents reach the container's user
-        # namespace. The seat-shim fakes cage's udev hotplug monitor via
+        # namespace. The seat-shim fakes labwc's udev hotplug monitor via
         # inotify (PS_FAKE_UDEV), and SDL/Steam falls back to its own inotify
         # gamepad discovery (SDL dlopens libudev — a preload shim can't
         # intercept that, but SDL ships this escape hatch).

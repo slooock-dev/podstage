@@ -55,7 +55,7 @@ host GUI.
 
 ## Features
 
-- **Headless isolated session.** `cage` → `gamescope` (Vulkan) → Steam
+- **Headless isolated session.** `labwc` → `gamescope` (Vulkan) → Steam
   `-gamepadui`, captured by a bundled Sunshine (wlr screencopy, hardware
   encode via NVENC or VAAPI). No window on the host, no DRM output.
 - **Built for Steam, gamepad first.** The streamed session is Big Picture and
@@ -147,7 +147,7 @@ flowchart LR
         gui["Management GUI (PyQt6)<br/>setup · sandboxes · session · telemetry · logs"]
         libs[("Shared Steam libraries")]
         subgraph container["podstage-runtime container · rootless podman"]
-            pipeline["cage → gamescope (Vulkan) → Steam Big Picture (-gamepadui) → game (Proton)<br/>private PipeWire · isolated $HOME volume"]
+            pipeline["labwc → gamescope (Vulkan) → Steam Big Picture (-gamepadui) → game (Proton)<br/>private PipeWire · isolated $HOME volume"]
             sunshine["Sunshine · wlr screencopy capture"]
             pipeline -->|captures| sunshine
         end

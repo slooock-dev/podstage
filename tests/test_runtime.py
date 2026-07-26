@@ -42,7 +42,7 @@ def test_run_args_rootless_input_flags():
 
 def test_rootless_hotplug_env():
     env = runtime.container_env(_opts(), LIBS)
-    assert env["PS_FAKE_UDEV"] == "1"                 # cage via seat-shim monitor
+    assert env["PS_FAKE_UDEV"] == "1"                 # compositor via seat-shim monitor
     assert env["SDL_JOYSTICK_DISABLE_UDEV"] == "1"    # Steam/SDL inotify fallback
 
 
