@@ -32,7 +32,7 @@ from ...core import monitor, runtime, sandbox, sunshine_api
 from ...core.session import Session
 from .. import theme
 from ..i18n import tr
-from ..widgets import AspectPixmapLabel, InfoRow, Meter, card
+from ..widgets import AspectPixmapLabel, InfoRow, Meter, align_captions, card
 from ..workers import start_action
 
 _NCPU = os.cpu_count() or 1
@@ -202,6 +202,7 @@ class SessionPage(QWidget):
         self._game = InfoRow(tr("Game"))
         self._resolution = InfoRow(tr("Resolution"))
         self._backend = InfoRow(tr("Backend"))
+        align_captions(self._game, self._resolution, self._backend)
         for w in (self._game, self._resolution, self._backend):
             lay.addWidget(w)
         return frame
