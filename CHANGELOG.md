@@ -4,6 +4,26 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-07-26
+
+Needs a runtime image rebuild (`podstage runtime build`): the focus watchdog
+changed.
+
+### Fixed
+
+- **An aborted game launch lost the navigation too.** A launch that never opens
+  a window (cancelled, or failing between Steam and the game) leaves both the
+  focused app and the focused window untouched, so neither existing trigger saw
+  it; only the last nudge of an unrelated game exit happened to cover it. The
+  watchdog now also watches `GAMESCOPECTRL_BASELAYER_APPID`, Steam's
+  focus-control stack, which gains the appid on launch and loses it again on the
+  abort. Measured in a live session: that property is the only trace such a
+  launch leaves.
+- **A nudge can no longer land in a starting game.** With the launch trigger the
+  sequence can still be running when a game takes over the focus, and dropping
+  the focus then looks like alt-tab to the game. Every shot now re-checks that
+  Steam still holds the focus and abandons the rest otherwise.
+
 ## [0.2.3] - 2026-07-26
 
 Needs a runtime image rebuild (`podstage runtime build`): both container helpers
