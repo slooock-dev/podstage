@@ -334,6 +334,20 @@ everything setup created: udev rules, firewall ports, the runtime image,
 sandboxes, data and configuration. Shared pieces (the mDNS firewall service,
 the NVIDIA CDI spec) are kept unless `--all`, since other software uses them too.
 
+## Roadmap
+
+Candidates for 0.3, in no particular order:
+
+- Proper desktop mode: a real window manager (labwc) instead of the cage
+  kiosk, fixing the X11 popup placement
+- Per-game Moonlight entries (apps.json) instead of Big Picture only
+- Direct game start (`PS_APP`) from the GUI
+- Restore the client's cursor image after the idle-hide
+- doctor check for custom-port firewall rules
+- Shared Steam update cache between sandboxes
+- Appliance mode: the session starts with the machine
+- Streamed first Steam login for a fully headless setup
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup, the Qt/Python quirk
