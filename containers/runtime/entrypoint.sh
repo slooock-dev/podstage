@@ -344,7 +344,6 @@ EOF
 fi
 chmod +x "$RUNNER"
 rm -f "$HOME/.cache/podstage/client-mode"   # stale = from a previous session
-rm -f "$HOME/.cache/podstage/perf.json"     # ditto: no FPS from the last run
 
 start_dbus
 start_pipewire
@@ -368,6 +367,15 @@ export WLR_LIBINPUT_NO_DEVICES=1
 # Deliberately started BEFORE the LD_PRELOAD export below: the seat shim is for
 # cage only. desktop mode has no gamescope in the chain, so nothing to ask.
 if [ "${PS_PERF_METRICS:-}" = enabled ] && [ "$PS_MODE" != desktop ]; then
+    # /run/podstage is the host's tmpfs (mounted by core/runtime.py), so the
+    # per-second rewrite costs no disk I/O; without the mount fall back to the
+    # HOME cache, which every host channel here uses.
+    if [ -d /run/podstage ]; then
+        export PS_PERF_FILE="${PS_PERF_FILE:-/run/podstage/perf.json}"
+    else
+        export PS_PERF_FILE="${PS_PERF_FILE:-$HOME/.cache/podstage/perf.json}"
+    fi
+    rm -f "$PS_PERF_FILE"   # stale = from a previous session
     (
         for _ in $(seq 1 "${PS_PERF_WAIT_S:-180}"); do
             for sock in "$XDG_RUNTIME_DIR"/gamescope-*; do

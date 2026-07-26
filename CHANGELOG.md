@@ -14,11 +14,11 @@ perf probe and the entrypoint starts it.
 - **Game FPS on the Session page** (experimental, *Performance metrics* in
   Setup, off by default): a wayland client in the container asks gamescope for
   the presented frametime of the focused app (`gamescope_control` perf query,
-  the source Steam's own overlay uses) and drops the current rate into the
-  mounted HOME for the GUI. Compositor-side, so it reads the same on NVIDIA,
-  AMD and Intel, unlike the NVIDIA-only encoder counters. The Load card is now
-  the Performance card; the FPS row exists only while the feature is on. Needs
-  gamescope 3.16+; the entrypoint flips its `mangoapp_use_output_timing`
+  the source Steam's own overlay uses) and drops the current rate into a tmpfs
+  both sides share for the GUI. Compositor-side, so it reads the same on
+  NVIDIA, AMD and Intel, unlike the NVIDIA-only encoder counters. The Load card
+  is now the Performance card; the FPS row exists only while the feature is on.
+  Needs gamescope 3.16+; the entrypoint flips its `mangoapp_use_output_timing`
   ConVar, without which no perf query is answered.
 
 ### Fixed

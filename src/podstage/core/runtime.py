@@ -400,6 +400,10 @@ def container_flags(library_paths: list[Path], home_dir: Path,
         # readable through the mount even rootless — only uevents are not).
         "--tmpfs", "/run:rw,mode=1777",
         "-v", "/run/udev:/run/udev:ro",
+        # Host tmpfs for volatile container→host data (the perf probe's fps
+        # sample): keeps a per-second rewrite off the disk, unlike the mounted
+        # HOME. The entrypoint only uses it when the mount is present.
+        "-v", f"{config.RUNTIME_SHARE_DIR}:/run/podstage",
     ]
     if vendor not in MESA_VENDORS:
         args += nvidia_lib32_mounts()
@@ -591,6 +595,8 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     library_paths = shared_library_paths(opts.home_dir, provision=opts.provision,
                                          app_ids=opts.app_ids)
     ensure_overlay_dirs(opts.home_dir, library_paths)
+    # Bind source must exist, or podman creates it root-owned in the tmpfs.
+    config.RUNTIME_SHARE_DIR.mkdir(parents=True, exist_ok=True)
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)
     publisher_pid = None
     if opts.mode in ("pipeline", "desktop"):

@@ -16,10 +16,11 @@
 //     tags the window), with Steam's 769 armed alongside so the menu keeps
 //     reporting while a game boots.
 //
-// The current fps (averaged over the last second) lands as JSON in the mounted
-// sandbox HOME (PS_PERF_FILE) for the host GUI, written by rename() so no
-// reader sees a half file. An idle window is written as `samples: 0`, which
-// distinguishes "nothing rendering" from "probe gone" (file mtime).
+// The current fps (averaged over the last second) lands as JSON in PS_PERF_FILE
+// (a tmpfs the host shares in, /run/podstage) for the host GUI, written by
+// rename() so no reader sees a half file. An idle window is written as
+// `samples: 0`, which distinguishes "nothing rendering" from "probe gone"
+// (file mtime).
 //
 // Env: PS_PERF_FILE (default $HOME/.cache/podstage/perf.json),
 //      PS_PERF_INTERVAL_MS (default 1000), PS_PERF_WAIT_S (default 180: how

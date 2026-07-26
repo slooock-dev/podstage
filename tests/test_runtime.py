@@ -250,3 +250,10 @@ def test_nvidia_wine_dll_dir_and_mount(tmp_path, monkeypatch):
     (wine / "nvngx.dll").touch()
     assert runtime.nvidia_wine_dll_dir() == wine
     assert f"{wine}:{runtime.NV_WINE_TARGET}:ro" in runtime.nvidia_lib32_mounts()
+
+
+def test_perf_share_dir_is_mounted_from_the_host_tmpfs(tmp_path, monkeypatch):
+    """The probe's 1 Hz file belongs on tmpfs, not in the on-disk HOME."""
+    monkeypatch.setattr(config, "RUNTIME_SHARE_DIR", tmp_path / "share")
+    flags = runtime.container_flags([], tmp_path / "home", vendor="amd")
+    assert "-v" in flags and f"{tmp_path / 'share'}:/run/podstage" in flags

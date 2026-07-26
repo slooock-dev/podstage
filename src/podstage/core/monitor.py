@@ -11,8 +11,9 @@ Everything here is readable as the plain user (the container is rootless):
   * The active game from the running ``SteamLaunch AppId=`` process.
   * Game FPS comes from the in-container perf probe, which asks gamescope for
     the presented frametime of the focused app and drops the current rate into
-    the mounted sandbox HOME. Compositor-side, so it is the one performance
-    number that reads the same on NVIDIA, AMD and Intel.
+    the tmpfs both sides share (``config.RUNTIME_SHARE_DIR``).
+    Compositor-side, so it is the one performance number that reads the same on
+    NVIDIA, AMD and Intel.
 
 There is deliberately NO connected-client detection: Sunshine's media path is
 unconnected UDP (no socket peer to read), and every heuristic tried around
@@ -29,6 +30,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from .. import config
 from . import provisioner, runtime
 
 _APPID_RE = re.compile(r"SteamLaunch AppId=(\d+)")
@@ -297,9 +299,10 @@ def container_stats(sample_interval: float = 0.4) -> ContainerStats | None:
 
 # -- game FPS from the in-container perf probe ------------------------------
 
-# Written once per probe interval (default 1s); a few missed intervals mean the
-# probe died or the session is gone, so stop trusting the numbers.
-PERF_FILE_REL = ".cache/podstage/perf.json"
+# The probe rewrites this once per interval (default 1s) in the host tmpfs both
+# sides share; a few missed intervals mean the probe or the session is gone, so
+# stop trusting the numbers.
+PERF_FILE = config.RUNTIME_SHARE_DIR / "perf.json"
 PERF_MAX_AGE_S = 6.0
 
 
@@ -313,17 +316,10 @@ class GamePerf:
     fps: float | None = None
 
 
-def game_perf(home_dir: Path | None = None) -> GamePerf | None:
+def game_perf(path: Path = PERF_FILE) -> GamePerf | None:
     """The probe's latest sample window, or None when there is nothing to
     trust: probe disabled (experimental feature off), a gamescope without the
     perf query, or a file older than ``PERF_MAX_AGE_S``."""
-    if home_dir is None:
-        state = runtime.load_state() or {}
-        home = state.get("home_dir")
-        if not home:
-            return None
-        home_dir = Path(home)
-    path = home_dir / PERF_FILE_REL
     try:
         stat = path.stat()
         if time.time() - stat.st_mtime > PERF_MAX_AGE_S:
