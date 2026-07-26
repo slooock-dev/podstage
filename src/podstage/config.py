@@ -146,7 +146,7 @@ def validate_client_name(name: str) -> str:
 
 @dataclass
 class SessionConfig:
-    """A client profile: a sandboxed Steam Big Picture stream for one client.
+    """One sandboxed Steam instance and how it streams (Big Picture).
 
     resolution:
       * a preset key ("deck", "1080p60", …) or "WxH@R", or

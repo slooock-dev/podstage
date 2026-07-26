@@ -14,8 +14,8 @@ Steam config.
 It is built for one powerful gaming PC that you want to play from the couch, a
 laptop, or a Steam Deck, controller in hand, with Steam's Big Picture UI on the
 screen. A small PyQt6 management GUI on the host does the rest: it walks you
-through the one-time setup, creates and logs in the per-client sandboxes, then
-starts, monitors, and tunes the stream. No config files to edit.
+through the one-time setup, creates and logs in the sandboxed Steam instances,
+then starts, monitors, and tunes the stream. No config files to edit.
 
 ![podstage streaming Path of Exile 2 to a Steam Deck](docs/screenshots/session.png)
 
@@ -39,8 +39,10 @@ invisible session instead:
   account while you keep playing on the desktop.)
 - Input from the client stays inside the streaming session and cannot reach
   the desktop, or the other way around.
-- Each client gets a persistent sandbox with its own Steam settings, Steam
-  Input layout, and per-game graphics presets.
+- You can keep several sandboxed Steam instances side by side, each with its
+  own login, Steam settings, Steam Input layout, and per-game graphics
+  presets. Use one per client, one per account, or one per use case; the
+  streaming session picks the sandbox you point it at.
 
 ## Related projects
 
@@ -48,7 +50,7 @@ invisible session instead:
 multi-client streaming platform built on the same isolation idea;
 [Apollo](https://github.com/ClassicOldSong/Apollo) (a Sunshine fork) gives each
 client its own virtual display on Windows. podstage has a narrower scope: one
-Linux gaming PC, one client at a time, Steam Big Picture, managed from a small
+Linux gaming PC, one stream at a time, Steam Big Picture, managed from a small
 host GUI.
 
 ## Features
@@ -80,8 +82,9 @@ host GUI.
   seat (udev rules plus a small `libseat` shim) and never touch the desktop.
   This isolates input routing, not malware: processes running as your user
   keep their usual `uinput` access, as on any gaming distro.
-- **Per-client sandboxes.** One isolated `$HOME` per client, created and
-  Steam-logged-in from the GUI.
+- **Sandboxed Steam instances.** Each sandbox is an isolated `$HOME` with its
+  own Steam login and settings, created and logged in from the GUI. Keep as
+  many as you like (one streams at a time) and pick one per stream.
 - **Light host footprint.** No daemons, no system services, nothing running as
   root; the container runs as your user. Setup installs two udev rules, the
   only sudo podstage ever needs.
@@ -136,7 +139,7 @@ Then, in the GUI:
    root-gated ones open a pkexec prompt. Build the image, install the two udev
    rules, open the mDNS firewall port. Everything after setup runs without a
    password.
-2. **Sandboxes**: create a client profile (name, resolution, Sunshine port),
+2. **Sandboxes**: create a sandbox profile (name, resolution, Sunshine port),
    then click *Start Steam login*. An isolated Steam opens on the desktop, you
    log in, close it, and the game library is provisioned automatically.
 3. **Session**: pick the client, *Start*, then *Pair* with the PIN Moonlight
@@ -191,7 +194,7 @@ streaming needs the Moonlight pairing PIN. The image is built locally
 | Page | What it does |
 |------|--------------|
 | **Session** | Start/stop the stream (Big Picture or the experimental desktop mode), the active game, CPU/GPU/VRAM/encoder meters, a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
-| **Sandboxes** | Client profiles, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
+| **Sandboxes** | Sandbox profiles, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
 | **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, streaming toggles (mouse & keyboard, preview behavior), experimental features, an on-demand update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
 
