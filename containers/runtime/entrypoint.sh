@@ -319,6 +319,9 @@ EOF
         cat >> "$RUNNER" <<EOF
 echo "[podstage] waiting for the first client (dynamic resolution)" >&2
 read -r CW CH CR < "$SUN_CONF_DIR/client-mode.fifo"
+# The locked resolution, readable by the host GUI through the mounted HOME.
+mkdir -p "\$HOME/.cache/podstage"
+printf '%s %s %s\n' "\$CW" "\$CH" "\$CR" > "\$HOME/.cache/podstage/client-mode"
 exec gamescope --backend wayland -W "\$CW" -H "\$CH" -w "\$CW" -h "\$CH" -r "\$CR" \\
      ${GS_HDR_FLAGS} -C 3000 --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
@@ -336,6 +339,7 @@ exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r 
 EOF
 fi
 chmod +x "$RUNNER"
+rm -f "$HOME/.cache/podstage/client-mode"   # stale = from a previous session
 
 start_dbus
 start_pipewire

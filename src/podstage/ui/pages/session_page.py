@@ -200,8 +200,9 @@ class SessionPage(QWidget):
         lay.addWidget(self._detail)
 
         self._game = InfoRow(tr("Game"))
+        self._resolution = InfoRow(tr("Resolution"))
         self._backend = InfoRow(tr("Backend"))
-        for w in (self._game, self._backend):
+        for w in (self._game, self._resolution, self._backend):
             lay.addWidget(w)
         return frame
 
@@ -464,9 +465,30 @@ class SessionPage(QWidget):
 
         self._game.set(snap.game.name if snap.game else
                        (tr("Big Picture / menu") if snap.running else None))
+        self._update_resolution(snap.running)
         self._backend.set(snap.detail if snap.running else None)
         self._update_load(snap)
         self._update_thumbnail(snap.running)
+
+    def _update_resolution(self, running: bool) -> None:
+        """With dynamic resolution the render size is only known once the
+        first client connects (the entrypoint drops it into the mounted HOME)
+        and stays locked until the session restarts."""
+        sc = self._profile()
+        if not running or sc is None:
+            self._resolution.set(None)
+            return
+        if not sc.dynamic_resolution:
+            self._resolution.set(None if sc.is_ask() else sc.resolution)
+            return
+        try:
+            w, h, r = (sc.home_dir() / ".cache/podstage/client-mode") \
+                .read_text().split()
+            self._resolution.set(tr(
+                "{w}x{h}@{r} · locked until the session restarts",
+                w=w, h=h, r=r))
+        except (OSError, ValueError):
+            self._resolution.set(tr("waiting for the first client …"))
 
     def _update_thumbnail(self, running: bool) -> None:
         """Show the preview frame the in-container loop drops into the mounted

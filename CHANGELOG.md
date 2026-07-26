@@ -28,8 +28,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   connect and renders at that client's resolution + refresh rate (locked
   until restart; other clients get scaled). Previously only the canvas was
   resized. Per-profile toggle (Sandboxes dialog / `session add
-  --fixed-resolution`), state visible in the sandbox table; the experimental
-  toggle is gone.
+  --fixed-resolution`), state visible in the sandbox table; the Session page
+  shows the locked client resolution, or that the session still waits for
+  the first client; the experimental toggle is gone.
 - First use seeds one generic profile (`sandbox_steam`) instead of two.
 
 ### Fixed

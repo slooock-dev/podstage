@@ -418,4 +418,8 @@ TEXTS: dict[str, str] = {
         "Fallback. Aus: es wird immer in der Profil-Auflösung gerendert.",
     "Client (auto)":
         "Client (auto)",
+    "{w}x{h}@{r} · locked until the session restarts":
+        "{w}x{h}@{r} · fixiert bis zum Session-Neustart",
+    "waiting for the first client …":
+        "warte auf den ersten Client …",
 }
