@@ -42,11 +42,16 @@ _GLYPH = {doctor.Status.OK: ("●", "ok"),
 # card build fails loudly on a missing one (gui-smoke catches it).
 _EXPERIMENTAL_LABELS = {
     "hdr": lambda: tr("HDR stream"),
+    "perf_metrics": lambda: tr("Performance metrics (FPS)"),
 }
 _EXPERIMENTAL_DETAILS = {
     "hdr": lambda: tr(
         "gamescope advertises an HDR output and games see DXVK_HDR. "
         "Unverified end to end."),
+    "perf_metrics": lambda: tr(
+        "A probe in the container asks gamescope for the presented frametime of "
+        "the running game and shows FPS on the Session page. Works on any GPU "
+        "vendor; needs a gamescope with the perf query (3.16+)."),
 }
 
 

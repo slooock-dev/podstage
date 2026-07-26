@@ -106,6 +106,7 @@ def sunshine_web_credentials() -> tuple[str, str]:
 # labels live in ui/pages/setup_page.py. Add/remove features HERE.
 EXPERIMENTAL_FEATURES: dict[str, str] = {
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
+    "perf_metrics": "PS_PERF_METRICS",       # in-container FPS probe (gamescope)
 }
 
 

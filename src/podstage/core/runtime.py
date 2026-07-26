@@ -106,6 +106,7 @@ _FORWARD_ENV: dict[str, str | None] = {
     "PS_DYNAMIC_RES": None,
     # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each.
     "PS_HDR": None,
+    "PS_PERF_METRICS": None,
 }
 
 

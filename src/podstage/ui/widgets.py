@@ -1,7 +1,7 @@
 """Small shared building blocks: cards, meters, key-value rows."""
 
-from PyQt6.QtCore import QRect, QSize, Qt
-from PyQt6.QtGui import QPainter, QPixmap
+from PyQt6.QtCore import QPointF, QRect, QSize, Qt
+from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -102,6 +102,7 @@ class Meter(QWidget):
         cap = QLabel(caption)
         cap.setProperty("muted", True)
         cap.setFixedWidth(48)
+        self.caption_label = cap  # align_captions() shares one column
         self._bar = QProgressBar()
         self._bar.setRange(0, 100)
         self._bar.setTextVisible(False)
@@ -115,6 +116,86 @@ class Meter(QWidget):
     def set(self, pct: int | None, text: str = "") -> None:
         self._bar.setValue(0 if pct is None else max(0, min(int(pct), 100)))
         self._value.setText(text or "—")
+
+
+class Sparkline(QWidget):
+    """caption | history graph | mono value — for FPS over the last minute.
+
+    A meter would be wrong here: FPS has no 0..100 scale and its *shape* over
+    time (dips, stutter) is the interesting part. Gaps in the series (nothing
+    rendering) break the line instead of being drawn as zero."""
+
+    CAPACITY = 60  # samples; at the 2s GUI poll that is ~2 minutes
+
+    def __init__(self, caption: str) -> None:
+        super().__init__()
+        h = QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(8)
+        self._values: list[float | None] = []
+        cap = QLabel(caption)
+        cap.setProperty("muted", True)
+        cap.setFixedWidth(48)
+        self.caption_label = cap  # align_captions() shares one column
+        self._graph = _SparkGraph(self._values)
+        self._value = QLabel("—")
+        self._value.setProperty("mono", True)
+        self._value.setFixedWidth(132)  # same column as Meter's value
+        h.addWidget(cap)
+        h.addWidget(self._graph, 1)
+        h.addWidget(self._value)
+
+    def push(self, value: float | None, text: str = "") -> None:
+        self._values.append(value)
+        del self._values[:-self.CAPACITY]
+        self._value.setText(text or "—")
+        self._graph.update()
+
+    def clear(self) -> None:
+        self._values.clear()
+        self._value.setText("—")
+        self._graph.update()
+
+
+class _SparkGraph(QWidget):
+    """The plot area of a Sparkline (kept separate so the row stays a layout)."""
+
+    def __init__(self, values: list[float | None]) -> None:
+        super().__init__()
+        self._values = values
+        self.setFixedHeight(20)
+        self.setMinimumWidth(60)
+
+    def paintEvent(self, event) -> None:
+        from . import theme  # local: keeps the widget module import-cycle free
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        area = self.contentsRect().adjusted(0, 2, 0, -2)
+        painter.setPen(QPen(QColor(theme.BORDER), 1))
+        painter.drawLine(area.left(), area.bottom(), area.right(), area.bottom())
+        points = [v for v in self._values if v is not None]
+        if len(points) < 2:
+            return
+        # Scale to the observed range with a little headroom, floored at 10 fps
+        # of span so a rock-steady 60 fps stays a flat line, not noise.
+        low, high = min(points), max(points)
+        span = max(high - low, 10.0)
+        mid = (high + low) / 2
+        low, high = mid - span / 2, mid + span / 2
+        step = area.width() / max(len(self._values) - 1, 1)
+        painter.setPen(QPen(QColor(theme.ACCENT), 1.5))
+        prev: QPointF | None = None
+        for i, value in enumerate(self._values):
+            if value is None:
+                prev = None
+                continue
+            frac = (value - low) / (high - low)
+            point = QPointF(area.left() + i * step,
+                            area.bottom() - frac * area.height())
+            if prev is not None:
+                painter.drawLine(prev, point)
+            prev = point
 
 
 class InfoRow(QWidget):
@@ -141,8 +222,8 @@ class InfoRow(QWidget):
         self._value.setText(text or "—")
 
 
-def align_captions(*rows: InfoRow) -> None:
-    """Give stacked InfoRows one caption column."""
+def align_captions(*rows: "InfoRow | Meter | Sparkline") -> None:
+    """Give stacked rows one caption column (any row with a caption_label)."""
     width = max(r.caption_label.minimumWidth() for r in rows)
     for r in rows:
         r.caption_label.setFixedWidth(width)

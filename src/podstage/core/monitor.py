@@ -9,6 +9,10 @@ Everything here is readable as the plain user (the container is rootless):
     (``gpu_busy_percent`` + ``mem_info_vram_*``) on AMD, or one
     ``intel_gpu_top -J`` sample on Intel (needs a readable GPU PMU).
   * The active game from the running ``SteamLaunch AppId=`` process.
+  * Game FPS/frametimes come from the in-container perf probe, which asks
+    gamescope for the presented frametime of the focused app and drops
+    aggregates into the mounted sandbox HOME. Compositor-side, so it is the one
+    performance number that reads the same on NVIDIA, AMD and Intel.
 
 There is deliberately NO connected-client detection: Sunshine's media path is
 unconnected UDP (no socket peer to read), and every heuristic tried around
@@ -291,6 +295,66 @@ def container_stats(sample_interval: float = 0.4) -> ContainerStats | None:
     return ContainerStats(cpu_pct, mem // (1 << 20) if mem else None)
 
 
+# -- game FPS from the in-container perf probe ------------------------------
+
+# Written once per probe interval (default 1s); a few missed intervals mean the
+# probe died or the session is gone, so stop trusting the numbers.
+PERF_FILE_REL = ".cache/podstage/perf.json"
+PERF_MAX_AGE_S = 6.0
+
+
+@dataclass
+class GamePerf:
+    """One perf-probe window. ``samples == 0`` is a real answer: the probe is
+    alive and nothing presented a frame (paused game, static menu)."""
+
+    app_id: int | None = None
+    samples: int = 0
+    fps: float | None = None
+    frametime_ms: float | None = None
+    frametime_max_ms: float | None = None
+    fps_1pct_low: float | None = None
+
+
+def _perf_float(data: dict, key: str) -> float | None:
+    value = data.get(key)
+    if isinstance(value, (int, float)) and value > 0:
+        return float(value)
+    return None
+
+
+def game_perf(home_dir: Path | None = None) -> GamePerf | None:
+    """The probe's latest sample window, or None when there is nothing to
+    trust: probe disabled (experimental feature off), a gamescope without the
+    perf query, or a file older than ``PERF_MAX_AGE_S``."""
+    if home_dir is None:
+        state = runtime.load_state() or {}
+        home = state.get("home_dir")
+        if not home:
+            return None
+        home_dir = Path(home)
+    path = home_dir / PERF_FILE_REL
+    try:
+        stat = path.stat()
+        if time.time() - stat.st_mtime > PERF_MAX_AGE_S:
+            return None
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    app_id = data.get("app_id")
+    samples = data.get("samples")
+    return GamePerf(
+        app_id=app_id if isinstance(app_id, int) and app_id > 0 else None,
+        samples=samples if isinstance(samples, int) and samples > 0 else 0,
+        fps=_perf_float(data, "fps"),
+        frametime_ms=_perf_float(data, "frametime_ms"),
+        frametime_max_ms=_perf_float(data, "frametime_max_ms"),
+        fps_1pct_low=_perf_float(data, "fps_1pct_low"),
+    )
+
+
 # -- one-shot snapshot for the GUI -----------------------------------------
 
 @dataclass
@@ -301,6 +365,7 @@ class Snapshot:
     game: ActiveGame | None = None
     gpu: GpuStats | None = None
     container: ContainerStats | None = None
+    perf: GamePerf | None = None
 
 
 def snapshot() -> Snapshot:
@@ -315,4 +380,5 @@ def snapshot() -> Snapshot:
         game=active_game(),
         gpu=gpu_stats(),
         container=container_stats(),
+        perf=game_perf(),
     )

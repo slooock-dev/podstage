@@ -32,7 +32,14 @@ from ...core import monitor, runtime, sandbox, sunshine_api
 from ...core.session import Session
 from .. import theme
 from ..i18n import tr
-from ..widgets import AspectPixmapLabel, InfoRow, Meter, align_captions, card
+from ..widgets import (
+    AspectPixmapLabel,
+    InfoRow,
+    Meter,
+    Sparkline,
+    align_captions,
+    card,
+)
 from ..workers import start_action
 
 _NCPU = os.cpu_count() or 1
@@ -244,7 +251,19 @@ class SessionPage(QWidget):
         return frame
 
     def _build_load_card(self) -> QWidget:
-        frame, lay = card(tr("Load"))
+        frame, lay = card(tr("Performance"))
+        # Game FPS first: it is what the player feels, and it is the only row
+        # here that comes from the compositor instead of a vendor interface, so
+        # it reads the same on NVIDIA, AMD and Intel.
+        self._fps = Sparkline("FPS")
+        self._frametime = InfoRow(tr("Frametime"))
+        lay.addWidget(self._fps)
+        lay.addWidget(self._frametime)
+        self._perf_hint = QLabel()
+        self._perf_hint.setProperty("muted", True)
+        self._perf_hint.setWordWrap(True)
+        self._perf_hint.hide()
+        lay.addWidget(self._perf_hint)
         self._cpu = Meter("CPU")
         self._ram = Meter("RAM")
         self._gpu = Meter("GPU")
@@ -259,6 +278,7 @@ class SessionPage(QWidget):
             rows.append(self._nvenc)
         for w in rows:
             lay.addWidget(w)
+        align_captions(self._fps, self._frametime, *rows)
         return frame
 
     def _build_quality_card(self) -> QWidget:
@@ -468,6 +488,7 @@ class SessionPage(QWidget):
                        (tr("Big Picture / menu") if snap.running else None))
         self._update_resolution(snap.running)
         self._backend.set(snap.detail if snap.running else None)
+        self._update_perf(snap)
         self._update_load(snap)
         self._update_thumbnail(snap.running)
 
@@ -543,6 +564,42 @@ class SessionPage(QWidget):
         if self._state.property("state") != state:  # repolish only on change
             self._state.setProperty("state", state)
             theme.repolish(self._state)
+
+    def _update_perf(self, snap: monitor.Snapshot) -> None:
+        """FPS + frametime from the in-container probe. Three distinct states,
+        each shown as such: no probe (feature off / no data), probe alive but
+        nothing rendering, and real samples."""
+        if not snap.running:
+            self._fps.clear()
+            self._frametime.set(None)
+            self._perf_hint.hide()
+            return
+        perf = snap.perf
+        if perf is None:
+            self._fps.push(None)
+            self._frametime.set(None)
+            enabled = self._ctx.config.experimental.get("perf_metrics", False)
+            self._perf_hint.setText(
+                tr("Waiting for the performance probe …") if enabled else
+                tr("FPS needs 'Performance metrics' on the Setup page "
+                   "(applies at the next session start)."))
+            self._perf_hint.show()
+            return
+        self._perf_hint.hide()
+        if perf.samples == 0 or perf.fps is None:
+            # The probe answered, gamescope just presented nothing: paused
+            # game, static menu. Not an error, so no hint — an empty row.
+            self._fps.push(None, tr("no frames"))
+            self._frametime.set(None)
+            return
+        value = f"{perf.fps:.0f} fps"
+        if perf.fps_1pct_low is not None:
+            value += f" · {perf.fps_1pct_low:.0f} low"
+        self._fps.push(perf.fps, value)
+        detail = f"{perf.frametime_ms:.1f} ms" if perf.frametime_ms else "—"
+        if perf.frametime_max_ms is not None:
+            detail += tr(" · max {ms} ms", ms=f"{perf.frametime_max_ms:.1f}")
+        self._frametime.set(detail)
 
     def _update_load(self, snap: monitor.Snapshot) -> None:
         c = snap.container

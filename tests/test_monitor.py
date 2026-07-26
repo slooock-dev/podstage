@@ -1,5 +1,9 @@
 """Tests for the telemetry parsers (no hardware, no subprocesses)."""
 
+import json
+import os
+import time
+
 from podstage.core import monitor
 
 # intel_gpu_top -J streams an array of period samples; the first one right
@@ -43,3 +47,57 @@ def test_parse_intel_gpu_top_empty_or_garbage():
     assert monitor._parse_intel_gpu_top("") is None
     assert monitor._parse_intel_gpu_top("intel_gpu_top: PMU failed") is None
     assert monitor._parse_intel_gpu_top('{"engines": {}}') is None
+
+
+# -- game perf (the in-container probe's JSON in the mounted HOME) -----------
+
+def _write_perf(home, payload: str, age_s: float = 0.0):
+    path = home / monitor.PERF_FILE_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload)
+    if age_s:
+        stamp = time.time() - age_s
+        os.utime(path, (stamp, stamp))
+    return path
+
+
+def test_game_perf_reads_probe_sample(tmp_path):
+    _write_perf(tmp_path, json.dumps({
+        "schema": 1, "source": "gamescope_control", "ts": 1, "app_id": 620,
+        "samples": 59, "fps": 59.4, "frametime_ms": 16.83,
+        "frametime_max_ms": 21.4, "fps_1pct_low": 46.7}))
+    perf = monitor.game_perf(tmp_path)
+    assert perf is not None
+    assert perf.app_id == 620 and perf.samples == 59
+    assert perf.fps == 59.4 and perf.frametime_ms == 16.83
+    assert perf.frametime_max_ms == 21.4 and perf.fps_1pct_low == 46.7
+
+
+def test_game_perf_idle_window_is_not_an_error(tmp_path):
+    # Probe alive, nothing presented: a real answer, distinct from "no probe".
+    _write_perf(tmp_path, json.dumps({"schema": 1, "app_id": 769, "samples": 0}))
+    perf = monitor.game_perf(tmp_path)
+    assert perf is not None
+    assert perf.samples == 0 and perf.fps is None and perf.app_id == 769
+
+
+def test_game_perf_stale_file_is_dropped(tmp_path):
+    _write_perf(tmp_path, json.dumps({"samples": 60, "fps": 60.0}),
+                age_s=monitor.PERF_MAX_AGE_S + 5)
+    assert monitor.game_perf(tmp_path) is None
+
+
+def test_game_perf_missing_or_garbage(tmp_path):
+    assert monitor.game_perf(tmp_path) is None  # probe never ran
+    _write_perf(tmp_path, '{"samples": 12, "fps":')  # caught mid-write
+    assert monitor.game_perf(tmp_path) is None
+    _write_perf(tmp_path, "[1, 2, 3]")  # valid JSON, wrong shape
+    assert monitor.game_perf(tmp_path) is None
+
+
+def test_game_perf_ignores_nonsense_values(tmp_path):
+    _write_perf(tmp_path, json.dumps({"app_id": 0, "samples": 3, "fps": 0,
+                                      "frametime_ms": -1}))
+    perf = monitor.game_perf(tmp_path)
+    assert perf is not None
+    assert perf.app_id is None and perf.fps is None and perf.frametime_ms is None
