@@ -343,17 +343,20 @@ the NVIDIA CDI spec) are kept unless `--all`, since other software uses them too
 
 ## Roadmap
 
-Candidates for 0.3, in no particular order:
+Planned for 0.3:
 
-- Proper desktop mode: a real window manager (labwc) instead of the cage
-  kiosk, fixing the X11 popup placement
-- Per-game Moonlight entries (apps.json) instead of Big Picture only
-- Direct game start (`PS_APP`) from the GUI
-- Restore the client's cursor image after the idle-hide
-- doctor check for custom-port firewall rules
-- Shared Steam update cache between sandboxes
-- Appliance mode: the session starts with the machine
-- Streamed first Steam login for a fully headless setup
+- Proper desktop mode: labwc replaces the cage kiosk. Spike-verified in the
+  sandbox: X11 popups and dialogs place correctly, where the kiosk pins every
+  popup to the top-left corner. Also a candidate for the Big Picture session.
+- Streamed first Steam login for a fully headless setup.
+- doctor check for custom-port firewall rules.
+- Restore the client's cursor image after the idle-hide (may come free with
+  the compositor switch).
+- Optional DualSense emulation (experimental setting): real gyro in the
+  session instead of the default Xbox pad, for clients that send motion data.
+
+Under exploration: a second sandbox type for non-Steam launchers (own image
+with the launchers preinstalled, same streaming pipeline).
 
 ## Development
 
