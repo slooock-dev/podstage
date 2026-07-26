@@ -169,7 +169,7 @@ def cmd_session_remove(args: argparse.Namespace) -> int:
         return 1
     st = runtime.status()
     if st.running and st.client == args.name:
-        print(f"session '{args.name}' is running — stop it first", file=sys.stderr)
+        print(f"session '{args.name}' is running; stop it first", file=sys.stderr)
         return 1
     if args.data:
         if not args.yes:
@@ -200,7 +200,7 @@ def cmd_session_clear_overlay(args: argparse.Namespace) -> int:
         return 1
     st = runtime.status()
     if st.running and st.client == args.name:
-        print(f"session '{args.name}' is running — stop it first", file=sys.stderr)
+        print(f"session '{args.name}' is running; stop it first", file=sys.stderr)
         return 1
     sandbox.clear_overlays(sc.home_dir())
     print(f"Overlay writes of '{args.name}' cleared; Steam re-applies game "
@@ -234,7 +234,7 @@ def cmd_session_start(args: argparse.Namespace) -> int:
 
 def cmd_session_pair(args: argparse.Namespace) -> int:
     """Complete a Moonlight pairing (verified against the sandbox pairing
-    state — see sunshine_api.pair_verified)."""
+    state; see sunshine_api.pair_verified)."""
     s = _resolve_session(args.name)
     if s is None:
         return 1
@@ -243,10 +243,10 @@ def cmd_session_pair(args: argparse.Namespace) -> int:
         ok = sunshine_api.pair_verified(args.pin, device, s.home,
                                         web_port=s.cfg.sunshine_port_base + 1)
     except sunshine_api.SunshineApiError as e:
-        print(f"pair failed: {e} — is the session running?", file=sys.stderr)
+        print(f"pair failed: {e} (is the session running?)", file=sys.stderr)
         return 1
     if not ok:
-        print("PIN submitted, but no new pairing appeared — wrong/expired PIN, "
+        print("PIN submitted, but no new pairing appeared; wrong/expired PIN, "
               "or a stale pairing attempt swallowed it (Sunshine answers the "
               "oldest one). Restart pairing in Moonlight and retry; if it "
               "keeps failing, restart the session.", file=sys.stderr)
@@ -282,7 +282,7 @@ def cmd_experimental(args: argparse.Namespace) -> int:
     cfg = _load_or_seed_config()
     if args.action in ("enable", "disable"):
         if not args.feature or args.feature not in config.EXPERIMENTAL_FEATURES:
-            print(f"unknown feature {args.feature!r} — known: "
+            print(f"unknown feature {args.feature!r}, known: "
                   f"{', '.join(config.EXPERIMENTAL_FEATURES)}", file=sys.stderr)
             return 1
         cfg.experimental[args.feature] = args.action == "enable"

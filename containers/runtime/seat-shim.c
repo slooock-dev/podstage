@@ -10,11 +10,11 @@
  * 2. Blank cursor — no-op the wlroots cursor-image setters so the dead pointer
  *    Sunshine creates isn't burned into the capture (see below).
  *
- * 3. Flat pointer acceleration (PS_POINTER_ACCEL=flat) — client mouse counts
+ * 3. Flat pointer acceleration (PS_POINTER_ACCEL=flat): client mouse counts
  *    arrive raw; libinput's adaptive accel on top is far too fast. Hook the
  *    device-attach, force the flat (1:1) profile on pointers.
  *
- * 4. Fake udev monitor — in a rootless user namespace the kernel does NOT
+ * 4. Fake udev monitor: in a rootless user namespace the kernel does NOT
  *    deliver udev netlink uevents, so libinput's hotplug monitor never sees
  *    the devices Sunshine creates mid-session. Enumerate still works (the
  *    udev DB is visible via the bind-mounted /run/udev), so we fake ONLY the
@@ -217,7 +217,7 @@ void wlr_cursor_set_surface(void *cur, void *surface, int32_t hx, int32_t hy) {
 
 /* cage attaches every new input device to its wlr_cursor; that is the one
  * spot where the underlying libinput device is reachable. All symbols come
- * from cage's own wlroots/libinput via RTLD_NEXT — no link-time deps.
+ * from cage's own wlroots/libinput via RTLD_NEXT; no link-time deps.
  * libinput enum value: LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT = (1 << 0). */
 void wlr_cursor_attach_input_device(void *cur, void *dev) {
     void (*real)(void *, void *) = dlsym(RTLD_NEXT, "wlr_cursor_attach_input_device");

@@ -47,7 +47,7 @@ if [ -n "$PS_APP" ]; then
 else
     STEAM_LAUNCH="steam $PS_STEAM_FLAGS"
 fi
-# desktop mode: no gamescope — cage runs the target itself (cage is built with
+# desktop mode: no gamescope, cage runs the target itself (cage is built with
 # Xwayland, so the X11 Steam desktop UI works). Default is Steam's desktop UI.
 if [ "$PS_MODE" = desktop ]; then
     STEAM_LAUNCH="${PS_DESKTOP_CMD:-steam}"
@@ -217,7 +217,7 @@ JSON
     # mouse_input feature sets PS_MOUSE_INPUT=enabled.
     # native_pen_touch stays disabled so any re-enabled pointer arrives as
     # mouse events (the only kind gamescope's Wayland backend understands).
-    # desktop mode has no gamescope in the chain, so none of that applies —
+    # desktop mode has no gamescope in the chain, so none of that applies;
     # the pointer default flips to enabled there.
     MOUSE_DEFAULT=disabled
     [ "$PS_MODE" = desktop ] && MOUSE_DEFAULT=enabled
@@ -248,7 +248,7 @@ CONF
     # WAYLAND_DISPLAY): each stream start resizes cage's output to the client;
     # the first connect additionally wakes the runner (fifo), which launches
     # gamescope at that client's WxH@R. gamescope can't resize its render
-    # target later — other resolutions get scaled.
+    # target later; other resolutions get scaled.
     if [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
         MODE_FIFO="$SUN_CONF_DIR/client-mode.fifo"
         mkfifo "$MODE_FIFO"
@@ -317,19 +317,19 @@ EOF
 echo "[podstage] waiting for the first client (dynamic resolution)" >&2
 read -r CW CH CR < "$SUN_CONF_DIR/client-mode.fifo"
 exec gamescope --backend wayland -W "\$CW" -H "\$CH" -w "\$CW" -h "\$CH" -r "\$CR" \\
-     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+     ${GS_HDR_FLAGS} -C 3000 --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
     else
         cat >> "$RUNNER" <<EOF
 exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
-     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+     ${GS_HDR_FLAGS} -C 3000 --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
     fi
 elif [ "$PS_MODE" = steam ]; then
     # No Sunshine — just render Steam in the nested compositor (boot smoke test).
     cat >> "$RUNNER" <<EOF
 exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
-     ${GS_HDR_FLAGS} --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
+     ${GS_HDR_FLAGS} -C 3000 --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
 EOF
 fi
 chmod +x "$RUNNER"
@@ -355,7 +355,7 @@ export WLR_LIBINPUT_NO_DEVICES=1
 SHIM=/usr/local/lib/podstage-seat-shim.so
 [ -e "$SHIM" ] && export LD_PRELOAD="$SHIM" || log "(warning) seat shim missing — cage will use seat0 (desktop input leaks!)"
 
-# desktop mode streams a pointer-driven UI — show the cursor (the shim blanks
+# desktop mode streams a pointer-driven UI, so show the cursor (the shim blanks
 # it by default so Sunshine's dead virtual pointer isn't burned into the
 # gamepad-only capture). PS_SHOW_CURSOR=0 forces it off again.
 # Pointer injected → flat 1:1 accel (client counts arrive raw; adaptive accel

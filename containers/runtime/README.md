@@ -35,7 +35,7 @@ label, so `doctor` reports the image as stale.
 | `shell` | drop into bash in the container |
 | `steam` | cage → gamescope → Steam, **no** Sunshine (render smoke test) |
 | `pipeline` | full pipeline incl. Sunshine capture (**default**) |
-| `desktop` | experimental: like `pipeline` but no gamescope — Steam desktop UI (or `PS_DESKTOP_CMD`) directly under cage, mouse/keyboard enabled, cursor shown |
+| `desktop` | experimental: like `pipeline` but no gamescope: Steam desktop UI (or `PS_DESKTOP_CMD`) directly under cage, mouse/keyboard enabled, cursor shown |
 
 Examples:
 

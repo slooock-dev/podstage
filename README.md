@@ -60,7 +60,11 @@ host GUI.
   Steam Input works natively. Optional mouse & keyboard streaming (off by
   default, incl. in-game pointer lock via a patched `cage`); an experimental
   desktop mode streams the Steam desktop UI. Non-Steam launchers aren't
-  wired up.
+  wired up. gamescope + Big Picture is the settled architecture: Steam forces
+  the gamepad UI under gamescope (not overridable), and gamescope provides the
+  Xwayland environment, fullscreen forcing and resolution scaling the pipeline
+  builds on; the desktop mode drops gamescope and stays experimental for
+  exactly that reason.
 - **Resolution follows the client.** The pipeline launches on the first
   Moonlight connect and renders at that client's resolution and refresh
   rate (locked until the session restarts; other clients get scaled).

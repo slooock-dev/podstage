@@ -289,7 +289,7 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
     if opts.env.get("PS_GAMESCOPE_WSI", os.environ.get("PS_GAMESCOPE_WSI")) != "enabled":
         env["DISABLE_GAMESCOPE_WSI"] = "1"
     env.update(_forwarded_env(opts))
-    # Desktop mode is pointer-driven — flip the defaults unless pinned.
+    # Desktop mode is pointer-driven; flip the defaults unless pinned.
     if opts.mode == "desktop":
         for key, val in (("PS_MOUSE_INPUT", "enabled"), ("PS_SHOW_CURSOR", "1")):
             if key not in opts.env and not os.environ.get(key):

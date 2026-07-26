@@ -85,13 +85,13 @@ def pair(pin: str, name: str, web_port: int = DEFAULT_WEB_PORT) -> bool:
 
 def pair_verified(pin: str, name: str, home: Path,
                   web_port: int = DEFAULT_WEB_PORT, timeout: float = 10.0) -> bool:
-    """Submit a PIN and wait for a new device in the sandbox pairing state —
+    """Submit a PIN and wait for a new device in the sandbox pairing state;
     /api/pin returns true even for a wrong PIN (the handshake fails later on
     the client). False: never completed. Raises: unreachable / no attempt
     pending."""
     before = set(sandbox.paired_clients(home))
     if not pair(pin, name, web_port):
-        raise SunshineApiError("no pairing attempt pending — start it in "
+        raise SunshineApiError("no pairing attempt pending; start it in "
                                "Moonlight first")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

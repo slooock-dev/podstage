@@ -8,7 +8,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Mouse & keyboard streaming** (Setup toggle, off by default — leave off
+- **Mouse & keyboard streaming** (Setup toggle, off by default; leave off
   for controller-only clients): pointer + keyboard injection into Big
   Picture; patched `cage` adds pointer-constraints (games lock the mouse,
   stutter-free mouse look) and keeps cursor and pointer focus inert until
