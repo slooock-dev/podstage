@@ -140,7 +140,7 @@ TEXTS: dict[str, str] = {
         "die Qualität kann bei Bewegung aber sinken.",
 
     # -- sandbox page: table + buttons ----------------------------------
-    "Client sandboxes": "Client-Sandboxen",
+    "Steam sandboxes": "Steam-Sandboxen",
     "Resolution": "Auflösung",
     "Size": "Größe",
     "New …": "Neu …",

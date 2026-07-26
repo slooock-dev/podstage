@@ -319,7 +319,7 @@ class SandboxPage(QWidget):
         root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(12)
 
-        frame, lay = card(tr("Client sandboxes"))
+        frame, lay = card(tr("Steam sandboxes"))
         self._table = QTableWidget(0, 7)
         self._table.setHorizontalHeaderLabels(
             [tr("Name"), tr("Resolution"), tr("Port"), tr("Login"),
