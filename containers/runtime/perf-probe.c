@@ -1,38 +1,30 @@
 // podstage perf probe — per-app frametimes from gamescope, for the host GUI.
 //
-// gamescope measures the presented frametime of every app it composites and
-// hands it out over its private `gamescope_control` protocol
-// (`request_app_performance_stats` → event `app_performance_stats`, protocol
-// v6, advertised as the PERF_QUERY feature). That is the same number Steam's
-// own performance overlay and mangoapp show: it comes from the compositor, so
-// it needs no GPU vendor interface, no NVML and no encoder counter — the one
-// FPS source in this stack that works identically on NVIDIA, AMD and Intel.
+// gamescope hands out the presented frametime of each app over its private
+// `gamescope_control` protocol (`request_app_performance_stats` → event
+// `app_performance_stats`, v6, PERF_QUERY feature) — the same number Steam's
+// overlay and mangoapp show. Compositor-side, so it reads identically on
+// NVIDIA, AMD and Intel, unlike any encoder counter. Three gamescope details:
 //
-// Three gamescope details this works around:
+//   * The events only fire while the `mangoapp_use_output_timing` ConVar is 0;
+//     gamescope 3.16 defaults it to 1 and then never calls
+//     wlserver_app_presented(). The entrypoint flips it via gamescopectl.
+//   * A request is one-shot (next present of that appid, then dropped), so
+//     re-arming on every event IS the sample pump — no timer polling.
+//   * Stats are keyed by Steam AppID: read from the running reaper's
+//     `SteamLaunch AppId=` (as core/monitor.py does, and as gamescope itself
+//     tags the window), with Steam's 769 armed alongside so the menu keeps
+//     reporting while a game boots.
 //
-//   * The events only fire while the `mangoapp_use_output_timing` ConVar is 0
-//     (gamescope 3.16 defaults it to 1, which routes mangoapp through output
-//     timing and skips wlserver_app_presented() entirely). The entrypoint
-//     flips it with `gamescopectl` before starting this probe.
-//   * A request is one-shot: it registers this client for the NEXT present of
-//     that appid and is then dropped. Re-arming on every event IS the sample
-//     pump; no timer polling involved.
-//   * Stats are keyed by Steam AppID, so the appid has to be known up front.
-//     It is read from the running reaper's `SteamLaunch AppId=` (same
-//     heuristic as core/monitor.py) with Steam's own 769 as the fallback, and
-//     both are kept armed so the menu still reports while a game boots.
-//
-// Aggregated samples land as JSON in the mounted sandbox HOME (PS_PERF_FILE),
-// where the host GUI polls them — the same host channel the thumbnail loop and
-// the locked client mode use. Written via rename(), so a reader never sees a
-// half-written file. A window with no presents is written as `samples: 0`
-// rather than omitted, so the host can tell "probe alive, nothing rendering"
-// from "probe gone" (file mtime).
+// Aggregates land as JSON in the mounted sandbox HOME (PS_PERF_FILE) for the
+// host GUI, written by rename() so no reader sees a half file. An idle window
+// is written as `samples: 0`, which distinguishes "nothing rendering" from
+// "probe gone" (file mtime).
 //
 // Env: PS_PERF_FILE (default $HOME/.cache/podstage/perf.json),
-//      PS_PERF_INTERVAL_MS (default 1000), PS_PERF_WAIT_S (default 180 —
-//      how long to wait for gamescope's wayland socket at session start),
-//      GAMESCOPE_WAYLAND_DISPLAY (else the gamescope-* socket is auto-found).
+//      PS_PERF_INTERVAL_MS (default 1000), PS_PERF_WAIT_S (default 180: how
+//      long to wait for gamescope's socket), GAMESCOPE_WAYLAND_DISPLAY (else
+//      the gamescope-* socket is auto-found).
 
 #define _GNU_SOURCE
 #include <dirent.h>
