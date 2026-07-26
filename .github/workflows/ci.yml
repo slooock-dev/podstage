@@ -28,6 +28,15 @@ jobs:
       - name: Test
         run: pytest -q
 
+  # The container scripts never run in CI — lint them statically so quoting
+  # or expansion mistakes fail here instead of inside a session.
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck container scripts
+        run: shellcheck containers/runtime/*.sh ui.sh
+
   # pytest runs without PyQt6, so ui/ errors stay green there — byte-compile
   # the GUI modules and boot the window offscreen once.
   gui-smoke:

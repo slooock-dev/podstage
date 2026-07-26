@@ -149,7 +149,10 @@ RUN pacman -S --noconfirm --needed gcc && \
 RUN useradd -u 1000 -m -s /bin/bash player
 
 COPY entrypoint.sh /usr/local/bin/podstage-entrypoint
-RUN chmod +x /usr/local/bin/podstage-entrypoint
+COPY runner.sh /usr/local/bin/podstage-runner
+COPY resize.sh /usr/local/bin/podstage-resize
+RUN chmod +x /usr/local/bin/podstage-entrypoint /usr/local/bin/podstage-runner \
+        /usr/local/bin/podstage-resize
 
 # Streaming ports (Moonlight): TCP 47984/47989/48010, UDP 47998-48000/48100/48200
 EXPOSE 47984/tcp 47989/tcp 48010/tcp 47998/udp 47999/udp 48000/udp 48100/udp 48200/udp

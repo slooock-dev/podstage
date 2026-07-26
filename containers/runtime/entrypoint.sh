@@ -128,16 +128,20 @@ start_seatd() {
     # "active" and wlroots would time out waiting for the session.
     SEATD_VTBOUND=0 seatd 2>&1 | sed 's/^/[seatd] /' >&2 &
     for _ in $(seq 1 30); do [ -S "$SEATD_SOCK" ] && break; sleep 0.1; done
-    [ -S "$SEATD_SOCK" ] && export LIBSEAT_BACKEND=seatd || log "(warning) seatd socket missing"
+    if [ -S "$SEATD_SOCK" ]; then
+        export LIBSEAT_BACKEND=seatd
+    else
+        log "(warning) seatd socket missing"
+    fi
 }
 
 # --- private PipeWire (audio isolation) ------------------------------------
 start_pipewire() {
     command -v pipewire >/dev/null || { log "pipewire absent — skipping audio"; return; }
     log "starting private PipeWire (isolated from any host audio)"
-    pipewire &        PW_PID=$!
-    pipewire-pulse &  PWP_PID=$!
-    wireplumber &     WP_PID=$!
+    pipewire &
+    pipewire-pulse &
+    wireplumber &
     for _ in $(seq 1 30); do
         [ -S "$XDG_RUNTIME_DIR/pipewire-0" ] && break; sleep 0.2
     done
@@ -154,31 +158,13 @@ case "$PS_MODE" in
     exit 0 ;;
 esac
 
-# --- inner runner: sizes output, backgrounds Sunshine, runs gamescope+steam -
-RUNNER=$(mktemp /tmp/ds-runner.XXXXXX.sh)
-cat > "$RUNNER" <<EOF
-#!/usr/bin/env bash
-set -uo pipefail
-# The seat shim is for cage only — gamescope/steam/sunshine must not
-# inherit it (32-bit Steam would spam ELF-class errors, and nothing
-# below cage uses libseat).
-unset LD_PRELOAD
-export HOME="$HOME"
-export XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR"
-export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
-[ -n "\${PULSE_SINK:-}" ] && export PULSE_SINK
-# Size cage's headless output to the client resolution (best-effort).
-for _ in \$(seq 1 20); do wlr-randr >/dev/null 2>&1 && break; sleep 0.2; done
-wlr-randr --output HEADLESS-1 --custom-mode ${PS_W}x${PS_H} >/dev/null 2>&1 || true
-EOF
-
-# Experimental HDR: gamescope advertises an HDR output, games see DXVK_HDR.
-# Whether the stream carries HDR depends on Sunshine and the client.
-GS_HDR_FLAGS=""
-if [ "${PS_HDR:-}" = enabled ]; then
-    GS_HDR_FLAGS="--hdr-enabled"
-    echo 'export DXVK_HDR=1' >> "$RUNNER"
-fi
+# --- runner wiring --------------------------------------------------------
+# The session logic lives in the static /usr/local/bin/podstage-runner (built
+# into the image, shellcheck-covered) — this entrypoint only assembles its
+# environment and the Sunshine config files.
+export PS_MODE PS_W PS_H PS_R PS_DYNAMIC_RES
+export PS_LAUNCH="$STEAM_LAUNCH"
+export PS_SUN_DIR=""
 
 if [ "$PS_MODE" = pipeline ] || [ "$PS_MODE" = desktop ]; then
     # Sunshine config (per-run), then background it so it inherits cage's
@@ -192,6 +178,7 @@ if [ "$PS_MODE" = pipeline ] || [ "$PS_MODE" = desktop ]; then
     SUN_STATE_DIR="$HOME/.config/podstage-sunshine"
     mkdir -p "$SUN_CONF_DIR" "$SUN_STATE_DIR"
     chmod 700 "$SUN_STATE_DIR"
+    export PS_SUN_DIR="$SUN_CONF_DIR"
     # No PS_WEB_PASS (manual run without the host runtime): use a random
     # per-sandbox password, persisted next to the pairing state so it survives
     # restarts and is readable on the host through the mounted HOME.
@@ -253,100 +240,25 @@ CONF
         printf '%s\n' "$PS_SUNSHINE_EXTRA" | tr ';' '\n' \
             >> "$SUN_CONF_DIR/sunshine.conf"
     fi
-    # Dynamic resolution via Sunshine prep-cmd (inherits cage's
-    # WAYLAND_DISPLAY): each stream start resizes cage's output to the client;
-    # the first connect additionally wakes the runner (fifo), which launches
+    # Dynamic resolution via Sunshine prep-cmd (podstage-resize, static in
+    # the image; inherits the runner env incl. WAYLAND_DISPLAY and PS_*):
+    # each stream start resizes the compositor's output to the client; the
+    # first connect additionally wakes the runner (fifo), which launches
     # gamescope at that client's WxH@R. gamescope can't resize its render
     # target later; other resolutions get scaled.
     if [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
-        MODE_FIFO="$SUN_CONF_DIR/client-mode.fifo"
         # Only the pipeline runner waits on the fifo; desktop mode resizes only.
-        [ "$PS_MODE" = pipeline ] && mkfifo "$MODE_FIFO"
-        RESIZE="$SUN_CONF_DIR/resize.sh"
-        cat > "$RESIZE" <<RESIZE_EOF
-#!/usr/bin/env bash
-# do: client resolution from Sunshine; "reset": back to the profile size.
-W=\${SUNSHINE_CLIENT_WIDTH:-}; H=\${SUNSHINE_CLIENT_HEIGHT:-}
-[ "\${1:-}" = reset ] && { W=${PS_W}; H=${PS_H}; }
-[ -n "\$W" ] && [ -n "\$H" ] || exit 0
-wlr-randr --output HEADLESS-1 --custom-mode "\${W%%.*}x\${H%%.*}" || true
-# Wake the runner waiting on the first client (no-op afterwards: without a
-# reader the timeout drops the write).
-if [ "\${1:-}" != reset ] && [ -p "$MODE_FIFO" ]; then
-    FPS=\${SUNSHINE_CLIENT_FPS:-${PS_R}}
-    W2=\${W%%.*}; H2=\${H%%.*}; FPS2=\${FPS%%.*}
-    timeout 1 bash -c "printf '%s %s %s\n' \$W2 \$H2 \$FPS2 > '$MODE_FIFO'" 2>/dev/null || true
-fi
-RESIZE_EOF
-        chmod +x "$RESIZE"
+        [ "$PS_MODE" = pipeline ] && mkfifo "$SUN_CONF_DIR/client-mode.fifo"
         printf 'global_prep_cmd = [{"do":"%s","undo":"%s reset"}]\n' \
-            "$RESIZE" "$RESIZE" >> "$SUN_CONF_DIR/sunshine.conf"
+            /usr/local/bin/podstage-resize "/usr/local/bin/podstage-resize" \
+            >> "$SUN_CONF_DIR/sunshine.conf"
     fi
     # Seed a default web-manager login headlessly so no first-run setup is needed.
     log "setting Sunshine web login ($PS_WEB_USER) + CSRF origins"
     /usr/bin/sunshine "$SUN_CONF_DIR/sunshine.conf" \
         --creds "$PS_WEB_USER" "$PS_WEB_PASS" >"$SUN_CONF_DIR/creds.log" 2>&1 || \
         log "  (warning) --creds failed; see creds.log"
-    cat >> "$RUNNER" <<EOF
-/usr/bin/sunshine "$SUN_CONF_DIR/sunshine.conf" >"$SUN_CONF_DIR/run.log" 2>&1 &
-EOF
-    # Thumbnail loop: periodically capture one frame of the cage output into
-    # the mounted HOME so the host GUI can show a live preview without
-    # entering the container. wlr-screencopy runs fine alongside Sunshine's
-    # capture client.
-    if [ "${PS_THUMBNAIL:-enabled}" != disabled ]; then
-        cat >> "$RUNNER" <<EOF
-(
-  TD="$HOME/.cache/podstage"; mkdir -p "\$TD"
-  sleep 8   # let cage/gamescope come up first
-  while :; do
-    rm -f /tmp/thumb.mp4
-    # -k is essential: on a static output wlr-screencopy delivers no frame,
-    # wf-recorder then sits in its wayland loop and never honors TERM —
-    # without the KILL fallback this loop would hang on its first iteration.
-    timeout -k 2 2 wf-recorder -y -f /tmp/thumb.mp4 >/dev/null 2>&1
-    if [ -s /tmp/thumb.mp4 ] && \\
-       ffmpeg -y -loglevel error -i /tmp/thumb.mp4 -frames:v 1 \\
-              -vf scale=640:-2 "\$TD/.thumb-tmp.png" 2>/dev/null; then
-        mv -f "\$TD/.thumb-tmp.png" "\$TD/thumb.png"
-    fi
-    sleep ${PS_THUMBNAIL_INTERVAL:-10}
-  done
-) >/dev/null 2>&1 &
-EOF
-    fi
-    if [ "$PS_MODE" = desktop ]; then
-        # No gamescope: cage displays the target directly (and provides
-        # Xwayland for it); pointer/keyboard events go straight to the app.
-        cat >> "$RUNNER" <<EOF
-exec ${STEAM_LAUNCH}
-EOF
-    elif [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
-        # Block until the first client connects, then render at its WxH@R.
-        cat >> "$RUNNER" <<EOF
-echo "[podstage] waiting for the first client (dynamic resolution)" >&2
-read -r CW CH CR < "$SUN_CONF_DIR/client-mode.fifo"
-rm -f "$SUN_CONF_DIR/client-mode.fifo"   # later connects skip the fifo write
-# The locked resolution, readable by the host GUI through the mounted HOME.
-mkdir -p "\$HOME/.cache/podstage"
-printf '%s %s %s\n' "\$CW" "\$CH" "\$CR" > "\$HOME/.cache/podstage/client-mode"
-exec gamescope --backend wayland -W "\$CW" -H "\$CH" -w "\$CW" -h "\$CH" -r "\$CR" \\
-     ${GS_HDR_FLAGS} -C 3000 --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
-EOF
-    else
-        cat >> "$RUNNER" <<EOF
-exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
-     ${GS_HDR_FLAGS} -C 3000 --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
-EOF
-    fi
-elif [ "$PS_MODE" = steam ]; then
-    # No Sunshine — just render Steam in the nested compositor (boot smoke test).
-    cat >> "$RUNNER" <<EOF
-exec gamescope --backend wayland -W ${PS_W} -H ${PS_H} -w ${PS_W} -h ${PS_H} -r ${PS_R} \\
-     ${GS_HDR_FLAGS} -C 3000 --expose-wayland --force-windows-fullscreen -e -- ${STEAM_LAUNCH}
-EOF
 fi
-chmod +x "$RUNNER"
 rm -f "$HOME/.cache/podstage/client-mode"   # stale = from a previous session
 
 start_dbus
@@ -419,7 +331,11 @@ fi
 # host runtime) — without it cage would never see devices Sunshine creates
 # mid-session, since rootless containers receive no udev uevents.
 SHIM=/usr/local/lib/podstage-seat-shim.so
-[ -e "$SHIM" ] && export LD_PRELOAD="$SHIM" || log "(warning) seat shim missing — cage will use seat0 (desktop input leaks!)"
+if [ -e "$SHIM" ]; then
+    export LD_PRELOAD="$SHIM"
+else
+    log "(warning) seat shim missing — cage will use seat0 (desktop input leaks!)"
+fi
 
 # desktop mode streams a pointer-driven UI, so show the cursor (the shim blanks
 # it by default so Sunshine's dead virtual pointer isn't burned into the
@@ -436,4 +352,4 @@ if [ "$PS_MODE" = desktop ]; then
 else
     log "launching cage (headless, seat ${PS_SEAT_NAME:-seat9}) → gamescope ${PS_W}x${PS_H}@${PS_R} → steam  [mode=$PS_MODE]"
 fi
-exec cage -d -- "$RUNNER"
+exec cage -d -- /usr/local/bin/podstage-runner
