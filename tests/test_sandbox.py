@@ -123,3 +123,34 @@ def test_clear_overlays_falls_back_to_podman_unshare(tmp_path: Path, monkeypatch
             work.chmod(0o755)
     assert calls and calls[0][:3] == ["podman", "unshare", "rm"]
     assert not root.exists()
+
+
+def test_paired_device_ids_detect_same_name_repair(tmp_path: Path):
+    _write_state(tmp_path, [{"name": "deck", "uuid": "A", "enabled": "true"}])
+    first = sandbox.paired_device_ids(tmp_path)
+    (tmp_path / sandbox.SUNSHINE_STATE).write_text(json.dumps(
+        {"root": {"named_devices": [{"name": "deck", "uuid": "B",
+                                     "enabled": "true"}]}}))
+    # Same name, fresh uuid: paired_clients() sees no change, the ids do.
+    assert sandbox.paired_clients(tmp_path) == ["deck"]
+    assert sandbox.paired_device_ids(tmp_path) - first == {"B"}
+
+
+def test_clear_overlays_reports_missing_podman(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
+    home = tmp_path / "homes" / "deck"
+    home.mkdir(parents=True)
+    root = config.overlay_root(home)
+    work = root / "lib-x" / "work" / "work"
+    work.mkdir(parents=True)
+    work.chmod(0)
+
+    def raise_fnf(cmd, **kwargs):
+        raise FileNotFoundError("podman")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", raise_fnf)
+    try:
+        with pytest.raises(RuntimeError):
+            sandbox.clear_overlays(home)
+    finally:
+        work.chmod(0o755)

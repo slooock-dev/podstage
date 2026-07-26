@@ -88,14 +88,15 @@ def pair_verified(pin: str, name: str, home: Path,
     """Submit a PIN and wait for a new device in the sandbox pairing state;
     /api/pin returns true even for a wrong PIN (the handshake fails later on
     the client). False: never completed. Raises: unreachable / no attempt
-    pending."""
-    before = set(sandbox.paired_clients(home))
+    pending. Compared by device id (uuid/cert), so a re-pairing under an
+    existing name counts as success too."""
+    before = sandbox.paired_device_ids(home)
     if not pair(pin, name, web_port):
         raise SunshineApiError("no pairing attempt pending; start it in "
                                "Moonlight first")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if set(sandbox.paired_clients(home)) - before:
+        if sandbox.paired_device_ids(home) - before:
             return True
         time.sleep(0.5)
     return False

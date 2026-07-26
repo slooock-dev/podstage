@@ -246,6 +246,7 @@ podstage session setup|start|stop|status <name>   # start: --mode desktop, --res
 podstage session pair <name> <PIN>    # complete a Moonlight pairing
 podstage session remove <name> [--data] | clear-overlay <name>
 podstage experimental [enable|disable <feature>]
+podstage config mouse-keyboard [on|off]
 podstage provision <app_id> <session>
 ```
 

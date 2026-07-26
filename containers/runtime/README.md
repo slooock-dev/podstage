@@ -122,7 +122,10 @@ undisturbed.
   relative mouse at stream start. The patched cage therefore keeps pointer
   focus and cursor invisible until deliberate mouse use (net motion >= 3 px,
   a click, or a scroll) and hides the cursor 3 s after the last use;
-  gamescope's own cursor follows via `-C 3000`.
+  gamescope's own cursor follows via `-C 3000`. Deliberate limitation:
+  absolute motion alone never activates (indistinguishable from a position
+  sync), so Moonlight's absolute-mouse mode wakes the pointer with its first
+  click or scroll.
 - **mDNS discovery.** There is no avahi in the container; discovery is
   announced host-side (open the `mdns` firewall service). Pairing by IP always
   works.

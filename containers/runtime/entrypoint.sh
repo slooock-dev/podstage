@@ -254,7 +254,8 @@ CONF
     # target later; other resolutions get scaled.
     if [ "${PS_DYNAMIC_RES:-}" = enabled ]; then
         MODE_FIFO="$SUN_CONF_DIR/client-mode.fifo"
-        mkfifo "$MODE_FIFO"
+        # Only the pipeline runner waits on the fifo; desktop mode resizes only.
+        [ "$PS_MODE" = pipeline ] && mkfifo "$MODE_FIFO"
         RESIZE="$SUN_CONF_DIR/resize.sh"
         cat > "$RESIZE" <<RESIZE_EOF
 #!/usr/bin/env bash
@@ -319,6 +320,7 @@ EOF
         cat >> "$RUNNER" <<EOF
 echo "[podstage] waiting for the first client (dynamic resolution)" >&2
 read -r CW CH CR < "$SUN_CONF_DIR/client-mode.fifo"
+rm -f "$SUN_CONF_DIR/client-mode.fifo"   # later connects skip the fifo write
 # The locked resolution, readable by the host GUI through the mounted HOME.
 mkdir -p "\$HOME/.cache/podstage"
 printf '%s %s %s\n' "\$CW" "\$CH" "\$CR" > "\$HOME/.cache/podstage/client-mode"

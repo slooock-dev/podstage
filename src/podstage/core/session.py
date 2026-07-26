@@ -205,6 +205,8 @@ class Session:
                 "before starting the stream"
             )
         opts = self._options(resolution, app=app, attach=attach, mode=mode)
+        # Stale from the previous session until the entrypoint rewrites it.
+        (self.home / ".cache/podstage/client-mode").unlink(missing_ok=True)
         self.close_host_steam()
         return runtime.start(opts)  # raises if another session already runs
 

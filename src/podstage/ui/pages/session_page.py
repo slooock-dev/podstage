@@ -479,7 +479,8 @@ class SessionPage(QWidget):
         if not running or sc is None:
             self._resolution.set(None)
             return
-        if not sc.dynamic_resolution:
+        # Desktop mode has no gamescope lock; the output follows each client.
+        if not sc.dynamic_resolution or self._mode.currentData() == "desktop":
             self._resolution.set(None if sc.is_ask() else sc.resolution)
             return
         try:

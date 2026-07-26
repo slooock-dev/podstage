@@ -45,6 +45,19 @@ def paired_clients(home: Path) -> list[str]:
             and str(d.get("enabled", "true")).lower() != "false"]
 
 
+def paired_device_ids(home: Path) -> set[str]:
+    """Stable ids of the paired devices. A pairing mints a fresh uuid/cert
+    even when the name already exists, so this detects a re-pairing that
+    paired_clients() (names only) would miss."""
+    try:
+        data = json.loads((home / SUNSHINE_STATE).read_text())
+    except (OSError, json.JSONDecodeError):
+        return set()
+    devices = data.get("root", {}).get("named_devices", [])
+    return {str(d.get("uuid") or d.get("cert") or d.get("name"))
+            for d in devices if isinstance(d, dict)}
+
+
 def is_bootstrapped(home: Path) -> bool:
     return provisioner.stream_steamapps(home).exists()
 
@@ -106,8 +119,12 @@ def clear_overlays(home: Path) -> None:
     if root.exists():
         # The kernel creates work/work owned by the container root's sub-UID;
         # deleting it needs the user namespace.
-        subprocess.run(["podman", "unshare", "rm", "-rf", "--", str(root)],
-                       capture_output=True, text=True, timeout=120, check=False)
+        try:
+            subprocess.run(["podman", "unshare", "rm", "-rf", "--", str(root)],
+                           capture_output=True, text=True, timeout=120,
+                           check=False)
+        except (OSError, subprocess.SubprocessError):
+            pass  # reported by the exists() check below
     if root.exists():
         raise RuntimeError(f"could not clear the overlay storage at {root}")
 

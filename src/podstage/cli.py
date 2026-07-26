@@ -155,13 +155,22 @@ def cmd_session_add(args: argparse.Namespace) -> int:
     elif port in used:
         print(f"port {port} is already used by another profile", file=sys.stderr)
         return 1
-    app_ids = [int(a) for a in args.apps.split(",")] if args.apps else []
+    try:
+        app_ids = [int(a) for a in args.apps.split(",") if a.strip()] if args.apps else []
+    except ValueError:
+        print(f"invalid --apps value {args.apps!r}; expected comma-separated "
+              "Steam AppIDs", file=sys.stderr)
+        return 1
     cfg.upsert(SessionConfig(name=args.name, resolution=args.resolution,
                              dynamic_resolution=not args.fixed_resolution,
                              sunshine_port_base=port, app_ids=app_ids))
     cfg.save()
-    res_note = (args.resolution if args.fixed_resolution
-                else f"client-driven, fallback {args.resolution}")
+    if args.fixed_resolution:
+        res_note = args.resolution
+    elif args.resolution == "ask":
+        res_note = "client-driven, canvas chosen at start"
+    else:
+        res_note = f"client-driven, fallback {args.resolution}"
     print(f"Session '{args.name}' created (resolution={res_note}, port={port}).")
     print(f"Next: podstage session setup {args.name}   (first Steam login)")
     return 0
@@ -176,8 +185,11 @@ def cmd_session_remove(args: argparse.Namespace) -> int:
         print(f"No session '{args.name}'.", file=sys.stderr)
         return 1
     st = runtime.status()
-    if st.running and st.client == args.name:
-        print(f"session '{args.name}' is running; stop it first", file=sys.stderr)
+    # Also block on a running container without profile attribution (started
+    # via run.sh / runtime start without --client): it may mount this HOME.
+    if st.running and st.client in (None, "", args.name):
+        print(f"a session is running (client: {st.client or 'unknown'}); "
+              "stop it first", file=sys.stderr)
         return 1
     if args.data:
         if not args.yes:
@@ -207,8 +219,11 @@ def cmd_session_clear_overlay(args: argparse.Namespace) -> int:
         print(f"No session '{args.name}'.", file=sys.stderr)
         return 1
     st = runtime.status()
-    if st.running and st.client == args.name:
-        print(f"session '{args.name}' is running; stop it first", file=sys.stderr)
+    # Also block on a running container without profile attribution (started
+    # via run.sh / runtime start without --client): it may mount this HOME.
+    if st.running and st.client in (None, "", args.name):
+        print(f"a session is running (client: {st.client or 'unknown'}); "
+              "stop it first", file=sys.stderr)
         return 1
     try:
         sandbox.clear_overlays(sc.home_dir())
@@ -304,6 +319,19 @@ def cmd_experimental(args: argparse.Namespace) -> int:
     for key, env_var in config.EXPERIMENTAL_FEATURES.items():
         state = "enabled " if cfg.experimental.get(key) else "disabled"
         print(f"  {key:20} {state}  ({env_var})")
+    return 0
+
+
+def cmd_config(args: argparse.Namespace) -> int:
+    """Get or set app settings headlessly (currently: mouse-keyboard). Same
+    store as the GUI's Setup page; applies at the next session start."""
+    cfg = _load_or_seed_config()
+    if args.value is None:
+        print("on" if cfg.mouse_keyboard else "off")
+        return 0
+    cfg.mouse_keyboard = args.value == "on"
+    cfg.save()
+    print(f"mouse-keyboard {args.value} (applies at the next session start)")
     return 0
 
 
@@ -471,6 +499,13 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("feature", nargs="?",
                     help="feature key, e.g. hdr (see 'list')")
     ex.set_defaults(func=cmd_experimental)
+
+    cf = sub.add_parser("config",
+                        help="get/set app settings (Setup-page equivalent)")
+    cf.add_argument("key", choices=["mouse-keyboard"])
+    cf.add_argument("value", nargs="?", choices=["on", "off"],
+                    help="omit to print the current state")
+    cf.set_defaults(func=cmd_config)
 
     prov = sub.add_parser("provision", help="make a Steam app available in a streaming session")
     prov.add_argument("app_id", type=int)
