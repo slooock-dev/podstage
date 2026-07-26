@@ -1,0 +1,31 @@
+# SPIKE (v0.3.0): compositor comparison — labwc vs sway vs cage.
+# Derives from the production runtime image and swaps ONLY the compositor:
+# the entrypoint's `exec cage -d -- $RUNNER` hits the wm-shim below, which
+# dispatches on PS_WM (cage|labwc|sway). Everything else (seat shim, Sunshine,
+# runner generation) stays byte-identical, so any behavior difference is the
+# compositor's.
+#
+# Build:  podman build -t podstage-spike-wm:latest containers/spike-wm/
+# Not part of the production build; delete after the spike is decided.
+
+FROM localhost/podstage-runtime:latest
+
+USER root
+
+# Full upgrade first: labwc pulls wlroots0.20, a plain -Sy install on the old
+# db would partial-upgrade. xterm/xdotool are the popup/interaction probes
+# (xdotool XTest reaches X11 clients under Xwayland — Steam's UI is X11).
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm --needed labwc sway xterm xdotool && \
+    pacman -Scc --noconfirm && \
+    setcap -r /usr/bin/sway
+# setcap -r: Arch ships sway with cap_sys_nice+ep; execing a file-caps binary
+# as non-root in the rootless user namespace fails with EPERM.
+
+# The patched cage lives at /usr/local/bin/cage (shadows /usr/bin/cage).
+# Move it aside and install the dispatcher under its name.
+RUN mv /usr/local/bin/cage /usr/local/bin/cage.real
+COPY wm-shim.sh /usr/local/bin/cage
+RUN chmod 755 /usr/local/bin/cage
+
+USER player
