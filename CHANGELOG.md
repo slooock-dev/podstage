@@ -4,7 +4,10 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-07-26
+
+Needs a runtime image rebuild (`podstage runtime build`): the cage input
+patch and the entrypoint changed.
 
 ### Added
 
@@ -210,6 +213,7 @@ Steam Deck.
   AppImage, whose bundled libva can't load the image's Mesa VAAPI driver).
   Validated on a Rembrandt iGPU; it still sees far less mileage than NVIDIA.
 
+[0.2.0]: https://github.com/slooock-dev/podstage/releases/tag/v0.2.0
 [0.1.4]: https://github.com/slooock-dev/podstage/releases/tag/v0.1.4
 [0.1.3]: https://github.com/slooock-dev/podstage/releases/tag/v0.1.3
 [0.1.2]: https://github.com/slooock-dev/podstage/releases/tag/v0.1.2
