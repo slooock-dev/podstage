@@ -106,6 +106,7 @@ _FORWARD_ENV: dict[str, str | None] = {
     "PS_DYNAMIC_RES": None,
     # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each.
     "PS_HDR": None,
+    "PS_PERF_METRICS": None,
 }
 
 
@@ -176,6 +177,28 @@ def gpu_vendor() -> str:
     return "unknown"
 
 
+# DLSS: Proton finds the Windows-side NGX DLLs relative to the loaded
+# libGLX_nvidia.so.0 (`<its dir>/nvidia/wine/nvngx.dll`, Proton's
+# find_nvidia_wine_dll_dir) and copies them into the prefix. CDI injects the
+# .so files but not those DLLs, so without this mount DLSS is silently
+# unavailable. CDI drops the libs in /usr/lib in this (Arch) image, hence the
+# fixed target.
+_NV_WINE_DIRS = (
+    Path("/usr/lib64/nvidia/wine"),                  # Fedora/Bazzite
+    Path("/usr/lib/nvidia/wine"),                    # Arch nvidia-utils
+    Path("/usr/lib/x86_64-linux-gnu/nvidia/wine"),   # Debian/Ubuntu
+)
+NV_WINE_TARGET = "/usr/lib/nvidia/wine"
+
+
+def nvidia_wine_dll_dir() -> Path | None:
+    """Host dir holding nvngx.dll (None if the driver ships none)."""
+    for d in _NV_WINE_DIRS:
+        if (d / "nvngx.dll").exists():
+            return d
+    return None
+
+
 def nvidia_lib32_mounts() -> list[str]:
     """-v flags for the host's 32-bit NVIDIA GL stack + Xwayland GLX module."""
     flags: list[str] = []
@@ -190,6 +213,9 @@ def nvidia_lib32_mounts() -> list[str]:
     glx = _glxserver()
     if glx is not None:
         flags += ["-v", f"{glx}:/usr/lib/xorg/modules/extensions/{glx.name}:ro"]
+    wine = nvidia_wine_dll_dir()
+    if wine is not None:
+        flags += ["-v", f"{wine}:{NV_WINE_TARGET}:ro"]
     return flags
 
 
@@ -374,6 +400,10 @@ def container_flags(library_paths: list[Path], home_dir: Path,
         # readable through the mount even rootless — only uevents are not).
         "--tmpfs", "/run:rw,mode=1777",
         "-v", "/run/udev:/run/udev:ro",
+        # Host tmpfs for volatile container→host data (the perf probe's fps
+        # sample): keeps a per-second rewrite off the disk, unlike the mounted
+        # HOME. The entrypoint only uses it when the mount is present.
+        "-v", f"{config.RUNTIME_SHARE_DIR}:/run/podstage",
     ]
     if vendor not in MESA_VENDORS:
         args += nvidia_lib32_mounts()
@@ -565,6 +595,8 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     library_paths = shared_library_paths(opts.home_dir, provision=opts.provision,
                                          app_ids=opts.app_ids)
     ensure_overlay_dirs(opts.home_dir, library_paths)
+    # Bind source must exist, or podman creates it root-owned in the tmpfs.
+    config.RUNTIME_SHARE_DIR.mkdir(parents=True, exist_ok=True)
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)
     publisher_pid = None
     if opts.mode in ("pipeline", "desktop"):

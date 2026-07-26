@@ -37,7 +37,6 @@ TEXTS: dict[str, str] = {
         "Die Vorschau erscheint hier während des Streams.",
     "Preview is off": "Vorschau ist aus",
     "waiting for preview …": "warte auf Vorschau …",
-    "Load": "Auslastung",
     "Stream quality": "Stream-Qualität",
     "NVENC preset": "NVENC-Preset",
     "Apply live": "Live übernehmen",
@@ -340,6 +339,13 @@ TEXTS: dict[str, str] = {
     "end to end.":
         "gamescope meldet einen HDR-Output und Spiele sehen DXVK_HDR. "
         "Ende-zu-Ende unverifiziert.",
+    "Performance metrics (FPS)": "Performance-Metriken (FPS)",
+    "A probe in the container asks gamescope for the presented frametime of "
+    "the running game and shows FPS on the Session page. Works on any GPU "
+    "vendor; needs a gamescope with the perf query (3.16+).":
+        "Eine Sonde im Container fragt gamescope nach der Bildzeit des "
+        "laufenden Spiels und zeigt FPS auf der Session-Seite. Läuft mit jedem "
+        "GPU-Hersteller; braucht ein gamescope mit Perf-Query (3.16+).",
     "Mouse && keyboard input": "Maus- && Tastatur-Eingabe",
     "Streams the client's mouse and keyboard into the session; games can "
     "lock the pointer for mouse look.":

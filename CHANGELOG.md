@@ -4,6 +4,31 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Needs a runtime image rebuild (`podstage runtime build`): the image gained the
+perf probe and the entrypoint starts it.
+
+### Added
+
+- **Game FPS on the Session page** (experimental, *Performance metrics* in
+  Setup, off by default): a wayland client in the container asks gamescope for
+  the presented frametime of the focused app (`gamescope_control` perf query,
+  the source Steam's own overlay uses) and drops the current rate into a tmpfs
+  both sides share for the GUI. Compositor-side, so it reads the same on
+  NVIDIA, AMD and Intel, unlike the NVIDIA-only encoder counters. The Load card
+  is now the Performance card; the FPS row exists only while the feature is on.
+  Needs gamescope 3.16+; the entrypoint flips its `mangoapp_use_output_timing`
+  ConVar, without which no perf query is answered.
+
+### Fixed
+
+- **DLSS was unavailable in the sandbox.** CDI injects `libnvidia-ngx.so` but
+  not the Windows-side NGX DLLs, which Proton looks for next to the loaded
+  `libGLX_nvidia.so.0` and copies into the prefix. The host's `nvidia/wine`
+  directory is now mounted there; `doctor` reports it when the driver ships
+  none.
+
 ## [0.2.1] - 2026-07-26
 
 Host-side only: the runtime image stays as it is.

@@ -120,6 +120,24 @@ RUN pacman -S --noconfirm --needed gcc && \
     rm /tmp/seat-shim.c && \
     pacman -Rns --noconfirm gcc && pacman -Scc --noconfirm
 
+# Perf probe: a tiny wayland client that asks gamescope for the presented
+# frametime of the focused app (gamescope_control v6 / PERF_QUERY) and drops
+# aggregated FPS into the mounted HOME for the host GUI. Compositor-side, so
+# the numbers are identical on NVIDIA/AMD/Intel — unlike encoder counters.
+# The protocol XML is vendored from gamescope (MIT); wayland-scanner ships with
+# the already-installed wayland package.
+COPY perf-probe.c gamescope-control.xml /tmp/perf/
+RUN pacman -S --noconfirm --needed gcc && \
+    cd /tmp/perf && \
+    wayland-scanner client-header gamescope-control.xml \
+        gamescope-control-client-protocol.h && \
+    wayland-scanner private-code gamescope-control.xml \
+        gamescope-control-protocol.c && \
+    gcc -O2 -Wall -Wextra -Werror -o /usr/local/bin/podstage-perf-probe \
+        perf-probe.c gamescope-control-protocol.c -I. -lwayland-client && \
+    cd / && rm -rf /tmp/perf && \
+    pacman -Rns --noconfirm gcc && pacman -Scc --noconfirm
+
 # --- unprivileged runtime user ---------------------------------------------
 RUN useradd -u 1000 -m -s /bin/bash player
 

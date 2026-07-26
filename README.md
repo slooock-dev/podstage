@@ -82,7 +82,8 @@ host GUI.
   normal. Only the game files are shared instead of duplicated, and where the
   sandboxes live is configurable.
 - **Management GUI.** One-click setup fixes, sandbox management, live
-  CPU/GPU/VRAM/encoder telemetry, a stream preview, pairing, and encoder
+  CPU/GPU/VRAM/encoder telemetry plus game FPS straight from the compositor
+  (experimental), a stream preview, pairing, and encoder
   settings that follow the GPU. English and German, following the system
   locale (override in Setup or via `PS_LANG`).
 

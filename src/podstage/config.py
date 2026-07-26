@@ -28,6 +28,10 @@ HOME = Path.home()
 CONFIG_DIR = _xdg("XDG_CONFIG_HOME", HOME / ".config") / "podstage"
 DATA_DIR = _xdg("XDG_DATA_HOME", HOME / ".local/share") / "podstage"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
+# Volatile session data the container hands the host (the probe's 1 Hz fps
+# sample). XDG_RUNTIME_DIR is a tmpfs, so a per-second rewrite never touches
+# the disk; DATA_DIR only as a fallback for sessions without one.
+RUNTIME_SHARE_DIR = _xdg("XDG_RUNTIME_DIR", DATA_DIR / "runtime") / "podstage"
 
 # Streaming Steam instances get their own $HOME so a second Steam can run
 # concurrently with the desktop one (Steam is single-instance per HOME). These
@@ -106,6 +110,7 @@ def sunshine_web_credentials() -> tuple[str, str]:
 # labels live in ui/pages/setup_page.py. Add/remove features HERE.
 EXPERIMENTAL_FEATURES: dict[str, str] = {
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
+    "perf_metrics": "PS_PERF_METRICS",       # in-container FPS probe (gamescope)
 }
 
 

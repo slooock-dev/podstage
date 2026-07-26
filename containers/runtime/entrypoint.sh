@@ -24,6 +24,8 @@
 #   PS_DYNAMIC_RES  enabled (default): pipeline starts on first connect at that
 #       client's WxH@R, locked until restart. disabled: fixed PS_RESOLUTION.
 #   PS_HDR            enabled → gamescope HDR output + DXVK_HDR (experimental)
+#   PS_PERF_METRICS   enabled → perf probe: per-app frametimes from gamescope
+#       into $HOME/.cache/podstage/perf.json for the host GUI (experimental)
 #   PS_FAKE_UDEV      1 → seat-shim fakes the udev hotplug monitor for cage
 #       (required rootless: the kernel delivers no uevents into a user
 #        namespace; the host runtime always sets it)
@@ -354,6 +356,46 @@ start_seatd
 # client connects — starting with zero input devices is fine.
 export WLR_BACKENDS=headless,libinput
 export WLR_LIBINPUT_NO_DEVICES=1
+
+# --- perf probe: per-app FPS for the host GUI ------------------------------
+# Frametimes come from the compositor (gamescope_control PERF_QUERY), not from
+# an encoder counter, so the numbers are identical on NVIDIA/AMD/Intel. Two
+# preconditions: gamescope's wayland socket has to exist (it appears a few
+# seconds into the session, hence the wait), and gamescope only answers a perf
+# query while mangoapp_use_output_timing is 0 — its 3.16 default of 1 routes
+# app frametimes through output timing and skips the event entirely.
+# Deliberately started BEFORE the LD_PRELOAD export below: the seat shim is for
+# cage only. desktop mode has no gamescope in the chain, so nothing to ask.
+if [ "${PS_PERF_METRICS:-}" = enabled ] && [ "$PS_MODE" != desktop ]; then
+    # /run/podstage is the host's tmpfs (mounted by core/runtime.py), so the
+    # per-second rewrite costs no disk I/O; without the mount fall back to the
+    # HOME cache, which every host channel here uses.
+    if [ -d /run/podstage ]; then
+        export PS_PERF_FILE="${PS_PERF_FILE:-/run/podstage/perf.json}"
+    else
+        export PS_PERF_FILE="${PS_PERF_FILE:-$HOME/.cache/podstage/perf.json}"
+    fi
+    rm -f "$PS_PERF_FILE"   # stale = from a previous session
+    (
+        for _ in $(seq 1 "${PS_PERF_WAIT_S:-180}"); do
+            for sock in "$XDG_RUNTIME_DIR"/gamescope-*; do
+                case "$sock" in *.lock | *-ei) continue ;; esac
+                [ -S "$sock" ] || continue
+                GAMESCOPE_WAYLAND_DISPLAY=${sock##*/}
+                break 2
+            done
+            sleep 1
+        done
+        if [ -z "${GAMESCOPE_WAYLAND_DISPLAY:-}" ]; then
+            log "(warning) perf probe: no gamescope socket appeared — no FPS"
+            exit 0
+        fi
+        export GAMESCOPE_WAYLAND_DISPLAY
+        gamescopectl mangoapp_use_output_timing 0 >/dev/null 2>&1 || \
+            log "(warning) perf probe: gamescopectl failed — FPS may stay empty"
+        exec podstage-perf-probe
+    ) &
+fi
 
 # cage runs on the streaming seat (default seat9) via the libseat_seat_name
 # shim, so it only ever opens Sunshine's virtual devices — never the host

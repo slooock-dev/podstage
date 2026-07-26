@@ -244,7 +244,11 @@ class SessionPage(QWidget):
         return frame
 
     def _build_load_card(self) -> QWidget:
-        frame, lay = card(tr("Load"))
+        frame, lay = card(tr("Performance"))
+        # Game FPS from the in-container probe (experimental feature, off by
+        # default): the row only exists while it is switched on.
+        self._fps = InfoRow("FPS")
+        lay.addWidget(self._fps)
         self._cpu = Meter("CPU")
         self._ram = Meter("RAM")
         self._gpu = Meter("GPU")
@@ -468,6 +472,7 @@ class SessionPage(QWidget):
                        (tr("Big Picture / menu") if snap.running else None))
         self._update_resolution(snap.running)
         self._backend.set(snap.detail if snap.running else None)
+        self._update_perf(snap)
         self._update_load(snap)
         self._update_thumbnail(snap.running)
 
@@ -543,6 +548,14 @@ class SessionPage(QWidget):
         if self._state.property("state") != state:  # repolish only on change
             self._state.setProperty("state", state)
             theme.repolish(self._state)
+
+    def _update_perf(self, snap: monitor.Snapshot) -> None:
+        """Current FPS from the in-container probe. The row is hidden unless
+        the experimental feature is on, so nobody stares at a permanent dash."""
+        self._fps.setVisible(
+            self._ctx.config.experimental.get("perf_metrics", False))
+        perf = snap.perf if snap.running else None
+        self._fps.set(f"{perf.fps:.0f} fps" if perf and perf.fps else None)
 
     def _update_load(self, snap: monitor.Snapshot) -> None:
         c = snap.container
