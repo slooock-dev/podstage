@@ -268,7 +268,12 @@ def check_gpu() -> CheckResult:
                     "--format=csv,noheader"])
     if rc != 0:
         return CheckResult("gpu/encoder", Status.WARN, "nvidia-smi failed")
-    return CheckResult("gpu/encoder", Status.OK, out.splitlines()[0].strip())
+    detail = out.splitlines()[0].strip()
+    # DLSS needs the driver's wine NGX DLLs mounted in; without them Proton
+    # just runs without it (no error anywhere).
+    if runtime.nvidia_wine_dll_dir() is None:
+        detail += "; no nvngx.dll on the host — no DLSS in the sandbox"
+    return CheckResult("gpu/encoder", Status.OK, detail)
 
 
 def check_steam() -> CheckResult:

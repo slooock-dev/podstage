@@ -37,12 +37,6 @@ TEXTS: dict[str, str] = {
         "Die Vorschau erscheint hier während des Streams.",
     "Preview is off": "Vorschau ist aus",
     "waiting for preview …": "warte auf Vorschau …",
-    "no frames": "keine Frames",
-    "Waiting for the performance probe …": "Warte auf die Performance-Sonde …",
-    "FPS needs 'Performance metrics' on the Setup page (applies at the next "
-    "session start).":
-        "FPS braucht »Performance-Metriken« auf der Setup-Seite (gilt ab dem "
-        "nächsten Session-Start).",
     "Stream quality": "Stream-Qualität",
     "NVENC preset": "NVENC-Preset",
     "Apply live": "Live übernehmen",

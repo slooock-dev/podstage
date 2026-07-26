@@ -64,13 +64,10 @@ def _write_perf(home, payload: str, age_s: float = 0.0):
 def test_game_perf_reads_probe_sample(tmp_path):
     _write_perf(tmp_path, json.dumps({
         "schema": 1, "source": "gamescope_control", "ts": 1, "app_id": 620,
-        "samples": 59, "fps": 59.4, "frametime_ms": 16.83,
-        "frametime_max_ms": 21.4, "fps_1pct_low": 46.7}))
+        "samples": 59, "fps": 59.4}))
     perf = monitor.game_perf(tmp_path)
     assert perf is not None
-    assert perf.app_id == 620 and perf.samples == 59
-    assert perf.fps == 59.4 and perf.frametime_ms == 16.83
-    assert perf.frametime_max_ms == 21.4 and perf.fps_1pct_low == 46.7
+    assert perf.app_id == 620 and perf.samples == 59 and perf.fps == 59.4
 
 
 def test_game_perf_idle_window_is_not_an_error(tmp_path):
@@ -96,8 +93,7 @@ def test_game_perf_missing_or_garbage(tmp_path):
 
 
 def test_game_perf_ignores_nonsense_values(tmp_path):
-    _write_perf(tmp_path, json.dumps({"app_id": 0, "samples": 3, "fps": 0,
-                                      "frametime_ms": -1}))
+    _write_perf(tmp_path, json.dumps({"app_id": 0, "samples": 3, "fps": 0}))
     perf = monitor.game_perf(tmp_path)
     assert perf is not None
-    assert perf.app_id is None and perf.fps is None and perf.frametime_ms is None
+    assert perf.app_id is None and perf.fps is None

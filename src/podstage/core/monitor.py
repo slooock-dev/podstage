@@ -9,10 +9,10 @@ Everything here is readable as the plain user (the container is rootless):
     (``gpu_busy_percent`` + ``mem_info_vram_*``) on AMD, or one
     ``intel_gpu_top -J`` sample on Intel (needs a readable GPU PMU).
   * The active game from the running ``SteamLaunch AppId=`` process.
-  * Game FPS/frametimes come from the in-container perf probe, which asks
-    gamescope for the presented frametime of the focused app and drops
-    aggregates into the mounted sandbox HOME. Compositor-side, so it is the one
-    performance number that reads the same on NVIDIA, AMD and Intel.
+  * Game FPS comes from the in-container perf probe, which asks gamescope for
+    the presented frametime of the focused app and drops the current rate into
+    the mounted sandbox HOME. Compositor-side, so it is the one performance
+    number that reads the same on NVIDIA, AMD and Intel.
 
 There is deliberately NO connected-client detection: Sunshine's media path is
 unconnected UDP (no socket peer to read), and every heuristic tried around
@@ -311,16 +311,6 @@ class GamePerf:
     app_id: int | None = None
     samples: int = 0
     fps: float | None = None
-    frametime_ms: float | None = None
-    frametime_max_ms: float | None = None
-    fps_1pct_low: float | None = None
-
-
-def _perf_float(data: dict, key: str) -> float | None:
-    value = data.get(key)
-    if isinstance(value, (int, float)) and value > 0:
-        return float(value)
-    return None
 
 
 def game_perf(home_dir: Path | None = None) -> GamePerf | None:
@@ -345,13 +335,11 @@ def game_perf(home_dir: Path | None = None) -> GamePerf | None:
         return None
     app_id = data.get("app_id")
     samples = data.get("samples")
+    fps = data.get("fps")
     return GamePerf(
         app_id=app_id if isinstance(app_id, int) and app_id > 0 else None,
         samples=samples if isinstance(samples, int) and samples > 0 else 0,
-        fps=_perf_float(data, "fps"),
-        frametime_ms=_perf_float(data, "frametime_ms"),
-        frametime_max_ms=_perf_float(data, "frametime_max_ms"),
-        fps_1pct_low=_perf_float(data, "fps_1pct_low"),
+        fps=float(fps) if isinstance(fps, (int, float)) and fps > 0 else None,
     )
 
 

@@ -16,10 +16,10 @@
 //     tags the window), with Steam's 769 armed alongside so the menu keeps
 //     reporting while a game boots.
 //
-// Aggregates land as JSON in the mounted sandbox HOME (PS_PERF_FILE) for the
-// host GUI, written by rename() so no reader sees a half file. An idle window
-// is written as `samples: 0`, which distinguishes "nothing rendering" from
-// "probe gone" (file mtime).
+// The current fps (averaged over the last second) lands as JSON in the mounted
+// sandbox HOME (PS_PERF_FILE) for the host GUI, written by rename() so no
+// reader sees a half file. An idle window is written as `samples: 0`, which
+// distinguishes "nothing rendering" from "probe gone" (file mtime).
 //
 // Env: PS_PERF_FILE (default $HOME/.cache/podstage/perf.json),
 //      PS_PERF_INTERVAL_MS (default 1000), PS_PERF_WAIT_S (default 180: how
@@ -46,9 +46,8 @@
 #include "gamescope-control-client-protocol.h"
 
 #define STEAM_APPID       769u   // Steam's own windows (Big Picture / menu)
-#define RING              1024u  // frametime samples kept (~17 s at 60 fps)
-#define FPS_WINDOW_NS     1000000000ull  // fps + average frametime
-#define LOW_WINDOW_NS     5000000000ull  // p99 frametime / 1% low
+#define RING              512u   // frametime samples kept (2 s at 240 fps)
+#define FPS_WINDOW_NS     1000000000ull  // averaging window behind the fps
 #define GAME_FRESH_NS     1500000000ull  // game slot preferred while this new
 #define SLOT_GAME         0
 #define SLOT_STEAM        1
@@ -117,12 +116,6 @@ static size_t slot_window(const struct slot *s, uint64_t now, uint64_t window_ns
     return n;
 }
 
-static int cmp_u64(const void *a, const void *b)
-{
-    uint64_t x = *(const uint64_t *)a, y = *(const uint64_t *)b;
-    return x < y ? -1 : (x > y ? 1 : 0);
-}
-
 // -- appid discovery ---------------------------------------------------------
 
 // The Steam AppID currently launched in the sandbox, from the reaper's
@@ -183,9 +176,8 @@ static void mkdir_parents(const char *file_path)
 
 static void write_json(const char *path, const struct slot *s, uint64_t now)
 {
-    uint64_t fps_win[RING], low_win[RING];
+    uint64_t fps_win[RING];
     size_t n_fps = slot_window(s, now, FPS_WINDOW_NS, fps_win, RING);
-    size_t n_low = slot_window(s, now, LOW_WINDOW_NS, low_win, RING);
 
     char tmp[PATH_MAX + 8];
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
@@ -198,24 +190,12 @@ static void write_json(const char *path, const struct slot *s, uint64_t now)
                "\"app_id\":%u,\"samples\":%zu",
             (long long)time(NULL), s->app_id, n_fps);
     if (n_fps > 0) {
-        uint64_t sum = 0, worst = 0;
-        for (size_t i = 0; i < n_fps; i++) {
+        uint64_t sum = 0;
+        for (size_t i = 0; i < n_fps; i++)
             sum += fps_win[i];
-            if (fps_win[i] > worst)
-                worst = fps_win[i];
-        }
         double avg_ns = (double)sum / (double)n_fps;
-        fprintf(f, ",\"fps\":%.1f,\"frametime_ms\":%.2f,\"frametime_max_ms\":%.2f",
-                avg_ns > 0 ? 1e9 / avg_ns : 0.0, avg_ns / 1e6, (double)worst / 1e6);
-        // 1% low over the longer window: the 99th-percentile frametime as an
-        // fps, which is what overlays label "1% low" (stutter, not average).
-        if (n_low >= 20) {
-            qsort(low_win, n_low, sizeof(low_win[0]), cmp_u64);
-            uint64_t p99 = low_win[(size_t)((double)(n_low - 1) * 0.99)];
-            if (p99 > 0)
-                fprintf(f, ",\"fps_1pct_low\":%.1f,\"frametime_p99_ms\":%.2f",
-                        1e9 / (double)p99, (double)p99 / 1e6);
-        }
+        if (avg_ns > 0)
+            fprintf(f, ",\"fps\":%.1f", 1e9 / avg_ns);
     }
     fprintf(f, "}\n");
     fclose(f);

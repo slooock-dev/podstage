@@ -12,14 +12,22 @@ perf probe and the entrypoint starts it.
 ### Added
 
 - **Game FPS on the Session page** (experimental, *Performance metrics* in
-  Setup): a wayland client in the container asks gamescope for the presented
-  frametime of the focused app (`gamescope_control` perf query, the source
-  Steam's own overlay uses) and drops FPS, frametimes and the 1% low into the
+  Setup, off by default): a wayland client in the container asks gamescope for
+  the presented frametime of the focused app (`gamescope_control` perf query,
+  the source Steam's own overlay uses) and drops the current rate into the
   mounted HOME for the GUI. Compositor-side, so it reads the same on NVIDIA,
-  AMD and Intel, unlike the NVIDIA-only encoder counters. The Load card became
-  the Performance card: FPS as a one-minute graph plus a frametime row above
-  the existing meters. Needs gamescope 3.16+; the entrypoint flips its
-  `mangoapp_use_output_timing` ConVar, without which no perf query is answered.
+  AMD and Intel, unlike the NVIDIA-only encoder counters. The Load card is now
+  the Performance card; the FPS row exists only while the feature is on. Needs
+  gamescope 3.16+; the entrypoint flips its `mangoapp_use_output_timing`
+  ConVar, without which no perf query is answered.
+
+### Fixed
+
+- **DLSS was unavailable in the sandbox.** CDI injects `libnvidia-ngx.so` but
+  not the Windows-side NGX DLLs, which Proton looks for next to the loaded
+  `libGLX_nvidia.so.0` and copies into the prefix. The host's `nvidia/wine`
+  directory is now mounted there; `doctor` reports it when the driver ships
+  none.
 
 ## [0.2.1] - 2026-07-26
 
