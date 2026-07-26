@@ -165,10 +165,10 @@ def cmd_session_add(args: argparse.Namespace) -> int:
                              dynamic_resolution=not args.fixed_resolution,
                              sunshine_port_base=port, app_ids=app_ids))
     cfg.save()
-    if args.fixed_resolution:
+    if args.resolution == "ask":
+        res_note = "chosen at start (dynamic resolution off)"
+    elif args.fixed_resolution:
         res_note = args.resolution
-    elif args.resolution == "ask":
-        res_note = "client-driven, canvas chosen at start"
     else:
         res_note = f"client-driven, fallback {args.resolution}"
     print(f"Session '{args.name}' created (resolution={res_note}, port={port}).")

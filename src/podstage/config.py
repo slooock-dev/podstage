@@ -179,6 +179,12 @@ class SessionConfig:
     # preview. Applied at container start via PS_THUMBNAIL(_INTERVAL).
     preview_interval_s: int = 10
 
+    def __post_init__(self) -> None:
+        # "ask" is an explicit resolution choice at start; the dynamic
+        # override would make that choice meaningless.
+        if self.resolution == "ask":
+            self.dynamic_resolution = False
+
     def is_ask(self) -> bool:
         """True for an "ask" profile (resolution chosen at start, not fixed)."""
         return self.resolution == "ask"

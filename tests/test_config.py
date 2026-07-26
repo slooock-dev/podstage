@@ -23,6 +23,14 @@ def test_ask_profile():
     assert ask.dimensions("1920x1080@60") == (1920, 1080, 60)
 
 
+def test_ask_profile_forces_fixed_resolution():
+    # "ask" means the resolution is chosen explicitly at start; the dynamic
+    # override would make that choice meaningless.
+    assert SessionConfig(name="s", resolution="ask").dynamic_resolution is False
+    assert SessionConfig(name="s", resolution="ask",
+                         dynamic_resolution=True).dynamic_resolution is False
+
+
 def test_dynamic_resolution_default_and_roundtrip(tmp_path: Path):
     # Default on, also for configs written before the field existed.
     assert SessionConfig(name="s").dynamic_resolution is True

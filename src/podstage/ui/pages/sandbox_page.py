@@ -87,7 +87,6 @@ class ProfileDialog(QDialog):
         self._resolution.currentTextChanged.connect(self._sync_custom)
         form.addRow(tr("Resolution"), self._resolution)
         form.addRow("", self._custom)
-        self._sync_custom(self._resolution.currentText())
 
         self._dynamic = QCheckBox(tr("Follow the client's resolution"))
         self._dynamic.setToolTip(tr(
@@ -96,6 +95,7 @@ class ProfileDialog(QDialog):
             "fallback. Off: always render at the profile resolution."))
         self._dynamic.setChecked(existing.dynamic_resolution if existing else True)
         form.addRow("", self._dynamic)
+        self._sync_custom(self._resolution.currentText())
 
         self._port = QSpinBox()
         self._port.setRange(1024, 64000)
@@ -112,6 +112,11 @@ class ProfileDialog(QDialog):
 
     def _sync_custom(self, choice: str) -> None:
         self._custom.setVisible(choice == self._custom_label)
+        # "ask" is an explicit fixed choice at start (config enforces this).
+        ask = choice == self._pick_label
+        self._dynamic.setEnabled(not ask)
+        if ask:
+            self._dynamic.setChecked(False)
 
     def _build_games(self, existing) -> QWidget:
         """A self-contained games picker: an 'all' toggle above a filterable,

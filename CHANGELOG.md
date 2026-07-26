@@ -30,7 +30,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   resized. Per-profile toggle (Sandboxes dialog / `session add
   --fixed-resolution`), state visible in the sandbox table; the Session page
   shows the locked client resolution, or that the session still waits for
-  the first client; the experimental toggle is gone.
+  the first client; the experimental toggle is gone. "Pick at startup"
+  profiles are always fixed (the choice would be meaningless otherwise).
 - First use seeds one generic profile (`sandbox_steam`) instead of two.
 
 ### Fixed
