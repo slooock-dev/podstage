@@ -56,43 +56,31 @@ host GUI.
 ## Features
 
 - **Headless isolated session.** `cage` → `gamescope` (Vulkan) → Steam
-  `-gamepadui`, captured by a bundled Sunshine (wlr screencopy, hardware encode
-  via NVENC or VAAPI). No window on the host, no DRM output.
-- **Built for Steam, gamepad first.** The streamed session is Big Picture;
-  Steam Input works natively. Optional mouse & keyboard streaming (off by
-  default, incl. in-game pointer lock via a patched `cage`; the cursor only
-  shows around actual mouse use); an experimental
-  desktop mode streams the Steam desktop UI. Non-Steam launchers aren't
-  wired up. gamescope + Big Picture is the settled architecture: Steam forces
-  the gamepad UI under gamescope (not overridable), and gamescope provides the
-  Xwayland environment, fullscreen forcing and resolution scaling the pipeline
-  builds on; the desktop mode drops gamescope and stays experimental for
-  exactly that reason.
+  `-gamepadui`, captured by a bundled Sunshine (wlr screencopy, hardware
+  encode via NVENC or VAAPI). No window on the host, no DRM output.
+- **Built for Steam, gamepad first.** The streamed session is Big Picture and
+  Steam Input works natively. Mouse and keyboard streaming is optional (off by
+  default, with in-game pointer lock). An experimental desktop mode streams the
+  Steam desktop UI instead. Non-Steam launchers aren't wired up.
 - **Resolution follows the client.** The pipeline launches on the first
-  Moonlight connect and renders at that client's resolution and refresh
-  rate (locked until the session restarts; other clients get scaled).
-  Per-profile toggle on the Sandboxes page, on by default; off renders at
-  the profile resolution.
+  Moonlight connect and renders at that client's resolution and refresh rate,
+  locked until the session restarts. Per-profile toggle, on by default.
 - **Shared games, separate prefixes.** Game files are symlinked from your main
-  Steam libraries, so nothing is downloaded twice. The libraries are mounted
-  as read-only overlay lowerdirs: a session can never modify host game
-  files; its writes land in per-sandbox overlay storage. Prefixes and saves
-  stay per sandbox.
-- **Input isolation.** The client's virtual input devices live on a dedicated
-  seat (udev rules plus a small `libseat` shim) and never touch the desktop.
-  This isolates input routing, not malware: processes running as your user
-  keep their usual `uinput` access, as on any gaming distro.
+  Steam libraries, so nothing downloads twice, and mounted as read-only
+  overlay lowerdirs, so a session cannot modify host game files. Prefixes,
+  saves and a session's own writes stay in per-sandbox storage.
 - **Sandboxed Steam instances.** Each sandbox is an isolated `$HOME` with its
-  own Steam login and settings, created and logged in from the GUI. Keep as
-  many as you like (one streams at a time) and pick one per stream.
+  own login, Steam settings and Steam Input layout, set up from the GUI. Keep
+  as many as you like; one streams at a time.
+- **Input isolation.** The client's virtual input devices live on a dedicated
+  seat and never touch the desktop, in either direction. That isolates input
+  routing, not malware (see [Security notes](#security-notes)).
 - **Light host footprint.** No daemons, no system services, nothing running as
-  root; the container runs as your user. Setup installs two udev rules, the
-  only sudo podstage ever needs.
+  root. Setup installs two udev rules, the only sudo podstage ever needs.
 - **Management GUI.** One-click setup fixes, sandbox management, live
   CPU/GPU/VRAM/encoder telemetry, a stream preview, pairing, and encoder
-  quality settings that follow the GPU (NVENC or VAAPI).
-- **English and German UI**, following the system locale (override in the
-  Setup panel or via `PS_LANG`).
+  settings that follow the GPU. English and German, following the system
+  locale (override in Setup or via `PS_LANG`).
 
 ## Requirements
 
@@ -171,6 +159,11 @@ flowchart LR
 - The client's virtual input devices live on a dedicated seat and stay
   isolated from the desktop in both directions.
 - The container runs as your user.
+- gamescope plus Big Picture is settled, not a placeholder: Steam forces the
+  gamepad UI under gamescope (not overridable), and gamescope provides the
+  Xwayland environment, fullscreen forcing and resolution scaling that the rest
+  of the pipeline builds on. Desktop mode drops gamescope and stays
+  experimental for exactly that reason.
 
 What is baked into the image vs. mounted at runtime, the exact run flags, and
 how input hotplug works inside the container is documented in
