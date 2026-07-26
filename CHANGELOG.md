@@ -18,11 +18,22 @@ perf probe and the entrypoint starts it.
   both sides share for the GUI. Compositor-side, so it reads the same on
   NVIDIA, AMD and Intel, unlike the NVIDIA-only encoder counters. The Load card
   is now the Performance card; the FPS row exists only while the feature is on.
-  Needs gamescope 3.16+; the entrypoint flips its `mangoapp_use_output_timing`
-  ConVar, without which no perf query is answered.
+  gamescope reports a frametime only for a new present, so a static Big Picture
+  page reads "no new frames" rather than a rate. Needs gamescope 3.16+; the
+  entrypoint flips its `mangoapp_use_output_timing` ConVar, without which no
+  perf query is answered.
 
 ### Fixed
 
+- **Big Picture lost its gamepad navigation** after a game exited (and
+  occasionally right after session start): controller input still arrived but no
+  element could be focused, until holding B opened the side menu. Diagnosed live
+  — gamescope's focus, the X input focus and Steam's own `STEAM_INPUT_FOCUS` all
+  point at the right window, and a dump before and after the B workaround is
+  identical, so the stuck state is inside Steam's UI and invisible from outside.
+  Dropping the X input focus and handing it straight back heals it, which a new
+  watchdog in the container now does whenever gamescope hands the focus back to
+  Steam. `PS_FOCUS_NUDGE=disabled` turns it off.
 - **DLSS was unavailable in the sandbox.** CDI injects `libnvidia-ngx.so` but
   not the Windows-side NGX DLLs, which Proton looks for next to the loaded
   `libGLX_nvidia.so.0` and copies into the prefix. The host's `nvidia/wine`

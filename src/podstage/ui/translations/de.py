@@ -37,6 +37,7 @@ TEXTS: dict[str, str] = {
         "Die Vorschau erscheint hier während des Streams.",
     "Preview is off": "Vorschau ist aus",
     "waiting for preview …": "warte auf Vorschau …",
+    "no new frames": "keine neuen Frames",
     "Stream quality": "Stream-Qualität",
     "NVENC preset": "NVENC-Preset",
     "Apply live": "Live übernehmen",

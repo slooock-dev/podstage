@@ -555,7 +555,15 @@ class SessionPage(QWidget):
         self._fps.setVisible(
             self._ctx.config.experimental.get("perf_metrics", False))
         perf = snap.perf if snap.running else None
-        self._fps.set(f"{perf.fps:.0f} fps" if perf and perf.fps else None)
+        if perf is None:
+            self._fps.set(None)
+        elif perf.fps:
+            self._fps.set(f"{perf.fps:.0f} fps")
+        else:
+            # gamescope reports a frametime only for a genuinely new present, so
+            # a static Big Picture page yields nothing. That is a state, not a
+            # missing reading, and a bare dash reads like a broken probe.
+            self._fps.set(tr("no new frames"))
 
     def _update_load(self, snap: monitor.Snapshot) -> None:
         c = snap.container

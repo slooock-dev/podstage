@@ -104,6 +104,9 @@ _FORWARD_ENV: dict[str, str | None] = {
     "PS_THUMBNAIL_INTERVAL": None,
     # Entrypoint default enabled; forwarded only to opt out (=disabled).
     "PS_DYNAMIC_RES": None,
+    # Big Picture focus watchdog: on by default, forwarded only to opt out.
+    "PS_FOCUS_NUDGE": None,
+    "PS_FOCUS_NUDGE_DELAYS": None,
     # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each.
     "PS_HDR": None,
     "PS_PERF_METRICS": None,
