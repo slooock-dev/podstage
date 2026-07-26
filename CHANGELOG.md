@@ -25,6 +25,15 @@ perf probe and the entrypoint starts it.
 
 ### Fixed
 
+- **Big Picture lost its gamepad navigation** after a game exited (and
+  occasionally right after session start): controller input still arrived but no
+  element could be focused, until holding B opened the side menu. Diagnosed live
+  — gamescope's focus, the X input focus and Steam's own `STEAM_INPUT_FOCUS` all
+  point at the right window, and a dump before and after the B workaround is
+  identical, so the stuck state is inside Steam's UI and invisible from outside.
+  Dropping the X input focus and handing it straight back heals it, which a new
+  watchdog in the container now does whenever gamescope hands the focus back to
+  Steam. `PS_FOCUS_NUDGE=disabled` turns it off.
 - **DLSS was unavailable in the sandbox.** CDI injects `libnvidia-ngx.so` but
   not the Windows-side NGX DLLs, which Proton looks for next to the loaded
   `libGLX_nvidia.so.0` and copies into the prefix. The host's `nvidia/wine`

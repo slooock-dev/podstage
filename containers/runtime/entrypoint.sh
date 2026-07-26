@@ -25,7 +25,11 @@
 #       client's WxH@R, locked until restart. disabled: fixed PS_RESOLUTION.
 #   PS_HDR            enabled → gamescope HDR output + DXVK_HDR (experimental)
 #   PS_PERF_METRICS   enabled → perf probe: per-app frametimes from gamescope
-#       into $HOME/.cache/podstage/perf.json for the host GUI (experimental)
+#       into /run/podstage/perf.json for the host GUI (experimental)
+#   PS_FOCUS_NUDGE    disabled → no focus watchdog (default on: re-focuses
+#       Steam when gamescope hands it the focus, heals Big Picture navigation)
+#   PS_FOCUS_NUDGE_DELAYS  ms offsets of the nudges after that switch
+#       (default "500,2500")
 #   PS_FAKE_UDEV      1 → seat-shim fakes the udev hotplug monitor for cage
 #       (required rootless: the kernel delivers no uevents into a user
 #        namespace; the host runtime always sets it)
@@ -356,6 +360,17 @@ start_seatd
 # client connects — starting with zero input devices is fine.
 export WLR_BACKENDS=headless,libinput
 export WLR_LIBINPUT_NO_DEVICES=1
+
+# --- focus nudge: heal Big Picture's gamepad navigation --------------------
+# After a game exits, Steam's UI sometimes takes controller input but focuses
+# nothing (the Play button never highlights). Nothing outside Steam is wrong or
+# even observable in that state — dropping the X input focus and handing it
+# straight back fixes it, which is what this watchdog does whenever gamescope
+# hands the focus back to Steam. desktop mode has no gamescope and no Big
+# Picture, so nothing to watch. Details in focus-nudge.c.
+if [ "${PS_FOCUS_NUDGE:-}" != disabled ] && [ "$PS_MODE" != desktop ]; then
+    podstage-focus-nudge &
+fi
 
 # --- perf probe: per-app FPS for the host GUI ------------------------------
 # Frametimes come from the compositor (gamescope_control PERF_QUERY), not from
