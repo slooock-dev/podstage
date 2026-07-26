@@ -4,6 +4,24 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-07-26
+
+Needs a runtime image rebuild (`podstage runtime build`): both container helpers
+changed.
+
+### Fixed
+
+- **The focus watchdog never ran at session start.** It identifies gamescope's X
+  display by `GAMESCOPE_FOCUSED_APP`, so the first value it ever sees is already
+  the final one and no switch was left to react to — only game exits were
+  covered. It now nudges on attach when Steam already holds the focus, and every
+  trigger fires a third time after 10 s, since Steam keeps moving its focused
+  window while the UI settles.
+- **Both helpers gave up after three minutes** waiting for gamescope. With
+  dynamic resolution gamescope only starts once the first client connects, which
+  can be much later, so the wait is now unbounded (`PS_FOCUS_NUDGE_WAIT_S` and
+  `PS_PERF_WAIT_S` bound it again).
+
 ## [0.2.2] - 2026-07-26
 
 Needs a runtime image rebuild (`podstage runtime build`): the image gained the

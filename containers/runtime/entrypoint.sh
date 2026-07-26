@@ -28,8 +28,8 @@
 #       into /run/podstage/perf.json for the host GUI (experimental)
 #   PS_FOCUS_NUDGE    disabled → no focus watchdog (default on: re-focuses
 #       Steam when gamescope hands it the focus, heals Big Picture navigation)
-#   PS_FOCUS_NUDGE_DELAYS  ms offsets of the nudges after that switch
-#       (default "500,2500")
+#   PS_FOCUS_NUDGE_DELAYS  ms offsets of the nudges per trigger
+#       (default "500,2500,10000")
 #   PS_FAKE_UDEV      1 → seat-shim fakes the udev hotplug monitor for cage
 #       (required rootless: the kernel delivers no uevents into a user
 #        namespace; the host runtime always sets it)

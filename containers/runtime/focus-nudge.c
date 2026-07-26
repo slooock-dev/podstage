@@ -12,15 +12,20 @@
 // navigation focus. Dropping the X input focus and handing it straight back
 // does heal it (verified on the broken state), which is all this does.
 //
-// Trigger: gamescope publishes GAMESCOPE_FOCUSED_APP on its Xwayland root.
-// Whenever that becomes Steam's 769 — session start, and every game exit — the
-// nudge runs twice with a short gap. Since the state is invisible, this is
-// deliberately blind: a nudge that was not needed re-focuses the same window
-// and changes nothing. It stays inside the first seconds after the switch so it
-// can never interrupt someone typing in Steam's search field.
+// Trigger: gamescope publishes GAMESCOPE_FOCUSED_APP on its Xwayland root. Every
+// game exit shows up as that property switching back to Steam's 769; session
+// start does NOT, because the display is identified by the very same property,
+// so its first observed value is already the final one — that case is nudged on
+// attach instead. Three shots per trigger (500 ms, 2.5 s, 10 s), because Steam
+// moves its focused window around for a while and the UI settles late. Since the
+// state is invisible, this is deliberately blind: a nudge that was not needed
+// re-focuses the same window and changes nothing. All shots stay inside the
+// first ten seconds, so none can interrupt someone typing in Steam's search.
 //
-// Env: PS_FOCUS_NUDGE=disabled turns it off, PS_FOCUS_NUDGE_DELAYS overrides
-//      the millisecond offsets after the switch (default "500,2500").
+// Env: PS_FOCUS_NUDGE=disabled turns it off, PS_FOCUS_NUDGE_DELAYS overrides the
+//      millisecond offsets (default "500,2500,10000"), PS_FOCUS_NUDGE_WAIT_S
+//      bounds the wait for gamescope's display — unbounded by default, since
+//      with dynamic resolution gamescope only starts on the first client.
 
 #define _GNU_SOURCE
 #include <stdarg.h>
@@ -92,6 +97,20 @@ static void nudge(Display *dpy)
     logf_nudge("nudged focus on window 0x%lx", (unsigned long)focus);
 }
 
+// Each offset is measured from the trigger; nudge() itself costs 250 ms, which
+// is accounted for so the offsets stay honest. The later shots matter because
+// Steam moves its focused window around in the first seconds.
+static void run_nudges(Display *dpy, const long *delays, size_t count)
+{
+    long waited = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (delays[i] > waited)
+            sleep_ms(delays[i] - waited);
+        waited = (delays[i] > waited ? delays[i] : waited) + 250;
+        nudge(dpy);
+    }
+}
+
 // gamescope's WM runs on the Xwayland display whose root carries its atoms; as
 // a sibling process we have no DISPLAY, so probe the sockets it created.
 static Display *open_gamescope_display(Atom *out_atom, Window *out_root,
@@ -114,7 +133,7 @@ static Display *open_gamescope_display(Atom *out_atom, Window *out_root,
             }
             XCloseDisplay(dpy);
         }
-        if (elapsed >= wait_s)
+        if (wait_s > 0 && elapsed >= wait_s)
             return NULL;
         sleep(1);
     }
@@ -135,14 +154,26 @@ static size_t parse_delays(const char *spec, long *out, size_t max_out)
     return n;
 }
 
+static int env_int(const char *name, int fallback)
+{
+    const char *value = getenv(name);
+    if (value == NULL || !*value)
+        return fallback;
+    char *end = NULL;
+    long parsed = strtol(value, &end, 10);
+    if (end == value || parsed <= 0 || parsed > 86400)
+        return fallback;
+    return (int)parsed;
+}
+
 int main(void)
 {
     const char *off = getenv("PS_FOCUS_NUDGE");
     if (off != NULL && strcmp(off, "disabled") == 0)
         return 0;
 
-    long delays[MAX_DELAYS] = { 500, 2500 };
-    size_t delay_count = 2;
+    long delays[MAX_DELAYS] = { 500, 2500, 10000 };
+    size_t delay_count = 3;
     const char *spec = getenv("PS_FOCUS_NUDGE_DELAYS");
     if (spec != NULL && *spec) {
         size_t parsed = parse_delays(spec, delays, MAX_DELAYS);
@@ -152,13 +183,21 @@ int main(void)
 
     Atom atom = None;
     Window root = None;
-    Display *dpy = open_gamescope_display(&atom, &root, 180);
+    Display *dpy = open_gamescope_display(&atom, &root, env_int("PS_FOCUS_NUDGE_WAIT_S", 0));
     if (dpy == NULL) {
         logf_nudge("no gamescope X display appeared — not watching");
         return 3;
     }
     XSelectInput(dpy, root, PropertyChangeMask);
     long previous = focused_app(dpy, root, atom);
+
+    // The display is found BY that property, so at startup its value is already
+    // the final one and there is no switch left to observe — the session-start
+    // case has to be nudged here or never.
+    if (previous == (long)STEAM_APPID) {
+        logf_nudge("Steam already holds the focus at startup");
+        run_nudges(dpy, delays, delay_count);
+    }
 
     for (;;) {
         XEvent ev;
@@ -168,16 +207,10 @@ int main(void)
         long current = focused_app(dpy, root, atom);
         if (current == previous)
             continue;
-        // Steam took the focus back: session start, or a game just exited.
+        // Steam took the focus back: a game just exited.
         if (current == (long)STEAM_APPID) {
             logf_nudge("focus switched %ld -> %ld", previous, current);
-            long waited = 0;
-            for (size_t i = 0; i < delay_count; i++) {
-                if (delays[i] > waited)
-                    sleep_ms(delays[i] - waited);
-                waited = (delays[i] > waited ? delays[i] : waited) + 250;
-                nudge(dpy);  // costs 250 ms itself, counted above
-            }
+            run_nudges(dpy, delays, delay_count);
         }
         previous = current;
     }

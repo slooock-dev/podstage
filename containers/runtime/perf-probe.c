@@ -23,9 +23,9 @@
 // (file mtime).
 //
 // Env: PS_PERF_FILE (default $HOME/.cache/podstage/perf.json),
-//      PS_PERF_INTERVAL_MS (default 1000), PS_PERF_WAIT_S (default 180: how
-//      long to wait for gamescope's socket), GAMESCOPE_WAYLAND_DISPLAY (else
-//      the gamescope-* socket is auto-found).
+//      PS_PERF_INTERVAL_MS (default 1000), PS_PERF_WAIT_S (bound on the wait
+//      for gamescope's socket, unbounded by default),
+//      GAMESCOPE_WAYLAND_DISPLAY (else the gamescope-* socket is auto-found).
 
 #define _GNU_SOURCE
 #include <dirent.h>
@@ -327,7 +327,7 @@ static struct wl_display *connect_with_wait(int wait_s)
                 return display;
             }
         }
-        if (elapsed >= wait_s)
+        if (wait_s > 0 && elapsed >= wait_s)
             return NULL;
         sleep(1);
     }
@@ -362,7 +362,9 @@ int main(void)
         snprintf(out_path, sizeof(out_path), "%s/.cache/podstage/perf.json", home);
     }
     int interval_ms = env_int("PS_PERF_INTERVAL_MS", 1000);
-    int wait_s = env_int("PS_PERF_WAIT_S", 180);
+    // Unbounded by default: with dynamic resolution gamescope only starts once
+    // the first client connects, which can be minutes after the container.
+    int wait_s = env_int("PS_PERF_WAIT_S", 0);
 
     struct wl_display *display = connect_with_wait(wait_s);
     if (!display) {
