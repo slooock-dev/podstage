@@ -245,6 +245,7 @@ podstage runtime build             # (re)build the runtime image
 podstage runtime start|stop|status # drive the container directly (by HOME dir)
 podstage session list
 podstage session add <name> [--resolution R] [--port N] [--apps ID,…] [--fixed-resolution]
+podstage session login <name>        # streamed first login (Big Picture sign-in)
 podstage session setup|start|stop|status <name>   # start: --resolution, --app
 podstage session pair <name> <PIN>    # complete a Moonlight pairing
 podstage session remove <name> [--data] | clear-overlay <name>
@@ -257,11 +258,11 @@ podstage provision <app_id> <session>
 `podstage runtime start --home homes/deck --resolution 1280x800@60` is what
 `containers/runtime/run.sh` wraps.
 
-Everything works headless, including the first Steam login: a fresh sandbox
-started with `podstage runtime start` boots into Big Picture's sign-in over
-the stream (QR code via the Steam Mobile App, or on-screen keyboard). The
-guided `session setup` flow still opens the sandbox Steam visibly on the
-host; a first-class streamed-login command is on the roadmap.
+Everything works headless, including the first Steam login: `session login`
+boots a fresh sandbox into Big Picture's sign-in over the stream (QR code via
+the Steam Mobile App, or on-screen keyboard); Steam bootstraps entirely
+in-container. `session setup` still opens the sandbox Steam visibly on the
+host, for settings Big Picture does not expose.
 
 ## Portability
 
@@ -351,15 +352,14 @@ the NVIDIA CDI spec) are kept unless `--all`, since other software uses them too
 ## Roadmap
 
 Landed on the 0.3 branch: labwc replaces the cage kiosk as the session
-compositor, and the doctor covers custom-port firewall rules. A desktop mode
-for playing was tried and cut; podstage stays focused on orchestrating the
-sandboxed Big Picture session.
+compositor, the streamed first login (`session login` / the GUI's "Streamed
+login": Big Picture sign-in over the stream, QR code included), and the
+doctor covers custom-port firewall rules. A desktop mode for playing was
+tried and cut; podstage stays focused on orchestrating the sandboxed Big
+Picture session.
 
 Planned for 0.3:
 
-- Streamed first Steam login as a first-class flow (CLI command + GUI
-  button). The mechanism is proven end to end: a fresh sandbox boots to Big
-  Picture's sign-in in the stream, QR login included.
 - Mount non-Steam game/launcher directories into the session, started from
   Big Picture via non-Steam shortcuts.
 - Hide the streamed cursor when idle (the compositor's cursor has no

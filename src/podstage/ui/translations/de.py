@@ -167,12 +167,37 @@ TEXTS: dict[str, str] = {
     "✓ logged in": "✓ eingeloggt",
     "— empty": "— leer",
     "✗ no login": "✗ kein Login",
-    "Setup: 'Start Steam login' opens the isolated Steam visibly on the "
-    "desktop. Log in there (Steam Guard), then close Steam; the game library "
-    "is provisioned automatically.":
-        "Einrichtung: »Steam-Login starten« öffnet das isolierte Steam sichtbar "
-        "auf dem Desktop. Dort einloggen (Steam Guard), dann Steam schließen; "
-        "die Spiele-Bibliothek wird automatisch provisioniert.",
+    "Setup: 'Streamed login' signs in over the stream (QR code, no "
+    "window on the host). 'Start Steam login' opens the isolated "
+    "Steam visibly on the desktop instead, useful for settings Big "
+    "Picture does not expose. Either way the game library is "
+    "provisioned automatically afterwards.":
+        "Einrichtung: »Gestreamter Login« loggt sich über den Stream ein "
+        "(QR-Code, kein Fenster auf dem Host). »Steam-Login starten« öffnet "
+        "stattdessen das isolierte Steam sichtbar auf dem Desktop, nützlich "
+        "für Einstellungen, die Big Picture nicht anbietet. In beiden Fällen "
+        "wird die Spiele-Bibliothek danach automatisch provisioniert.",
+    "Streamed login": "Gestreamter Login",
+    "Boots this sandbox into Big Picture's Steam sign-in over the "
+    "stream (QR code via the Steam Mobile App, or the on-screen "
+    "keyboard). No window opens on the host.":
+        "Startet diese Sandbox direkt in Steams Big-Picture-Anmeldung über "
+        "den Stream (QR-Code per Steam-Mobile-App oder Bildschirmtastatur). "
+        "Auf dem Host öffnet sich kein Fenster.",
+    "The sandbox\n{home}\nboots into Big Picture's Steam sign-in over "
+    "the stream: connect with Moonlight and log in with the QR code "
+    "(Steam Mobile App) or the on-screen keyboard.\n\nContinue?":
+        "Die Sandbox\n{home}\nstartet in Steams Big-Picture-Anmeldung über "
+        "den Stream: mit Moonlight verbinden und per QR-Code (Steam-Mobile-"
+        "App) oder Bildschirmtastatur einloggen.\n\nFortfahren?",
+    "Starting login session …": "Starte Login-Session …",
+    "Login session failed: {msg}": "Login-Session fehlgeschlagen: {msg}",
+    "Login session running: connect with Moonlight and sign in. "
+    "Stop the session on the Session page when you are done; the "
+    "next regular start provisions the game library.":
+        "Login-Session läuft: mit Moonlight verbinden und einloggen. "
+        "Danach die Session auf der Session-Seite stoppen; der nächste "
+        "normale Start provisioniert die Spiele-Bibliothek.",
 
     # -- sandbox page: profile dialog -----------------------------------
     "Edit profile": "Profil bearbeiten",

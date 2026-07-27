@@ -352,14 +352,21 @@ class SandboxPage(QWidget):
             "(game updates re-apply in the next session). Host libraries and "
             "the sandbox HOME are untouched."))
         self._clear_overlay_btn.clicked.connect(self._on_clear_overlay)
+        self._stream_login_btn = QPushButton(tr("Streamed login"))
+        self._stream_login_btn.setProperty("primary", True)
+        self._stream_login_btn.setToolTip(tr(
+            "Boots this sandbox into Big Picture's Steam sign-in over the "
+            "stream (QR code via the Steam Mobile App, or the on-screen "
+            "keyboard). No window opens on the host."))
+        self._stream_login_btn.clicked.connect(self._on_stream_login)
         self._login_btn = QPushButton(tr("Start Steam login"))
-        self._login_btn.setProperty("primary", True)
         self._login_btn.clicked.connect(self._on_bootstrap)
         buttons.addWidget(new_btn)
         buttons.addWidget(edit_btn)
         buttons.addWidget(self._delete_btn)
         buttons.addWidget(self._clear_overlay_btn)
         buttons.addStretch(1)
+        buttons.addWidget(self._stream_login_btn)
         buttons.addWidget(self._login_btn)
         lay.addLayout(buttons)
 
@@ -370,9 +377,11 @@ class SandboxPage(QWidget):
         root.addWidget(frame)
 
         hint = QLabel(tr(
-            "Setup: 'Start Steam login' opens the isolated Steam visibly on the "
-            "desktop. Log in there (Steam Guard), then close Steam; the game "
-            "library is provisioned automatically."))
+            "Setup: 'Streamed login' signs in over the stream (QR code, no "
+            "window on the host). 'Start Steam login' opens the isolated "
+            "Steam visibly on the desktop instead, useful for settings Big "
+            "Picture does not expose. Either way the game library is "
+            "provisioned automatically afterwards."))
         hint.setProperty("muted", True)
         hint.setWordWrap(True)
         root.addWidget(hint)
@@ -538,6 +547,48 @@ class SandboxPage(QWidget):
         self._clear_overlay_btn.setEnabled(True)
         self._status.setText(msg if ok else tr("Error: {msg}", msg=msg))
         self.refresh()
+
+    # -- streamed login (Big Picture sign-in over the stream) ------------
+    def _on_stream_login(self) -> None:
+        sc = self._selected()
+        if sc is None:
+            self._status.setText(tr("No profile selected."))
+            return
+        if self._steam_proc is not None:
+            self._status.setText(tr("A Steam login is already running."))
+            return
+        if runtime.status().running:
+            self._status.setText(tr("Stop the running streaming session first; "
+                                    "Steam can only run once."))
+            return
+        body = tr(
+            "The sandbox\n{home}\nboots into Big Picture's Steam sign-in over "
+            "the stream: connect with Moonlight and log in with the QR code "
+            "(Steam Mobile App) or the on-screen keyboard.\n\nContinue?",
+            home=sc.home_dir())
+        answer = QMessageBox.question(self, tr("Streamed login"), body)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        session = Session(sc)
+        self._stream_login_btn.setEnabled(False)
+        self._status.setText(tr("Starting login session …"))
+
+        def _launch() -> str:
+            session.login()
+            return "started"
+
+        start_action(self._pool, _launch, f"Streamed login {sc.name}",
+                     self._on_stream_login_started)
+
+    def _on_stream_login_started(self, ok: bool, msg: str) -> None:
+        self._stream_login_btn.setEnabled(True)
+        if not ok:
+            self._status.setText(tr("Login session failed: {msg}", msg=msg))
+            return
+        self._status.setText(tr(
+            "Login session running: connect with Moonlight and sign in. "
+            "Stop the session on the Session page when you are done; the "
+            "next regular start provisions the game library."))
 
     # -- bootstrap (first-time Steam login) ------------------------------
     def _on_bootstrap(self) -> None:

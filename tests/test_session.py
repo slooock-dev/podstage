@@ -55,6 +55,40 @@ def test_start_refuses_while_sandbox_steam_open(monkeypatch):
         s.start()
 
 
+def test_login_skips_gates_and_provisioning(tmp_path, monkeypatch):
+    """The streamed login must start a completely fresh sandbox (no
+    bootstrap, no Steam login) and must not provision into the empty HOME."""
+    from podstage.core import runtime
+
+    sc = SessionConfig(name="fresh", home=str(tmp_path / "fresh"))
+    s = Session(sc)
+    monkeypatch.setattr(s, "sandbox_steam_running", lambda: False)
+    monkeypatch.setattr(s, "close_host_steam", lambda timeout=20: None)
+    captured = {}
+
+    def fake_start(opts):
+        captured["opts"] = opts
+        return runtime.RuntimeStatus(running=True)
+
+    monkeypatch.setattr(runtime, "start", fake_start)
+    st = s.login()
+    assert st.running
+    opts = captured["opts"]
+    assert opts.provision is False
+    assert opts.mode == "pipeline"
+    assert (tmp_path / "fresh").is_dir()   # HOME created for the volume mount
+
+
+def test_login_refuses_while_sandbox_steam_open(tmp_path, monkeypatch):
+    import pytest
+
+    sc = SessionConfig(name="fresh", home=str(tmp_path / "fresh"))
+    s = Session(sc)
+    monkeypatch.setattr(s, "sandbox_steam_running", lambda: True)
+    with pytest.raises(RuntimeError, match="still open"):
+        s.login()
+
+
 def test_close_sandbox_steam_without_binary(monkeypatch):
     import shutil
 

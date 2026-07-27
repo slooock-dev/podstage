@@ -262,6 +262,29 @@ def cmd_session_start(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_session_login(args: argparse.Namespace) -> int:
+    """Streamed Steam login: boot the sandbox into Big Picture's sign-in
+    over the stream (QR code or on-screen keyboard), no window on the host.
+    Works for a completely fresh sandbox (Steam bootstraps in-container)."""
+    s = _resolve_session(args.name)
+    if s is None:
+        return 1
+    try:
+        s.login(resolution=args.resolution)
+    except (RuntimeError, ValueError) as e:
+        print(f"login start failed: {e}", file=sys.stderr)
+        return 1
+    port = s.cfg.sunshine_port_base
+    print(f"Login session for '{args.name}' started (container podstage-runtime).")
+    print("  Connect with Moonlight; Big Picture shows the Steam sign-in")
+    print("  (QR code via the Steam Mobile App, or the on-screen keyboard).")
+    print(f"  First connect? Pair at https://localhost:{port + 1} or: "
+          f"podstage session pair {args.name} <PIN>")
+    print(f"  Afterwards: podstage session stop {args.name}  (the next regular "
+          "start provisions the library)")
+    return 0
+
+
 def cmd_session_pair(args: argparse.Namespace) -> int:
     """Complete a Moonlight pairing (verified against the sandbox pairing
     state; see sunshine_api.pair_verified)."""
@@ -560,6 +583,7 @@ def build_parser() -> argparse.ArgumentParser:
         "add": cmd_session_add,
         "remove": cmd_session_remove,
         "setup": cmd_session_setup,
+        "login": cmd_session_login,
         "start": cmd_session_start,
         "stop": cmd_session_stop,
         "status": cmd_session_status,
@@ -579,6 +603,9 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--mode", default="pipeline",
                             choices=["pipeline", "desktop", "steam", "probe", "shell"],
                             help="container mode (default: pipeline)")
+        if action == "login":
+            sp.add_argument("--resolution", metavar="WxH@R",
+                            help="resolution (required for a 'pick at startup' profile)")
         if action == "pair":
             sp.add_argument("pin", help="4-digit PIN shown by Moonlight")
             sp.add_argument("--device",

@@ -208,6 +208,29 @@ class Session:
             print(f"Stream with: podstage session start {self.cfg.name}")
         return rc
 
+    def login(self, resolution: str | None = None) -> runtime.RuntimeStatus:
+        """Start the session for a streamed Steam login (first or repeat).
+
+        Unlike ``start`` this skips the bootstrap/login gates: a fresh
+        sandbox bootstraps Steam entirely in-container and boots into Big
+        Picture's sign-in over the stream (QR code via the Steam Mobile App,
+        or the on-screen keyboard). Provisioning is skipped, the sandbox
+        library does not exist yet; the next regular ``start`` provisions.
+        The visible host login (``setup``) stays available for settings Big
+        Picture does not expose.
+        """
+        if self.sandbox_steam_running():
+            raise RuntimeError(
+                "the sandbox Steam is still open on the desktop; close it "
+                "before starting the streamed login"
+            )
+        self.home.mkdir(parents=True, exist_ok=True)
+        opts = self._options(resolution)
+        opts.provision = False
+        (self.home / ".cache/podstage/client-mode").unlink(missing_ok=True)
+        self.close_host_steam()
+        return runtime.start(opts)  # raises if another session already runs
+
     def start(self, resolution: str | None = None, *, app: str = "",
               attach: bool = False,
               mode: str = "pipeline") -> runtime.RuntimeStatus:
