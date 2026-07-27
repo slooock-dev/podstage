@@ -163,8 +163,8 @@ class Session:
             if self.app_config().mouse_keyboard:
                 env["PS_MOUSE_INPUT"] = "enabled"
         else:
-            # moonshine advertises itself over its own mDNS responder.
-            env["PS_MOONSHINE_NAME"] = self.cfg.name
+            # The advertised name comes from runtime.container_env for both
+            # backends (Backend.advertised_name), so it is not set here.
             # Only forwarded when set, so an untouched profile keeps
             # moonshine's own defaults rather than ours.
             if self.cfg.moonshine_fec_percent >= 0:

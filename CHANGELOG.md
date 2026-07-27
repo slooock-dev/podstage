@@ -109,6 +109,14 @@ entrypoints and the container helpers changed.
 
 ### Fixed
 
+- **A profile's two backends are two hosts in the client now.** Sunshine
+  announced the fixed string "podstage" for every profile while moonshine
+  announced the bare profile name, so nothing on the client said which backend
+  a host was, even though the two keep separate pairings and a client paired to
+  one is not paired to the other. Both announce `<profile> (<backend>)` now,
+  from one place (`Backend.advertised_name`), and the CLI and the pairing
+  dialog name the host to pick. Existing Sunshine pairings survive the rename,
+  Moonlight matches hosts by their server UUID.
 - **The focus watchdog no longer knocks on the host's X server.** It probes
   `:0`..`:9` for gamescope's display, and with `--network host` the abstract
   socket namespace is shared, so `:0` reached the host's X server and was

@@ -59,6 +59,7 @@ class Backend:
     derives_from  image this one is built FROM, so a build can bring the base
                   up first; None for a self-contained image
     port_env      container env var carrying the Moonlight base port
+    name_env      container env var carrying the advertised session name
     web_port_off  offset of a management web UI from the base port; None for
                   a backend without one
     host_mdns     needs runtime.start_publisher (the host's avahi) to be
@@ -82,6 +83,7 @@ class Backend:
     src_subdir: str
     derives_from: str | None
     port_env: str
+    name_env: str
     web_port_off: int | None
     host_mdns: bool
     live_config: bool
@@ -93,6 +95,17 @@ class Backend:
     def web_port(self, base: int) -> int | None:
         return None if self.web_port_off is None else base + self.web_port_off
 
+    def advertised_name(self, profile: str = "") -> str:
+        """What Moonlight shows for this profile on this backend.
+
+        The backend belongs in the name because the two are separate servers
+        with separate pairings, kept in different state files: a client paired
+        to a profile's Sunshine session is NOT paired to its moonshine one.
+        Two entries called the same thing would be indistinguishable in the
+        client, and the wrong one silently fails to connect.
+        """
+        return f"{profile or 'podstage'} ({self.label})"
+
 
 SUNSHINE = Backend(
     name="sunshine",
@@ -101,6 +114,7 @@ SUNSHINE = Backend(
     src_subdir="containers/runtime",
     derives_from=None,
     port_env="PS_SUNSHINE_PORT",
+    name_env="PS_SUNSHINE_NAME",
     web_port_off=1,          # Sunshine's web UI, 47990 by default
     host_mdns=True,          # no avahi in the container
     live_config=True,        # POST /api/config + /api/restart
@@ -119,6 +133,7 @@ MOONSHINE = Backend(
     # rootless user, and Steam/gamescope/the focus-nudge binary come along.
     derives_from=SUNSHINE.image,
     port_env="PS_MOONSHINE_PORT",
+    name_env="PS_MOONSHINE_NAME",
     web_port_off=None,       # config.toml on disk, no management UI
     host_mdns=False,         # built-in mDNS responder (--network host)
     live_config=False,       # config changes need a session restart

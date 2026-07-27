@@ -23,6 +23,7 @@
 #       delegates cursor drawing to labwc and never clears it on its internal
 #       idle-hide, so the shim hides and restores the outer image itself.
 #   PS_SUNSHINE_PORT  base port                                    (default 47989)
+#   PS_SUNSHINE_NAME  name Moonlight lists this session as         (default podstage)
 #   PS_WEB_USER / PS_WEB_PASS   Sunshine web-manager login
 #       (normally passed in by the host runtime; unset PS_WEB_PASS falls back
 #        to a random per-sandbox password persisted in the mounted HOME —
@@ -245,7 +246,7 @@ JSON
     MOUSE_DEFAULT=disabled
     [ "$PS_MODE" = desktop ] && MOUSE_DEFAULT=enabled
     cat > "$SUN_CONF_DIR/sunshine.conf" <<CONF
-sunshine_name = podstage
+sunshine_name = ${PS_SUNSHINE_NAME:-podstage}
 port = $PS_SUNSHINE_PORT
 encoder = ${PS_ENCODER:-nvenc}
 capture = wlr

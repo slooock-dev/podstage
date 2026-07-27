@@ -437,6 +437,25 @@ def test_backends_share_everything_that_is_not_backend_specific(monkeypatch):
             assert env.get(key) == val, (opts.backend, key)
 
 
+def test_the_advertised_name_carries_the_backend():
+    """Both backends are separate servers with separate pairings, so a client
+    must be able to tell a profile's two sessions apart. Before this, Sunshine
+    announced the constant "podstage" for every profile while moonshine
+    announced the bare profile name."""
+    assert backends.SUNSHINE.advertised_name("deck") == "deck (Sunshine)"
+    assert backends.MOONSHINE.advertised_name("deck") == "deck (moonshine)"
+    assert backends.SUNSHINE.advertised_name() == "podstage (Sunshine)"
+    for opts, key, want in ((_opts(client="deck"), "PS_SUNSHINE_NAME", "deck (Sunshine)"),
+                            (_ms(client="deck"), "PS_MOONSHINE_NAME", "deck (moonshine)")):
+        assert runtime.container_env(opts, LIBS, vendor="nvidia")[key] == want
+
+
+def test_the_advertised_name_can_still_be_pinned(monkeypatch):
+    monkeypatch.setenv("PS_MOONSHINE_NAME", "living room")
+    env = runtime.container_env(_ms(client="deck"), LIBS, vendor="nvidia")
+    assert env["PS_MOONSHINE_NAME"] == "living room"
+
+
 def test_web_port_only_exists_for_sunshine():
     assert _opts(stream_port=48989).web_port == 48990
     assert _ms(stream_port=48989).web_port is None
@@ -453,15 +472,19 @@ def test_start_skips_the_host_publisher_for_moonshine(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime, "shared_library_paths",
                         lambda home, provision=True, app_ids=None: [])
     monkeypatch.setattr(runtime, "start_publisher",
-                        lambda **kw: started.append(kw) or 4242)
+                        lambda *a, **kw: started.append((a, kw)) or 4242)
     monkeypatch.setattr(runtime, "save_state", lambda *a: None)
     monkeypatch.setattr(runtime, "_run", lambda argv, timeout=15: (0, ""))
     monkeypatch.setattr(config, "RUNTIME_SHARE_DIR", tmp_path / "share")
 
     runtime.start(_ms(home_dir=tmp_path / "home", provision=False))
     assert started == []
-    runtime.start(_opts(home_dir=tmp_path / "home", provision=False))
-    assert started == [{"port": runtime.DEFAULT_STREAM_PORT}]
+    runtime.start(_opts(home_dir=tmp_path / "home", provision=False,
+                        client="deck"))
+    # The name a client lists it as carries the backend, so a profile's two
+    # backends never show up as the same host (with different pairings).
+    assert started == [(("deck (Sunshine)",),
+                        {"port": runtime.DEFAULT_STREAM_PORT})]
 
 
 def test_start_refuses_an_unbuilt_backend_image(tmp_path, monkeypatch):

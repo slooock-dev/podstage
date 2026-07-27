@@ -203,6 +203,7 @@ is the same either way.
 | encode | NVENC / VAAPI | Vulkan Video |
 | GPU | every GPU podstage supports | NVIDIA RTX, AMD RDNA2+, Intel Arc only |
 | discovery | host avahi | built-in mDNS |
+| name in the client | `<profile> (Sunshine)` | `<profile> (moonshine)` |
 | pairing | web UI or CLI, TLS + login | CLI only, plain HTTP, no auth |
 | quality settings | encoder presets in the GUI, applied live | error correction, applied at the next start |
 | keyboard layout | host default | per profile (XKB layout/variant) |

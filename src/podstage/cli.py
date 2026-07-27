@@ -284,7 +284,9 @@ def _pair_hints(sc: SessionConfig) -> list[str]:
     """How to pair with this profile's backend. Only Sunshine has a web UI."""
     spec = backends.get_or_default(sc.backend)
     web = spec.web_port(sc.sunshine_port_base)
-    lines = []
+    # The name carries the backend, so a profile's two backends are two hosts
+    # in the client with two pairings; say which one to pick.
+    lines = [f"  Moonlight lists it as: {spec.advertised_name(sc.name)}"]
     if web is not None:
         lines.append(f"  Pair once at https://localhost:{web}  (Sunshine web UI)")
         lines.append(f"  or: podstage session pair {sc.name} <PIN>  (PIN shown by Moonlight)")

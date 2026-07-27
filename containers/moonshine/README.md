@@ -18,6 +18,7 @@ profile dialog). The Sunshine backend stays the default.
 | GPU requirement | every GPU podstage supports | Vulkan video-encode queue: NVIDIA RTX, AMD RDNA2+, Intel Arc |
 | input | Sunshine virtual evdev → udev OWNER rule → seat-shim fake hotplug | client input straight into moonshine's Wayland seat; inputtino creates the gamepads |
 | discovery | host `avahi-publish-service` (no avahi in the container) | built-in mDNS responder |
+| name in the client | `PS_SUNSHINE_NAME` → `sunshine.conf` | `PS_MOONSHINE_NAME` → `config.toml` + its mDNS record |
 | pairing | `POST /api/pin`, TLS + basic auth | `POST /submit-pin`, plain HTTP, **no auth** |
 | config changes | live via the web API | rewrite `config.toml`, restart the session |
 | quality settings | profile `sunshine_extra`, applied live | `fec_percentage`, applied at the next start |

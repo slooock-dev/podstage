@@ -28,7 +28,7 @@
 #   PS_DYNAMIC_RES     disabled → render at PS_RESOLUTION even when the client
 #                      asks for something else (see app.sh)
 #   PS_MOONSHINE_PORT  Moonlight base port (whole block derives from it)
-#   PS_MOONSHINE_NAME  name advertised over mDNS
+#   PS_MOONSHINE_NAME  name advertised over mDNS and reported in serverinfo
 #   PS_APP             Steam AppID → boot straight into that game
 #   PS_STEAM_FLAGS     Steam flags (default -gamepadui)
 #   PS_HDR             enabled → moonshine's compositor in HDR

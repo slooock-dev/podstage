@@ -129,6 +129,9 @@ _SUNSHINE_ENV: dict[str, str | None] = {
     "PS_WEB_USER": None,
     "PS_WEB_PASS": None,
     "PS_SEAT_NAME": None,  # only forwarded when set (entrypoint defaults seat9)
+    # Advertised session name; container_env fills it from the profile via
+    # Backend.advertised_name, this only lets the caller pin another one.
+    "PS_SUNSHINE_NAME": None,
     # ';'-separated extra sunshine.conf lines ("key = value;key2 = value2"),
     # built from the profile's sunshine_extra (quality settings).
     "PS_SUNSHINE_EXTRA": None,
@@ -359,6 +362,11 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
         "PS_MODE": opts.mode,
         "PS_RESOLUTION": opts.resolution,
         backend.port_env: str(opts.stream_port),
+        # What a Moonlight client lists this session as. Sunshine puts it in
+        # sunshine.conf, moonshine in its config.toml and its own mDNS
+        # responder; the host-side publisher (Sunshine only) announces the
+        # same string. See Backend.advertised_name.
+        backend.name_env: backend.advertised_name(opts.client),
         "PS_APP": opts.app,
         "STEAM_COMPAT_MOUNTS": ":".join(str(p) for p in library_paths),
         # Rootless container: the kernel delivers no udev uevents into this
@@ -789,7 +797,8 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)
     publisher_pid = None
     if spec.host_mdns and opts.mode in ("pipeline", "desktop"):
-        publisher_pid = start_publisher(port=opts.stream_port)
+        publisher_pid = start_publisher(spec.advertised_name(opts.client),
+                                        port=opts.stream_port)
     save_state(opts, publisher_pid)
     try:
         if opts.attach:

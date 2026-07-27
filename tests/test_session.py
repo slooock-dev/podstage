@@ -165,8 +165,9 @@ def test_moonshine_options_skip_the_sunshine_only_settings():
     env = Session(sc, app_config=AppConfig(mouse_keyboard=True))._options().env
     for key in ("PS_SUNSHINE_EXTRA", "PS_MOUSE_INPUT"):
         assert key not in env, key
-    # What it does need: its own mDNS name, and the shared gamescope probe.
-    assert env["PS_MOONSHINE_NAME"] == "tv"
+    # What it does need: the shared gamescope probe. The advertised name is
+    # not here, runtime.container_env derives it for both backends.
+    assert "PS_MOONSHINE_NAME" not in env
     assert env["PS_PERF_METRICS"] == "enabled"
 
 

@@ -76,7 +76,7 @@ THUMB_MAX_AGE_S = 45  # strict mode only: older previews count as stale
 class PairDialog(QDialog):
     """Submit the PIN Moonlight shows to pair a new client."""
 
-    def __init__(self, parent, default_name: str) -> None:
+    def __init__(self, parent, default_name: str, advertised: str = "") -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Pair client"))
         self.setMinimumWidth(320)
@@ -88,8 +88,8 @@ class PairDialog(QDialog):
         self.name = QLineEdit(default_name)
         form.addRow("PIN", self.pin)
         form.addRow(tr("Device name"), self.name)
-        hint = QLabel(tr("Select the server in Moonlight and enter the 4-digit "
-                         "PIN it shows here."))
+        hint = QLabel(tr("Select '{server}' in Moonlight and enter the 4-digit "
+                         "PIN it shows here.", server=advertised or default_name))
         hint.setProperty("muted", True)
         hint.setWordWrap(True)
         form.addRow(hint)
@@ -739,7 +739,7 @@ class SessionPage(QWidget):
         if sc is None:
             return
         spec = backends.get_or_default(sc.backend)
-        dlg = PairDialog(self, sc.name)
+        dlg = PairDialog(self, sc.name, spec.advertised_name(sc.name))
         # moonshine records no client names, so asking for one would suggest
         # a label that is never stored anywhere.
         dlg.name.setEnabled(spec.name == backends.SUNSHINE.name)

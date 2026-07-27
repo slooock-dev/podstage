@@ -112,8 +112,8 @@ TEXTS: dict[str, str] = {
     "Pair client": "Client pairen",
     "PIN from Moonlight, e.g. 1234": "PIN aus Moonlight, z. B. 1234",
     "Device name": "Gerätename",
-    "Select the server in Moonlight and enter the 4-digit PIN it shows here.":
-        "In Moonlight den Server auswählen und die angezeigte 4-stellige "
+    "Select '{server}' in Moonlight and enter the 4-digit PIN it shows here.":
+        "In Moonlight »{server}« auswählen und die angezeigte 4-stellige "
         "PIN hier eintragen.",
 
     # -- Sunshine web UI dialog ------------------------------------------
