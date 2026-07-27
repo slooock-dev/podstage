@@ -75,6 +75,14 @@ def overlay_root(home_dir: Path) -> Path:
     return DATA_DIR / "overlays" / slug
 
 
+# moonshine's own default for stream.video.fec_percentage, read from its
+# source at the pinned commit (moonshine-core/src/session/stream/video/mod.rs,
+# `impl Default for VideoStreamConfig`). Only ever *shown*: the profile stores
+# -1 for "leave moonshine's default alone", so an upstream change carries
+# through instead of being frozen here.
+MOONSHINE_FEC_DEFAULT = 20
+
+
 def parse_extra_mount(entry: str) -> tuple[Path, bool]:
     """``(path, writable)`` for one ``extra_mounts`` entry.
 

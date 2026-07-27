@@ -310,12 +310,18 @@ class SessionPage(QWidget):
         # -1 is the minimum so it can carry the special text: 0 is a real
         # setting of its own ("no FEC"), not a stand-in for "leave default".
         self._fec.setRange(-1, 100)
-        self._fec.setSpecialValueText(tr("moonshine default"))
+        # Spell the default out. "moonshine default" alone said nothing, and
+        # the value one step away from it is 0, which switches error
+        # correction OFF entirely: the most harmful setting in the box sat
+        # right next to the safe one and read just as harmless.
+        self._fec.setSpecialValueText(
+            tr("moonshine default ({pct} %)", pct=config.MOONSHINE_FEC_DEFAULT))
         self._fec.setSuffix(" %")
         self._fec.setToolTip(tr(
             "Forward error correction: how much redundancy is sent so lost "
             "packets do not become visible artifacts. Higher survives a lossy "
-            "WiFi and costs bandwidth."))
+            "WiFi and costs bandwidth. 0 turns it off, and then every lost "
+            "packet is visible in the picture."))
         self._fec.editingFinished.connect(self._persist_moonshine)
         row.addWidget(QLabel(tr("Error correction")))
         row.addWidget(self._fec)

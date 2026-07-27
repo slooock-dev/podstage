@@ -109,6 +109,13 @@ entrypoints and the container helpers changed.
 
 ### Fixed
 
+- **The error-correction box says what "default" is.** It read "moonshine
+  default" with no number, and the value one step away from it is 0, which
+  switches forward error correction off entirely. The safe setting and the most
+  harmful one sat next to each other and read equally harmless. It now shows
+  "moonshine default (20 %)", the number taken from moonshine's own source, and
+  the tooltip says what 0 does. The profile still stores -1 for "leave
+  moonshine's default alone", so an upstream change carries through.
 - **A profile's two backends are two hosts in the client now.** Sunshine
   announced the fixed string "podstage" for every profile while moonshine
   announced the bare profile name, so nothing on the client said which backend

@@ -54,13 +54,15 @@ TEXTS: dict[str, str] = {
         "Bitrate & Codec wählt der Moonlight-Client. {backend} hat kein "
         "Config-API, das hier gilt also ab dem nächsten Session-Start.",
     "Error correction": "Fehlerkorrektur",
-    "moonshine default": "moonshine-Standard",
+    "moonshine default ({pct} %)": "moonshine-Standard ({pct} %)",
     "Forward error correction: how much redundancy is sent so lost "
     "packets do not become visible artifacts. Higher survives a lossy "
-    "WiFi and costs bandwidth.":
+    "WiFi and costs bandwidth. 0 turns it off, and then every lost "
+    "packet is visible in the picture.":
         "Vorwärtsfehlerkorrektur: wie viel Redundanz mitgesendet wird, damit "
         "verlorene Pakete keine sichtbaren Artefakte werden. Höher übersteht "
-        "ein verlustbehaftetes WLAN und kostet Bandbreite.",
+        "ein verlustbehaftetes WLAN und kostet Bandbreite. 0 schaltet sie ab, "
+        "dann ist jedes verlorene Paket im Bild zu sehen.",
     "Saved. Applies at the next session start.":
         "Gespeichert. Gilt ab dem nächsten Session-Start.",
     "The {backend} backend has no live quality settings; these apply to "
