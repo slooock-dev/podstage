@@ -33,8 +33,13 @@ case "$PS_MS_TARGET" in
     exec steam
     ;;
   steam)
+    # -f -b are NOT in the production runner.sh, and they are needed here:
+    # moonshine implements no zxdg_decoration_manager_v1, so gamescope falls
+    # back to libdecor and draws its own titlebar (with a close button) around
+    # a content area smaller than the output. cage is a kiosk and labwc does
+    # server-side decorations, so neither ever showed this.
     exec gamescope --backend wayland -W "$W" -H "$H" -w "$W" -h "$H" -r "$R" \
-        -C 3000 --expose-wayland --force-windows-fullscreen -e -- \
+        -f -b -C 3000 --expose-wayland --force-windows-fullscreen -e -- \
         steam $PS_STEAM_FLAGS
     ;;
   *)

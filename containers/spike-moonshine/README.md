@@ -186,27 +186,32 @@ Works:
 * **Controller input** end to end — inputtino's gamepad path needs no
   equivalent of our uinput/udev plumbing.
 
-Open, and the reason this is not a drop-in replacement for the Sunshine path:
+Open:
 
-* **Big Picture is not fullscreen and carries a window bar at the top.** Not a
-  resolution mismatch: the compositor came up at the client's 1280x800
-  (`Compositor started: 1280x800 @ 60Hz`), `ms-app.sh` sized gamescope to the
-  same, and gamescope's own buffer is a correct fullscreen 1280x800 with the
-  Steam window at 1280x800 inside it. The geometry therefore breaks on
-  moonshine's compositing/presentation side, not in our gamescope invocation.
-  Worth checking next: whether a second toplevel (Steam helper windows,
-  xdg-desktop-portal) gets mapped on moonshine's own XWayland and composited
-  alongside gamescope's surface, and what `reevaluate_focus` picks.
-* **Mouse input and cursor still need solving.** The structural argument above
-  only rules out the specific labwc failure mode (seat POINTER capability
-  dropping and the lost `wl_pointer.enter`); it does not mean the pointer path
-  is finished. Same class of work as the seat-shim/keeper effort on the
-  Sunshine path, different cause.
-* **Focus nudging is needed here too.** The production
-  `podstage-focus-nudge` exists because Big Picture loses gamepad navigation
-  when gamescope hands focus back after a game exits; moonshine's own
-  `reevaluate_focus` does not remove the need.
+* **Big Picture was not fullscreen and carried a titlebar with a close button**
+  (the touchpad could click that X and end the session). **Root cause found:**
+  moonshine implements no `zxdg_decoration_manager_v1` (no occurrence of
+  "decoration" anywhere in its source) and gamescope is linked against
+  libdecor, so gamescope draws its own client-side frame around a content area
+  smaller than the output. Neither production compositor shows this — cage is a
+  kiosk, labwc does server-side decorations — which is why `runner.sh` has no
+  flag for it. Ruled out beforehand: a resolution mismatch (compositor,
+  gamescope and the Steam window were all at the client's 1280x800).
+  **Fix applied, not yet re-tested on the Deck:** `ms-app.sh` now passes
+  gamescope's nested-mode `-f -b` (fullscreen, borderless).
+* **The mouse worked on that titlebar but not inside Big Picture** — the same
+  symptom class as the current labwc architecture. Note the pointer test was
+  not clean: with a libdecor frame in place, the frame's own surfaces take
+  pointer focus, so the `-f -b` fix may change this result. Test that before
+  investigating further. If it persists, it is the known gamescope
+  `CWaylandInputThread` family of bugs, *not* the capability-drop variant the
+  keeper works around — that one is structurally impossible here (see 2 above).
+* **Focus nudging is needed here too.** The production `podstage-focus-nudge`
+  exists because Big Picture loses gamepad navigation when gamescope hands
+  focus back after a game exits; moonshine's own `reevaluate_focus` does not
+  remove the need.
 
-So the encode and transport side of moonshine is ready and the input plumbing we
-built for Sunshine largely falls away, but the window-management and pointer
-work does not — it reappears in a different form.
+So the encode, transport and gamepad side of moonshine is ready and the input
+plumbing built for Sunshine (seat-shim, keeper, udev rules, PipeWire) largely
+falls away, but window management and the pointer path do not — they reappear in
+a different form.
