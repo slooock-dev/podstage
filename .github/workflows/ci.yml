@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck container scripts
-        run: shellcheck containers/runtime/*.sh ui.sh
+        run: shellcheck containers/runtime/*.sh containers/moonshine/*.sh ui.sh
 
   # pytest runs without PyQt6, so ui/ errors stay green there — byte-compile
   # the GUI modules and boot the window offscreen once.
