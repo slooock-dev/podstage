@@ -108,6 +108,17 @@ entrypoint and both container helpers changed.
   image brings a missing *or stale* base up first: podman layers on whatever
   the tag points at today, so building on a stale base would stamp a label
   the image cannot honour.
+- **Clicking empty space now leaves the focused field.** Qt kept the caret in
+  a line edit or spin box until another focusable widget took over, so a field
+  stayed visibly active after clicking away. Values are saved when a field
+  loses focus, so this also commits a typed value instead of leaving it
+  hanging.
+- **Spin boxes and combo boxes have visible arrows again.** Styling a widget
+  through a stylesheet drops Qt's own rendering of its sub-controls, which
+  left the steppers as bare boxes. A stylesheet cannot draw a triangle either
+  (the CSS border trick renders as a filled rectangle here), so the arrows are
+  painted at startup and cached; a cache dir that cannot be written costs the
+  arrows, not the window.
 - **A crashing check no longer blanks the whole report.** One failing check
   left the Setup page with no rows at all, hiding every other verdict; it is
   now reported as a failed row of its own. `nvidia-smi` returning success with

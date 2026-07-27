@@ -11,7 +11,8 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QPointF, Qt, pyqtSignal
+from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication
 
 from podstage import config
@@ -77,6 +78,45 @@ def check_sandbox_columns() -> bool:
     return ok
 
 
+def check_click_away_drops_focus(win) -> bool:
+    """A click on empty space must take the focus out of the active field.
+
+    Qt keeps the caret in a line edit until another focusable widget takes
+    over, so a field stayed visibly active after clicking away. Offscreen
+    focus handling differs from a real display, so this asserts the contract
+    that matters: whatever holds the focus loses it.
+    """
+    if win.focusWidget() is None:
+        win._nav.setFocus()
+    if win.focusWidget() is None:
+        print("gui smoke: FAILED (nothing could take focus, check is inert)")
+        return False
+    event = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(5, 5),
+                        Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+                        Qt.KeyboardModifier.NoModifier)
+    win.mousePressEvent(event)
+    if win.focusWidget() is not None:
+        print("gui smoke: FAILED (focus survived a click on empty space: "
+              f"{type(win.focusWidget()).__name__})")
+        return False
+    return True
+
+
+def check_stepper_arrows(win) -> bool:
+    """Styling a widget through a stylesheet drops Qt's native rendering of
+    its sub-controls, which once left the spin boxes as bare boxes with no
+    arrows at all."""
+    qss = win.styleSheet()
+    missing = [rule for rule in ("QSpinBox::up-button", "QSpinBox::down-button",
+                                 "QSpinBox::up-arrow", "QSpinBox::down-arrow",
+                                 "QComboBox::down-arrow")
+               if rule not in qss]
+    if missing:
+        print(f"gui smoke: FAILED (unstyled sub-controls: {', '.join(missing)})")
+        return False
+    return True
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     if not check_sandbox_columns():
@@ -95,11 +135,15 @@ def main() -> int:
     app.processEvents()
 
     ok = not win.grab().isNull()
+    if not ok:
+        print("gui smoke: FAILED (empty grab)")
+    ok = check_click_away_drops_focus(win) and ok
+    ok = check_stepper_arrows(win) and ok
     if win._poll is not None:
         win._poll.stop()
         win._poll.wait(5000)
     win._logs_page.shutdown()
-    print("gui smoke: ok" if ok else "gui smoke: FAILED (empty grab)")
+    print("gui smoke: ok" if ok else "gui smoke: FAILED")
     return 0 if ok else 1
 
 
