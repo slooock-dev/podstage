@@ -253,3 +253,51 @@ def test_avahi_is_not_required_for_a_moonshine_only_setup(tmp_path, monkeypatch)
               '[[sessions]]\nname = "a"\n'
               '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
     assert doctor.check_avahi().status is doctor.Status.WARN
+
+
+# -- grouping ----------------------------------------------------------------
+
+def test_run_all_stamps_groups_and_skips_unused_backends(tmp_path, monkeypatch):
+    """A backend nobody uses contributes no rows at all: an inert
+    'not used' line would be noise and would inflate the counters."""
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (0, "x"))
+    names = {r.name: r.group for r in doctor.run_all()}
+    assert names["podman"] == doctor.GROUP_HOST
+    assert names["avahi"] == doctor.GROUP_STREAMING
+    assert names["image"] == "sunshine"
+    assert "moonshine image" not in names
+    assert "moonshine encode" not in names
+
+
+def test_run_all_drops_sunshine_for_a_moonshine_only_setup(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (0, "OK Codecs H.264"))
+    names = {r.name: r.group for r in doctor.run_all()}
+    assert names["moonshine image"] == "moonshine"
+    assert "image" not in names
+    assert "sunshine-conflict" not in names
+    assert names["podman"] == doctor.GROUP_HOST   # host checks always apply
+
+
+def test_by_group_follows_the_declared_order_and_drops_empties():
+    def mk(name, group):
+        return doctor.CheckResult(name, doctor.Status.OK, "", group=group)
+
+    results = [mk("c", "moonshine"), mk("a", doctor.GROUP_HOST),
+               mk("b", doctor.GROUP_STREAMING)]
+    assert [g for g, _ in doctor.by_group(results)] == [
+        doctor.GROUP_HOST, doctor.GROUP_STREAMING, "moonshine"]
+    assert [r.name for _, rows in doctor.by_group(results) for r in rows] == \
+        ["a", "b", "c"]
+
+
+def test_encode_check_offers_no_second_build_button(tmp_path, monkeypatch):
+    """The 'moonshine image' row owns the build action."""
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (1, ""))
+    res = doctor.check_moonshine_encode()
+    assert res.status is doctor.Status.WARN
+    assert not res.fix

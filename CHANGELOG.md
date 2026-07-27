@@ -27,10 +27,15 @@ entrypoint and both container helpers changed.
   (`podstage runtime build --backend moonshine`) is built on top of the
   runtime image and compiles moonshine from source. See
   [`containers/moonshine/README.md`](containers/moonshine/README.md).
-- **`podstage doctor` gates the moonshine backend.** Two checks that stay
-  silent unless a profile selects it: the image is present and current, and
-  the GPU can actually encode, answered by running moonshine's own health
-  check in a throwaway container and reporting the codecs it finds.
+- **`podstage doctor` gates the moonshine backend.** Two checks that only
+  exist when a profile selects it: the image is present and current, and the
+  GPU can actually encode, answered by running moonshine's own health check in
+  a throwaway container and reporting the codecs it finds.
+- **Preflight checks are grouped** by host, streaming and backend, in the
+  order they have to be worked through. A backend contributes no rows at all
+  until a profile uses it, and each backend group carries its own image build
+  button on the Setup page. The summary above the list still counts across
+  every group, so nothing hides behind a heading.
 - **Streamed first Steam login.** `podstage session login <name>` and the
   GUI's *Streamed login* boot a fresh sandbox straight into Big Picture's
   sign-in over the stream (QR code via the Steam Mobile App, or the on-screen

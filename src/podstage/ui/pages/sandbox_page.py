@@ -113,7 +113,8 @@ class ProfileDialog(QDialog):
             "Sunshine (default) works on every supported GPU. moonshine brings "
             "its own compositor and encodes with Vulkan Video, which needs an "
             "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU; it has no live quality "
-            "settings and no preview picture. Check with 'podstage doctor'."))
+            "settings and no preview picture. The Setup page checks whether "
+            "this machine can run it."))
         self._backend.currentIndexChanged.connect(self._sync_backend_note)
         form.addRow(tr("Backend"), self._backend)
         self._backend_note = QLabel()
@@ -149,9 +150,9 @@ class ProfileDialog(QDialog):
         if self._backend.currentData() == backends.MOONSHINE.name:
             self._backend_note.setText(tr(
                 "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
-                "Intel Arc) and its own image "
-                "('podstage runtime build --backend moonshine'). No live "
-                "quality settings and no preview picture."))
+                "Intel Arc). Save this profile, then build its image and check "
+                "the GPU on the Setup page. No live quality settings and no "
+                "preview picture."))
         else:
             self._backend_note.setText("")
 

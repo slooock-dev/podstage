@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -35,12 +36,23 @@ class Status(str, Enum):
     FAIL = "FAIL"
 
 
+# Check groups, in the order they are meant to be worked through. The host
+# has to be right before any backend can stream, so backend groups come last.
+# Labels are the GUI's business (they get translated there); doctor only says
+# which group a check belongs to.
+GROUP_HOST = "host"
+GROUP_STREAMING = "streaming"
+GROUP_ORDER = [GROUP_HOST, GROUP_STREAMING, backends.SUNSHINE.name,
+               backends.MOONSHINE.name]
+
+
 @dataclass
 class CheckResult:
     name: str
     status: Status
     detail: str
     fix: str = ""  # ready-made command that resolves a WARN/FAIL
+    group: str = GROUP_HOST  # one of GROUP_ORDER
 
 
 def _run(cmd: list[str], timeout: int = 10) -> tuple[int, str]:
@@ -174,9 +186,10 @@ def check_moonshine_encode() -> CheckResult:
         return CheckResult("moonshine encode", Status.OK,
                            "not used by any profile")
     if _run(["podman", "image", "exists", spec.image])[0] != 0:
+        # No fix here on purpose: the "moonshine image" row right above owns
+        # the build action, and two build buttons on one card is one too many.
         return CheckResult("moonshine encode", Status.WARN,
-                           "cannot check without the image",
-                           fix=MOONSHINE_BUILD_FIX)
+                           "cannot check until the image is built")
     rc, out = _run(_moonshine_probe_argv(spec.image), timeout=180)
     codecs = _codec_line(out)
     if codecs is None:
@@ -470,23 +483,49 @@ def check_sunshine_conflict() -> CheckResult:
     return CheckResult("sunshine-conflict", Status.OK, "no always-on Sunshine service")
 
 
-ALL_CHECKS = [
-    check_podman,
-    check_image,
-    check_moonshine_image,
-    check_moonshine_encode,
-    check_cdi,
-    check_udev_rules,
-    check_uinput,
-    check_uhid,
-    check_mdns,
-    check_stream_firewall,
-    check_avahi,
-    check_gpu,
-    check_steam,
-    check_sunshine_conflict,
+# (check, group), in the order they are meant to be worked through: the host
+# has to be right before any backend can stream. The group belongs to the
+# check, not to a single outcome, so it is stamped onto the result in
+# run_all() rather than repeated at every CheckResult call site.
+ALL_CHECKS: list[tuple[Callable[[], CheckResult], str]] = [
+    (check_podman, GROUP_HOST),
+    (check_cdi, GROUP_HOST),
+    (check_gpu, GROUP_HOST),
+    (check_udev_rules, GROUP_HOST),
+    (check_uinput, GROUP_HOST),
+    (check_uhid, GROUP_HOST),
+    (check_steam, GROUP_HOST),
+    (check_mdns, GROUP_STREAMING),
+    (check_stream_firewall, GROUP_STREAMING),
+    (check_avahi, GROUP_STREAMING),
+    (check_image, backends.SUNSHINE.name),
+    (check_sunshine_conflict, backends.SUNSHINE.name),
+    (check_moonshine_image, backends.MOONSHINE.name),
+    (check_moonshine_encode, backends.MOONSHINE.name),
 ]
 
 
 def run_all() -> list[CheckResult]:
-    return [check() for check in ALL_CHECKS]
+    """Every check that applies to this install, stamped with its group.
+
+    A backend's checks are skipped entirely unless a profile uses it. An
+    inert "not used by any profile" row is noise on a machine that will never
+    run that backend, and it would inflate the counters the Setup page and
+    the CLI summary report. The checks keep their own guard for direct
+    callers.
+    """
+    used = configured_backends()
+    results: list[CheckResult] = []
+    for check, group in ALL_CHECKS:
+        if group in backends.BACKENDS and group not in used:
+            continue
+        result = check()
+        result.group = group
+        results.append(result)
+    return results
+
+
+def by_group(results: list[CheckResult]) -> list[tuple[str, list[CheckResult]]]:
+    """``results`` bucketed in GROUP_ORDER, empty groups dropped."""
+    return [(g, [r for r in results if r.group == g])
+            for g in GROUP_ORDER if any(r.group == g for r in results)]

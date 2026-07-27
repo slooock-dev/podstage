@@ -29,7 +29,16 @@ from PyQt6.QtWidgets import (
 )
 
 from ... import __version__, config
-from ...core import desktop, doctor, elevate, runtime, teardown, udev, update
+from ...core import (
+    backends,
+    desktop,
+    doctor,
+    elevate,
+    runtime,
+    teardown,
+    udev,
+    update,
+)
 from ..i18n import tr
 from ..widgets import ElideLabel, card
 from ..workers import start_action
@@ -56,10 +65,23 @@ _EXPERIMENTAL_DETAILS = {
 }
 
 
-def _build_image() -> str:
+def _build_image(backend: str = backends.DEFAULT) -> str:
     # runtime.build_image stamps the source hash label doctor compares against.
-    runtime.build_image()
+    # Deliberately in-process rather than through the generic shell fix runner:
+    # that one shells out to `podstage`, which is not on PATH for the GUI's
+    # interpreter, and caps the run at 10 minutes, which a from-scratch
+    # moonshine build (it compiles the server and its Rust dependency graph)
+    # would blow through.
+    runtime.build_image(backend=backend)
     return tr("Image built.")
+
+
+def _group_label(group: str) -> str:
+    if group == doctor.GROUP_HOST:
+        return tr("Host")
+    if group == doctor.GROUP_STREAMING:
+        return tr("Streaming")
+    return tr("{name} backend", name=backends.get_or_default(group).label)
 
 
 def _install_udev_rules() -> str:
@@ -347,15 +369,29 @@ class SetupPage(QWidget):
             self._headline.setText(tr("Ready, {warns} warning(s).", warns=warns))
         else:
             self._headline.setText(tr("All set ✓"))
-        for r in self._results:
-            self._checks_box.addWidget(self._check_row(r))
+        # Grouped, but still one list on one page: the headline above counts
+        # across every group, so a failure can never hide behind a heading the
+        # way it would behind a tab. Backend groups only appear when a profile
+        # uses that backend (doctor.run_all decides).
+        for group, rows in doctor.by_group(self._results):
+            self._checks_box.addWidget(self._group_heading(_group_label(group)))
+            for r in rows:
+                self._checks_box.addWidget(self._check_row(r))
 
         self._homeroot_label.setText(str(config.SESSIONS_HOME_ROOT))
+
+    def _group_heading(self, text: str) -> QWidget:
+        label = QLabel(text)
+        label.setProperty("groupTitle", True)
+        label.setContentsMargins(0, 6, 0, 0)
+        return label
 
     def _check_row(self, r: doctor.CheckResult) -> QWidget:
         row = QWidget()
         h = QHBoxLayout(row)
-        h.setContentsMargins(0, 0, 0, 0)
+        # Indented under its group heading, so the grouping reads as structure
+        # and not as an unrelated label dropped between rows.
+        h.setContentsMargins(10, 0, 0, 0)
         h.setSpacing(8)
         glyph_text, status = _GLYPH[r.status]
         glyph = QLabel(glyph_text)
@@ -376,9 +412,13 @@ class SetupPage(QWidget):
     def _fix_button(self, r: doctor.CheckResult) -> QPushButton | None:
         if r.status is doctor.Status.OK:
             return None
-        if r.name == "image":
+        if r.name in ("image", "moonshine image"):
+            backend = (backends.MOONSHINE.name if r.name.startswith("moonshine")
+                       else backends.SUNSHINE.name)
             btn = QPushButton(tr("Build image"))
-            btn.clicked.connect(lambda: self._start("Image-Build", _build_image))
+            btn.clicked.connect(
+                lambda: self._start("Image-Build",
+                                    lambda: _build_image(backend)))
         elif r.name == "udev rules":
             # The generated per-user OWNER rule must be staged first — the
             # generic fix runner can't do that, so this button wraps

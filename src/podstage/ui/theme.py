@@ -49,6 +49,10 @@ QLabel#globalState[state="running"] {{ color: {OK}; }}
 QFrame[card="true"] {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 8px; }}
 QFrame[card="true"] > QWidget {{ background: transparent; }}
 QLabel[cardTitle="true"] {{ color: {MUTED}; font-size: 11px; font-weight: 600; letter-spacing: 1px; }}
+/* Sub-heading INSIDE a card (the doctor check groups): brighter than the
+   muted detail text it sits above, but without the card kicker's uppercase
+   letter-spacing, so it never competes with the card title. */
+QLabel[groupTitle="true"] {{ color: {FG}; font-size: 11px; font-weight: 600; }}
 QLabel#pageTitle {{ font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }}
 
 /* -- text roles --------------------------------------------------------- */

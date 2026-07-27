@@ -215,10 +215,15 @@ its pairing endpoint has no authentication, and it has no config API, so
 quality changes mean editing the profile and restarting the session.
 
 ```bash
-podstage runtime build --backend moonshine     # once, builds from source
 podstage session add tv --backend moonshine
+podstage runtime build --backend moonshine     # once, builds from source
 podstage doctor                                # checks this GPU can encode
 ```
+
+In the GUI it is the same three steps: pick the backend in the profile
+dialog, then work the Setup page, where the preflight checks are grouped by
+host, streaming and backend. The backend group only appears once a profile
+uses it, and carries its own *Build image* button.
 
 `podstage doctor` runs moonshine's own health check in a throwaway container
 and reports the codecs it finds, but only when a profile actually selects the
@@ -251,7 +256,7 @@ session as trusted-LAN only.
 |------|--------------|
 | **Session** | Start/stop the Big Picture stream, the active game, the Performance card (game FPS plus CPU/GPU/VRAM/encoder), a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). Preview and quality settings are Sunshine-only; on a moonshine profile they are greyed out and say so. |
 | **Sandboxes** | Sandbox profiles including the streaming backend, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
-| **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, streaming toggles (mouse & keyboard, preview behavior, performance metrics), experimental features, an on-demand update check, UI language. |
+| **Setup** | Doctor checks grouped by host, streaming and backend (a backend group appears once a profile uses it, with its own image build) with one-click fixes, the one-time udev rules install, desktop integration, streaming toggles (mouse & keyboard, preview behavior, performance metrics), experimental features, an on-demand update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
 
 <p align="center">

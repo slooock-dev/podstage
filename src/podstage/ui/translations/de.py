@@ -234,20 +234,21 @@ TEXTS: dict[str, str] = {
     "Sunshine (default) works on every supported GPU. moonshine brings "
     "its own compositor and encodes with Vulkan Video, which needs an "
     "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU; it has no live quality "
-    "settings and no preview picture. Check with 'podstage doctor'.":
+    "settings and no preview picture. The Setup page checks whether "
+    "this machine can run it.":
         "Sunshine (Standard) läuft auf jeder unterstützten GPU. moonshine "
         "bringt einen eigenen Compositor mit und kodiert per Vulkan Video, "
         "was eine NVIDIA RTX, AMD RDNA2+ oder Intel Arc voraussetzt; es hat "
         "keine Qualitätseinstellungen zur Laufzeit und kein Vorschaubild. "
-        "Prüfen mit 'podstage doctor'.",
+        "Die Setup-Seite prüft, ob diese Maschine das kann.",
     "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
-    "Intel Arc) and its own image "
-    "('podstage runtime build --backend moonshine'). No live "
-    "quality settings and no preview picture.":
+    "Intel Arc). Save this profile, then build its image and check "
+    "the GPU on the Setup page. No live quality settings and no "
+    "preview picture.":
         "Braucht eine GPU mit Vulkan-Video-Encode (NVIDIA RTX, AMD RDNA2+, "
-        "Intel Arc) und ein eigenes Image "
-        "('podstage runtime build --backend moonshine'). Keine "
-        "Qualitätseinstellungen zur Laufzeit und kein Vorschaubild.",
+        "Intel Arc). Profil speichern, dann auf der Setup-Seite das Image "
+        "bauen und die GPU prüfen. Keine Qualitätseinstellungen zur Laufzeit "
+        "und kein Vorschaubild.",
     "Games in this sandbox": "Spiele in dieser Sandbox",
     "Include every installed game (and any you add later)":
         "Alle installierten Spiele einschließen (auch später hinzugefügte)",
@@ -337,6 +338,9 @@ TEXTS: dict[str, str] = {
 
     # -- setup page ------------------------------------------------------
     "Preflight checks": "Preflight-Checks",
+    # "Host" and "Streaming" are identical in German, so the English fallback
+    # already covers those two check-group headings.
+    "{name} backend": "Backend {name}",
     "Re-check": "Neu prüfen",
     "checking …": "prüfe …",
     "Check failed: {msg}": "Prüfung fehlgeschlagen: {msg}",
