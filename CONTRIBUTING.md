@@ -23,14 +23,23 @@ This stamps a hash of `containers/runtime/` into the image; `doctor` flags an
 image whose sources changed since the build (a plain `podman build` counts as
 stale because it lacks the label).
 
+The moonshine backend has its own image, built on top of that one and only
+needed if you work on that path (it compiles moonshine from source, so expect
+a long first build):
+
+```bash
+podstage runtime build --backend moonshine
+```
+
 ## Architecture at a glance
 
 | Layer | Package | Responsibility |
 |-------|---------|----------------|
 | GUI | `podstage.ui` | PyQt6 management window (setup, sandboxes, session, logs) |
 | CLI | `podstage.cli` | scriptable surface; `doctor`, `setup`, `runtime`, `session`, … |
-| Core | `podstage.core` | `runtime`, `udev`, `provisioner`, `monitor`, `sandbox`, `doctor`, `elevate`, `sunshine_api`, `steam`, `session`, `teardown` |
+| Core | `podstage.core` | `backends`, `runtime`, `udev`, `provisioner`, `monitor`, `sandbox`, `doctor`, `elevate`, `sunshine_api`, `moonshine_api`, `steam`, `session`, `teardown` |
 | Image | `containers/runtime` | the self-contained streaming sandbox (labwc → gamescope → Steam + Sunshine) |
+| Image | `containers/moonshine` | the alternative backend image (moonshine → gamescope → Steam), built FROM the one above |
 
 **`core/runtime.py` is the single source of truth** for the `podman run`
 invocation. Both the CLI and the GUI build the container command from it, so
@@ -113,7 +122,14 @@ Language selection: `config.language` (`auto`/`en`/`de`, set in the Setup panel)
   offscreen smoke test above.
 - After changing `containers/runtime/`, rebuild the image (Setup → *Build
   image* or `podstage runtime build`); the next start picks it up directly
-  from your user's image store. `doctor` warns while the image is stale.
+  from your user's image store. `doctor` warns while the image is stale. Each
+  backend hashes its own `containers/<x>/`, so the two do not invalidate each
+  other, but the moonshine image is layered on the runtime one and needs a
+  rebuild after a base change.
+- **`core/backends.py` holds everything that differs between the two
+  streaming backends** (image, port env, whether the host publishes mDNS,
+  whether there is a live config API). Add a backend trait there and read it
+  in `core/runtime.py`; do not branch on the backend name at call sites.
 - **Updating the pinned versions**: `tools/bump_pins.py` compares the
   Containerfile pins (Arch base digest, Sunshine release) against upstream;
   `--apply` writes them. Then `podstage runtime build`, `podstage doctor`,

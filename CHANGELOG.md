@@ -4,6 +4,82 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Needs a runtime image rebuild (`podstage runtime build`): the compositor,
+entrypoint and both container helpers changed.
+
+### Added
+
+- **A second streaming backend: moonshine.** Pick it per profile
+  (`podstage session add <name> --backend moonshine`, or the GUI's profile
+  dialog); Sunshine stays the default.
+  [moonshine](https://github.com/hgaiser/moonshine) is compositor, capture path
+  and GameStream server in one process, so the whole labwc input-plumbing layer
+  (dedicated seat, faked udev hotplug, pointer-capability keeper, host-side
+  mDNS) falls away. gamescope still runs nested, so the focus watchdog, the
+  perf probe and the `touch_click_mode` pin carry over.
+  It is narrower than Sunshine in three ways worth knowing before choosing it:
+  it encodes through Vulkan Video, which rules out every pre-Arc Intel and
+  pre-RDNA2 AMD GPU that streams fine via VAAPI; its pairing endpoint has no
+  authentication; and it has no config API, so there is no live quality
+  setting and no stream preview in the GUI. Its own image
+  (`podstage runtime build --backend moonshine`) is built on top of the
+  runtime image and compiles moonshine from source. See
+  [`containers/moonshine/README.md`](containers/moonshine/README.md).
+- **`podstage doctor` gates the moonshine backend.** Two checks that stay
+  silent unless a profile selects it: the image is present and current, and
+  the GPU can actually encode, answered by running moonshine's own health
+  check in a throwaway container and reporting the codecs it finds.
+- **Streamed first Steam login.** `podstage session login <name>` and the
+  GUI's *Streamed login* boot a fresh sandbox straight into Big Picture's
+  sign-in over the stream (QR code via the Steam Mobile App, or the on-screen
+  keyboard); Steam bootstraps entirely in-container. The visible host login
+  stays available for settings Big Picture does not expose.
+- **Per-profile extra mounts.** Mount host directories with non-Steam games or
+  launchers into the session (`--mount /path`, `:rw` for launchers that update
+  themselves in place) and start them from Big Picture via non-Steam
+  shortcuts. Container path equals host path, so shortcut paths keep working.
+- **DualSense emulation as an experimental feature (`gamepad_ds5`).** Sunshine
+  emulates a DualSense instead of the default Xbox pad, giving clients that
+  send motion data real gyro in the session. Needs `/dev/uhid`, so the runtime
+  binds the host `/dev` while it is on, and the udev OWNER rule covers uhid.
+- **Container diagnostics baked into the image** (frame, X11, event-recorder
+  and uinput probes) for debugging a running session.
+
+### Changed
+
+- **labwc replaces the patched cage kiosk as the session compositor.** Popups
+  and dialogs now render where they belong; the previous kiosk drew them at
+  0,0. The generated runner became static image scripts, checked by shellcheck
+  in CI.
+- **Performance metrics graduated from experimental to a stable setting**
+  (game FPS from the compositor, on by default).
+- **Desktop mode is no longer a way to play.** It remains as plumbing for the
+  headless login and setup path only; podstage orchestrates the sandboxed Big
+  Picture session.
+- `doctor`'s stream-firewall check now covers a profile's custom base port
+  instead of assuming the default block.
+
+### Fixed
+
+- **The client's absolute mouse could go missing on some sessions.** The
+  seat-shim faked every udev monitor, so wlroots' DRM monitor swallowed device
+  hotplugs. It now fakes only the input monitor, never drops a device, and logs
+  every hotplug line. Touchscreen control in Big Picture verified on a Steam
+  Deck.
+- **A logged-out Big Picture hung on "Waiting for network".** Its
+  NetworkManager client cannot even connect when there is no system bus at
+  all, so the sign-in screen never appeared. The entrypoint now starts an empty
+  stub bus at the system socket path and Steam falls back to its own
+  connectivity test.
+- **The streamed cursor stayed on screen forever.** gamescope never clears the
+  delegated cursor image, so the shim remembers it, hides it after
+  `PS_CURSOR_IDLE_MS` (3 s by default) and restores it on motion.
+- **Streamed mouse input stopped warping** when Steam flipped gamescope's
+  `touch_click_mode` to passthrough for touch-advertising clients. The pin is
+  re-asserted every 30 s.
+
 ## [0.2.4] - 2026-07-26
 
 Needs a runtime image rebuild (`podstage runtime build`): the focus watchdog
