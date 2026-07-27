@@ -242,8 +242,13 @@ class SetupPage(QWidget):
             "can lock the pointer for mouse look."))
         self._mouse_kb.setChecked(self._ctx.config.mouse_keyboard)
         self._mouse_kb.toggled.connect(self._on_mouse_kb_toggled)
+        # Sunshine-only by nature: it creates the virtual mouse/keyboard this
+        # gates, while moonshine feeds the client's input straight into its own
+        # compositor seat and has nothing to switch off.
         mkhint = QLabel(tr("Recommended off for controller-only clients. "
-                           "Applies at the next session start."))
+                           "Applies at the next session start. Sunshine only: "
+                           "moonshine always passes the client's mouse and "
+                           "keyboard into the session."))
         mkhint.setProperty("muted", True)
         mkhint.setWordWrap(True)
         slay.addWidget(self._mouse_kb)

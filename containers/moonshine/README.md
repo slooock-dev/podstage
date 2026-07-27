@@ -22,6 +22,7 @@ profile dialog). The Sunshine backend stays the default.
 | config changes | live via the web API | rewrite `config.toml`, restart the session |
 | quality settings | profile `sunshine_extra`, applied live | `fec_percentage`, applied at the next start |
 | keyboard layout | host default | `compositor.keyboard` per profile |
+| mouse & keyboard | `PS_MOUSE_INPUT` gates Sunshine's virtual devices | always in the compositor seat, nothing to gate |
 | GUI preview | wf-recorder on the labwc output | `gamescopectl screenshot` on the nested gamescope |
 | render size | first client's mode, locked until restart | the connecting client's mode, per session |
 

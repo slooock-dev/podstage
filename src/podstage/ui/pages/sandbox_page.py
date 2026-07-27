@@ -6,12 +6,15 @@ logged in, paired Moonlight clients, disk usage.
 """
 
 
+from pathlib import Path
+
 from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -113,9 +116,10 @@ class ProfileDialog(QDialog):
 
         self._dynamic = QCheckBox(tr("Follow the client's resolution"))
         self._dynamic.setToolTip(tr(
-            "Render at the first connecting client's resolution, locked until "
-            "the session restarts. The profile resolution above is only the "
-            "fallback. Off: always render at the profile resolution."))
+            "Render at the connecting client's resolution; the profile "
+            "resolution above is only the fallback. Sunshine locks the first "
+            "client's mode until the session restarts, moonshine follows every "
+            "reconnect. Off: always render at the profile resolution."))
         self._dynamic.setChecked(existing.dynamic_resolution if existing else True)
         form.addRow("", self._dynamic)
         self._sync_custom(self._resolution.currentText())
@@ -137,9 +141,9 @@ class ProfileDialog(QDialog):
         self._backend.setToolTip(tr(
             "Sunshine (default) works on every supported GPU. moonshine brings "
             "its own compositor and encodes with Vulkan Video, which needs an "
-            "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU; it has no live quality "
-            "settings and no preview picture. The Setup page checks whether "
-            "this machine can run it."))
+            "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU, and its quality settings "
+            "apply at the next session start instead of live. The Setup page "
+            "checks whether this machine can run it."))
         self._backend.currentIndexChanged.connect(self._sync_backend_note)
         form.addRow(tr("Backend"), self._backend)
         self._backend_note = QLabel()
@@ -180,13 +184,64 @@ class ProfileDialog(QDialog):
             "in place."))
         if existing and existing.extra_mounts:
             self._mounts.setPlainText("\n".join(existing.extra_mounts))
-        form.addRow(tr("Extra mounts"), self._mounts)
+        # The list stays editable text (that is how a path gets removed or an
+        # existing entry switched), with a picker on top so a mount can be
+        # added without typing a path from memory.
+        mount_box = QWidget()
+        mv = QVBoxLayout(mount_box)
+        mv.setContentsMargins(0, 0, 0, 0)
+        mv.setSpacing(6)
+        mv.addWidget(self._mounts)
+        picker = QHBoxLayout()
+        picker.setSpacing(8)
+        browse = QPushButton(tr("Add folder …"))
+        browse.setAutoDefault(False)  # otherwise Enter in a field opens it
+        browse.clicked.connect(self._on_browse_mount)
+        self._mount_writable = QCheckBox(tr("writable"))
+        self._mount_writable.setToolTip(tr(
+            "Add the chosen folder as ':rw'. Only for launchers that update "
+            "themselves in place — a writable mount lets the session change "
+            "host files."))
+        picker.addWidget(browse)
+        picker.addWidget(self._mount_writable)
+        picker.addStretch(1)
+        mv.addLayout(picker)
+        form.addRow(tr("Extra mounts"), mount_box)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                                    | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+
+    def _on_browse_mount(self) -> None:
+        """Append a picked host directory to the extra-mount list.
+
+        Starts in the last entry's parent so adding a second library next to
+        the first is one dialog, not a walk from $HOME. Duplicates are dropped
+        rather than reported: the same path twice is a no-op, not an error.
+        """
+        lines = [ln.strip() for ln in self._mounts.toPlainText().splitlines()
+                 if ln.strip()]
+        # A half-typed line must not break the picker, so parsing is
+        # best-effort here; _on_accept is where an invalid entry is reported.
+        paths = []
+        for line in lines:
+            try:
+                paths.append(config.parse_extra_mount(line)[0])
+            except ValueError:
+                pass
+        start = str(Path.home())
+        if paths and paths[-1].parent.is_dir():
+            start = str(paths[-1].parent)
+        chosen = QFileDialog.getExistingDirectory(
+            self, tr("Choose a folder to mount into the session"), start)
+        if not chosen:
+            return
+        if Path(chosen) in paths:
+            return  # already on the list — adding it twice is a no-op
+        lines.append(f"{chosen}:rw" if self._mount_writable.isChecked() else chosen)
+        self._mounts.setPlainText("\n".join(lines))
 
     def _sync_backend_note(self) -> None:
         """Follow the backend choice: spell out the moonshine trade-offs (the
@@ -200,7 +255,7 @@ class ProfileDialog(QDialog):
                 "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
                 "Intel Arc). Save this profile, then build its image and check "
                 "the GPU on the Setup page. Its quality setting applies at the "
-                "next start instead of live, and there is no preview picture."))
+                "next start instead of live."))
         else:
             self._backend_note.setText("")
 

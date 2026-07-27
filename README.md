@@ -206,6 +206,7 @@ is the same either way.
 | pairing | web UI or CLI, TLS + login | CLI only, plain HTTP, no auth |
 | quality settings | encoder presets in the GUI, applied live | error correction, applied at the next start |
 | keyboard layout | host default | per profile (XKB layout/variant) |
+| mouse & keyboard | per-install toggle | always streamed, no switch |
 | stream preview in the GUI | wf-recorder on the labwc output | screenshot of the nested gamescope |
 | image | `podstage-runtime` (~2.7 GB) | `podstage-moonshine`, built on top of it |
 

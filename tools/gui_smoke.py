@@ -160,6 +160,38 @@ def check_session_card_per_backend(win) -> bool:
     return ok
 
 
+def check_extra_mount_picker() -> bool:
+    """The folder picker appends to the extra-mount list.
+
+    A modal QFileDialog cannot run offscreen, so the chooser is stubbed and
+    only the part worth guarding is exercised: what the picked path turns
+    into, that the ':rw' box decides it, and that picking the same folder
+    twice does not add a second line.
+    """
+    from podstage.ui.pages import sandbox_page
+
+    cfg = config.AppConfig(sessions=[])
+    dlg = sandbox_page.ProfileDialog(None, cfg)
+    original = sandbox_page.QFileDialog.getExistingDirectory
+    picked = ["/srv/games"]
+    sandbox_page.QFileDialog.getExistingDirectory = (
+        staticmethod(lambda *a, **k: picked[0]))
+    try:
+        dlg._on_browse_mount()
+        dlg._on_browse_mount()                      # same folder again
+        dlg._mount_writable.setChecked(True)
+        picked[0] = "/srv/launcher"
+        dlg._on_browse_mount()
+    finally:
+        sandbox_page.QFileDialog.getExistingDirectory = original
+
+    lines = dlg._mounts.toPlainText().splitlines()
+    if lines != ["/srv/games", "/srv/launcher:rw"]:
+        print(f"gui smoke: FAILED (extra-mount picker produced {lines})")
+        return False
+    return True
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     if not check_sandbox_columns():
@@ -183,6 +215,7 @@ def main() -> int:
     ok = check_click_away_drops_focus(win) and ok
     ok = check_stepper_arrows(win) and ok
     ok = check_session_card_per_backend(win) and ok
+    ok = check_extra_mount_picker() and ok
     if win._poll is not None:
         win._poll.stop()
         win._poll.wait(5000)

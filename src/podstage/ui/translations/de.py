@@ -243,22 +243,23 @@ TEXTS: dict[str, str] = {
     "Backend": "Backend",
     "Sunshine (default) works on every supported GPU. moonshine brings "
     "its own compositor and encodes with Vulkan Video, which needs an "
-    "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU; it has no live quality "
-    "settings and no preview picture. The Setup page checks whether "
-    "this machine can run it.":
+    "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU, and its quality settings "
+    "apply at the next session start instead of live. The Setup page "
+    "checks whether this machine can run it.":
         "Sunshine (Standard) läuft auf jeder unterstützten GPU. moonshine "
         "bringt einen eigenen Compositor mit und kodiert per Vulkan Video, "
-        "was eine NVIDIA RTX, AMD RDNA2+ oder Intel Arc voraussetzt; es hat "
-        "keine Qualitätseinstellungen zur Laufzeit und kein Vorschaubild. "
-        "Die Setup-Seite prüft, ob diese Maschine das kann.",
+        "was eine NVIDIA RTX, AMD RDNA2+ oder Intel Arc voraussetzt, und "
+        "seine Qualitätseinstellungen wirken erst ab dem nächsten "
+        "Session-Start statt sofort. Die Setup-Seite prüft, ob diese "
+        "Maschine das kann.",
     "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
     "Intel Arc). Save this profile, then build its image and check "
     "the GPU on the Setup page. Its quality setting applies at the "
-    "next start instead of live, and there is no preview picture.":
+    "next start instead of live.":
         "Braucht eine GPU mit Vulkan-Video-Encode (NVIDIA RTX, AMD RDNA2+, "
         "Intel Arc). Profil speichern, dann auf der Setup-Seite das Image "
         "bauen und die GPU prüfen. Die Qualitätseinstellung gilt ab dem "
-        "nächsten Start statt live, ein Vorschaubild gibt es nicht.",
+        "nächsten Start statt live.",
     "Keyboard": "Tastatur",
     "variant, e.g. nodeadkeys": "Variante, z. B. nodeadkeys",
     "XKB layout of the streamed session, empty keeps moonshine's "
@@ -446,9 +447,11 @@ TEXTS: dict[str, str] = {
         "Leitet Maus und Tastatur des Clients in die Session; Spiele können "
         "den Zeiger für Mouse-Look locken.",
     "Recommended off for controller-only clients. Applies at the next "
-    "session start.":
+    "session start. Sunshine only: moonshine always passes the client's "
+    "mouse and keyboard into the session.":
         "Für reine Controller-Clients empfohlen: aus. Gilt ab dem nächsten "
-        "Session-Start.",
+        "Session-Start. Nur Sunshine: moonshine reicht Maus und Tastatur des "
+        "Clients immer in die Session durch.",
     "Experimental features apply from the next session start.":
         "Experimentelle Features gelten ab dem nächsten Session-Start.",
     "Checks the GitHub releases for a newer version.":
@@ -508,14 +511,27 @@ TEXTS: dict[str, str] = {
         "»Sandboxen« anmelden.",
     "Follow the client's resolution":
         "Auflösung folgt dem Client",
-    "Render at the first connecting client's resolution, locked until "
-    "the session restarts. The profile resolution above is only the "
-    "fallback. Off: always render at the profile resolution.":
-        "Rendert in der Auflösung des zuerst verbindenden Clients, fixiert "
-        "bis zum Neustart der Session. Die Profil-Auflösung oben ist nur der "
-        "Fallback. Aus: es wird immer in der Profil-Auflösung gerendert.",
+    "Render at the connecting client's resolution; the profile "
+    "resolution above is only the fallback. Sunshine locks the first "
+    "client's mode until the session restarts, moonshine follows every "
+    "reconnect. Off: always render at the profile resolution.":
+        "Rendert in der Auflösung des verbindenden Clients; die "
+        "Profil-Auflösung oben ist nur der Fallback. Sunshine fixiert den "
+        "Modus des ersten Clients bis zum Session-Neustart, moonshine folgt "
+        "jedem Reconnect. Aus: es wird immer in der Profil-Auflösung "
+        "gerendert.",
     "Client (auto)":
         "Client (auto)",
+    "Add folder …": "Ordner hinzufügen …",
+    "writable": "schreibbar",
+    "Add the chosen folder as ':rw'. Only for launchers that update "
+    "themselves in place — a writable mount lets the session change "
+    "host files.":
+        "Fügt den gewählten Ordner als »:rw« hinzu. Nur für Launcher, die "
+        "sich selbst an Ort und Stelle aktualisieren: ein schreibbarer Mount "
+        "lässt die Session Host-Dateien verändern.",
+    "Choose a folder to mount into the session":
+        "Ordner wählen, der in die Session gemountet wird",
     "{w}x{h}@{r} · locked until the session restarts":
         "{w}x{h}@{r} · fixiert bis zum Session-Neustart",
     "waiting for the first client …":

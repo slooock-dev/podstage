@@ -6,8 +6,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Needs a runtime image rebuild (`podstage runtime build`): the compositor,
-entrypoint and both container helpers changed.
+Needs an image rebuild for both backends (`podstage runtime build` and
+`podstage runtime build --backend moonshine`): the compositor, both
+entrypoints and the container helpers changed.
 
 ### Added
 
@@ -86,6 +87,11 @@ entrypoint and both container helpers changed.
   binds the host `/dev` while it is on, and the udev OWNER rule covers uhid.
 - **Container diagnostics baked into the image** (frame, X11, event-recorder
   and uinput probes) for debugging a running session.
+- **A folder picker for the extra mounts.** The profile dialog keeps the
+  editable list (that is how an entry is removed or switched), and adds a
+  chooser next to it with a *writable* box that decides whether the picked
+  folder lands as a read-only overlay or as `:rw`. Picking a folder already
+  on the list changes nothing.
 
 ### Changed
 

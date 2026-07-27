@@ -377,7 +377,7 @@ def test_moonshine_env_drops_everything_sunshine_specific():
     # No web UI, no encoder pick, no faked udev monitor, no seat-shim.
     for key in ("PS_CSRF_ORIGINS", "PS_ENCODER", "PS_FAKE_UDEV", "PS_WEB_USER",
                 "PS_WEB_PASS", "PS_MOUSE_INPUT", "PS_SHOW_CURSOR",
-                "PS_NATIVE_TOUCH", "PS_DYNAMIC_RES"):
+                "PS_NATIVE_TOUCH"):
         assert key not in env, key
     # What both backends share: Steam, the nested gamescope, the compat mounts.
     assert env["PS_RESOLUTION"] == "1280x800@60"
@@ -401,6 +401,40 @@ def test_moonshine_forwards_its_own_knobs():
         _ms(env={"PS_MOONSHINE_NAME": "tv", "PS_HDR": "enabled"}), LIBS)
     assert env["PS_MOONSHINE_NAME"] == "tv"
     assert env["PS_HDR"] == "enabled"
+
+
+def test_backends_share_everything_that_is_not_backend_specific(monkeypatch):
+    """Guard against a backend branch quietly dropping a general feature.
+
+    Extra mounts, the shared Steam libraries, the sandbox HOME, the boot-into
+    a-game AppID and the preview/dynamic-resolution/perf switches are
+    properties of the sandbox, not of the streaming server, so both backends
+    must carry them identically. Only the image, the port variable and the
+    /dev breadth may differ.
+
+    The switches go through the environment, NOT through RuntimeOptions.env:
+    an explicit override lands whatever the forward table says, so passing
+    them there would test nothing about the table.
+    """
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "nvidia")
+    forwarded = {"PS_THUMBNAIL_INTERVAL": "25", "PS_DYNAMIC_RES": "disabled",
+                 "PS_PERF_METRICS": "enabled", "PS_HDR": "enabled",
+                 "PS_FOCUS_NUDGE": "disabled", "PS_TOUCH_CLICK_MODE": "4"}
+    for key, val in forwarded.items():
+        monkeypatch.setenv(key, val)
+    shared = {"app": "620",
+              "extra_mounts": ["/srv/gog-games", "/srv/heroic:rw"]}
+    for opts in (_opts(**shared), _ms(**shared)):
+        joined = " ".join(runtime.podman_run_args(opts, library_paths=LIBS))
+        upper, work = config.overlay_dirs(opts.home_dir, Path("/srv/gog-games"))
+        assert f"/srv/gog-games:/srv/gog-games:O,upperdir={upper},workdir={work}" in joined
+        assert "-v /srv/heroic:/srv/heroic " in joined + " "   # writable bind
+        assert "-v /tmp/home-x:/home/player" in joined
+        env = runtime.container_env(opts, LIBS)
+        assert env["PS_APP"] == "620"
+        assert env["STEAM_COMPAT_MOUNTS"] == "/tmp/lib-a/steamapps:/tmp/lib-b/steamapps"
+        for key, val in forwarded.items():
+            assert env.get(key) == val, (opts.backend, key)
 
 
 def test_web_port_only_exists_for_sunshine():
