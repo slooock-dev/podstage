@@ -168,6 +168,42 @@ def test_shared_libraries_mounted_as_overlay():
         assert str(upper).startswith(str(config.DATA_DIR))
 
 
+def test_extra_mounts_overlay_and_rw():
+    home = Path("/tmp/home-x")
+    flags = runtime.container_flags(
+        LIBS, home, vendor="nvidia",
+        extra_mounts=["/srv/gog-games", "/srv/heroic:rw"])
+    upper, work = config.overlay_dirs(home, Path("/srv/gog-games"))
+    assert f"/srv/gog-games:/srv/gog-games:O,upperdir={upper},workdir={work}" in flags
+    assert "/srv/heroic:/srv/heroic" in flags          # plain writable bind
+    assert "/srv/heroic:/srv/heroic:O" not in " ".join(flags)
+
+
+def test_extra_mount_parsing():
+    import pytest
+
+    assert config.parse_extra_mount("/srv/games") == (Path("/srv/games"), False)
+    assert config.parse_extra_mount("/srv/heroic:rw") == (Path("/srv/heroic"), True)
+    with pytest.raises(ValueError, match="absolute"):
+        config.parse_extra_mount("games:rw")
+    with pytest.raises(ValueError, match="absolute"):
+        config.parse_extra_mount("relative/path")
+
+
+def test_start_rejects_missing_extra_mount(tmp_path, monkeypatch):
+    import pytest
+
+    monkeypatch.setattr(runtime, "status",
+                        lambda: runtime.RuntimeStatus(running=False))
+    monkeypatch.setattr(runtime, "image_is_stale", lambda image=None: False)
+    monkeypatch.setattr(runtime, "shared_library_paths",
+                        lambda home, provision=True, app_ids=None: [])
+    opts = runtime.RuntimeOptions(home_dir=tmp_path / "home", provision=False,
+                                  extra_mounts=[str(tmp_path / "missing")])
+    with pytest.raises(RuntimeError, match="extra mount source missing"):
+        runtime.start(opts)
+
+
 def test_overlay_dirs_distinct_per_library_and_sandbox():
     home = Path("/tmp/home-x")
     uppers = {config.overlay_dirs(home, lib)[0] for lib in LIBS}

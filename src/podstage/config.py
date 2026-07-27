@@ -71,6 +71,21 @@ def overlay_root(home_dir: Path) -> Path:
     return DATA_DIR / "overlays" / slug
 
 
+def parse_extra_mount(entry: str) -> tuple[Path, bool]:
+    """``(path, writable)`` for one ``extra_mounts`` entry.
+
+    ``"/abs/path"`` mounts as a read-only overlay, ``"/abs/path:rw"`` as a
+    plain writable bind. Raises ``ValueError`` for a relative path.
+    """
+    writable = entry.endswith(":rw")
+    path_s = entry[:-3] if writable else entry
+    p = Path(path_s).expanduser()
+    if not p.is_absolute():
+        raise ValueError(
+            f"extra mount must be an absolute path (got {entry!r})")
+    return p, writable
+
+
 def overlay_dirs(home_dir: Path, library_path: Path) -> tuple[Path, Path]:
     """(upperdir, workdir) for one shared library's overlay mount. upper and
     work must be siblings on the same filesystem and work must start empty."""
@@ -180,6 +195,14 @@ class SessionConfig:
     # Seconds between in-container preview-thumbnail captures; 0 disables the
     # preview. Applied at container start via PS_THUMBNAIL(_INTERVAL).
     preview_interval_s: int = 10
+    # Extra host directories mounted into the session (non-Steam games or
+    # launchers, started from Big Picture via non-Steam shortcuts). Entries
+    # are "/abs/path" (read-only overlay like the shared Steam libraries;
+    # the sandbox's writes land in per-sandbox overlay storage) or
+    # "/abs/path:rw" (plain writable bind, for launchers that update
+    # themselves in place). Container path = host path, so shortcut paths
+    # keep working.
+    extra_mounts: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         # "ask" is an explicit resolution choice at start; the dynamic

@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QSpinBox,
@@ -100,6 +101,19 @@ class ProfileDialog(QDialog):
         form.addRow(tr("Sunshine port"), self._port)
 
         form.addRow(self._build_games(existing))
+
+        self._mounts = QPlainTextEdit()
+        self._mounts.setPlaceholderText("/path/to/games\n/path/to/launcher:rw")
+        self._mounts.setFixedHeight(64)
+        self._mounts.setToolTip(tr(
+            "One host directory per line, mounted into the session at the "
+            "same path (start its games via non-Steam shortcuts in Big "
+            "Picture). Default is a read-only overlay like the Steam "
+            "libraries; append ':rw' for launchers that update themselves "
+            "in place."))
+        if existing and existing.extra_mounts:
+            self._mounts.setPlainText("\n".join(existing.extra_mounts))
+        form.addRow(tr("Extra mounts"), self._mounts)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                                    | QDialogButtonBox.StandardButton.Cancel)
@@ -243,6 +257,14 @@ class ProfileDialog(QDialog):
                                 tr("Port {port} is already used by profile '{name}'.",
                                    port=port, name=clash.name))
             return
+        mounts = [ln.strip() for ln in self._mounts.toPlainText().splitlines()
+                  if ln.strip()]
+        try:
+            for m in mounts:
+                config.parse_extra_mount(m)
+        except ValueError as e:
+            QMessageBox.warning(self, tr("Invalid extra mount"), str(e))
+            return
         base = self._existing or config.SessionConfig(name=name)
         self.result_profile = config.SessionConfig(
             name=name, resolution=resolution,
@@ -250,6 +272,7 @@ class ProfileDialog(QDialog):
             sunshine_port_base=port, home=base.home,
             sunshine_extra=dict(base.sunshine_extra),
             preview_interval_s=base.preview_interval_s,
+            extra_mounts=mounts,
         )
         self.accept()
 

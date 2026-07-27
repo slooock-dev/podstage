@@ -164,9 +164,17 @@ def cmd_session_add(args: argparse.Namespace) -> int:
         print(f"invalid --apps value {args.apps!r}; expected comma-separated "
               "Steam AppIDs", file=sys.stderr)
         return 1
+    mounts = args.mount or []
+    try:
+        for m in mounts:
+            config.parse_extra_mount(m)  # raises on relative paths/garbage
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 1
     cfg.upsert(SessionConfig(name=args.name, resolution=args.resolution,
                              dynamic_resolution=not args.fixed_resolution,
-                             sunshine_port_base=port, app_ids=app_ids))
+                             sunshine_port_base=port, app_ids=app_ids,
+                             extra_mounts=mounts))
     cfg.save()
     if args.resolution == "ask":
         res_note = "chosen at start (dynamic resolution off)"
@@ -175,7 +183,7 @@ def cmd_session_add(args: argparse.Namespace) -> int:
     else:
         res_note = f"client-driven, fallback {args.resolution}"
     print(f"Session '{args.name}' created (resolution={res_note}, port={port}).")
-    print(f"Next: podstage session setup {args.name}   (first Steam login)")
+    print(f"Next: podstage session login {args.name}   (streamed first Steam login)")
     return 0
 
 
@@ -620,6 +628,10 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--fixed-resolution", action="store_true",
                             help="always render at the profile resolution instead "
                                  "of the first client's")
+            sp.add_argument("--mount", action="append", metavar="PATH[:rw]",
+                            help="mount an extra host dir into the session "
+                                 "(non-Steam games/launchers; default read-only "
+                                 "overlay, ':rw' for a writable bind); repeatable")
         if action == "remove":
             sp.add_argument("--data", action="store_true",
                             help="also delete the sandbox HOME (Steam login, saves) and overlays")

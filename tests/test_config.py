@@ -269,3 +269,12 @@ def test_perf_metrics_save_roundtrip(tmp_path: Path):
     assert AppConfig.load(path).perf_metrics is False
     AppConfig().save(path)
     assert "perf_metrics" not in path.read_text()
+
+
+def test_extra_mounts_save_roundtrip(tmp_path: Path):
+    path = tmp_path / "c.toml"
+    cfg = AppConfig(sessions=[SessionConfig(
+        name="deck", extra_mounts=["/srv/gog-games", "/srv/heroic:rw"])])
+    cfg.save(path)
+    loaded = AppConfig.load(path)
+    assert loaded.sessions[0].extra_mounts == ["/srv/gog-games", "/srv/heroic:rw"]

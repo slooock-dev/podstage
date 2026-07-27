@@ -134,6 +134,9 @@ class RuntimeOptions:
     client: str = ""  # profile name (informational, lands in the state file)
     app_ids: list[int] = field(default_factory=list)  # provision only these (empty = all)
     env: dict[str, str] = field(default_factory=dict)  # extra PS_* overrides
+    # Profile extra_mounts entries ("/path" overlay, "/path:rw" bind); see
+    # config.SessionConfig.extra_mounts.
+    extra_mounts: list[str] = field(default_factory=list)
 
     @property
     def web_port(self) -> int:
@@ -346,7 +349,8 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     vendor = gpu_vendor()
     args = ["run", "--rm", "--name", CONTAINER_NAME]
     args += ["-it"] if opts.attach else ["-d"]
-    args += container_flags(library_paths, opts.home_dir, vendor=vendor)
+    args += container_flags(library_paths, opts.home_dir, vendor=vendor,
+                            extra_mounts=opts.extra_mounts)
     args += ["-v", f"{opts.home_dir}:/home/player"]
     for key, val in container_env(opts, library_paths, vendor=vendor).items():
         args += ["-e", f"{key}={val}"]
@@ -354,15 +358,27 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     return args
 
 
-def ensure_overlay_dirs(home_dir: Path, library_paths: list[Path]) -> None:
-    for p in library_paths:
+def ensure_overlay_dirs(home_dir: Path, overlay_paths: list[Path]) -> None:
+    for p in overlay_paths:
         upper, work = config.overlay_dirs(home_dir, p)
         upper.mkdir(parents=True, exist_ok=True)
         work.mkdir(parents=True, exist_ok=True)
 
 
+def extra_mount_paths(extra_mounts: list[str]) -> tuple[list[Path], list[Path]]:
+    """``(overlay_paths, rw_paths)`` from profile ``extra_mounts`` entries.
+    Raises ValueError for malformed entries."""
+    overlay: list[Path] = []
+    rw: list[Path] = []
+    for entry in extra_mounts:
+        p, writable = config.parse_extra_mount(entry)
+        (rw if writable else overlay).append(p)
+    return overlay, rw
+
+
 def container_flags(library_paths: list[Path], home_dir: Path,
-                    vendor: str | None = None) -> list[str]:
+                    vendor: str | None = None,
+                    extra_mounts: list[str] | None = None) -> list[str]:
     """Devices, isolation and mounts of the rootless runtime container.
     Excludes: container name/detach, the client HOME volume, env, image."""
     vendor = vendor or gpu_vendor()
@@ -421,6 +437,17 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     for p in library_paths:
         upper, work = config.overlay_dirs(home_dir, p)
         args += ["-v", f"{p}:{p}:O,upperdir={upper},workdir={work}"]
+    # Profile extra_mounts (non-Steam games/launchers, launched from Big
+    # Picture via non-Steam shortcuts): overlay by default like the
+    # libraries; ":rw" mounts plain and writable for launchers that update
+    # themselves in place. Container path = host path so shortcut paths
+    # keep working.
+    overlay_extra, rw_extra = extra_mount_paths(extra_mounts or [])
+    for p in overlay_extra:
+        upper, work = config.overlay_dirs(home_dir, p)
+        args += ["-v", f"{p}:{p}:O,upperdir={upper},workdir={work}"]
+    for p in rw_extra:
+        args += ["-v", f"{p}:{p}"]
     return args
 
 
@@ -608,7 +635,15 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     # discovered libraries to the pure args builder.
     library_paths = shared_library_paths(opts.home_dir, provision=opts.provision,
                                          app_ids=opts.app_ids)
-    ensure_overlay_dirs(opts.home_dir, library_paths)
+    # Extra mounts fail fast on a bad or vanished source: a missing bind
+    # source would make podman create it, and a typo would surface only as a
+    # broken non-Steam shortcut inside Big Picture.
+    overlay_extra, rw_extra = extra_mount_paths(opts.extra_mounts)  # raises on garbage
+    missing = [p for p in overlay_extra + rw_extra if not p.is_dir()]
+    if missing:
+        raise RuntimeError("extra mount source missing: "
+                           + ", ".join(str(p) for p in missing))
+    ensure_overlay_dirs(opts.home_dir, library_paths + overlay_extra)
     # Bind source must exist, or podman creates it root-owned in the tmpfs.
     config.RUNTIME_SHARE_DIR.mkdir(parents=True, exist_ok=True)
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)

@@ -161,6 +161,7 @@ class Session:
             client=self.cfg.name,
             app_ids=self.cfg.app_ids,
             env=env,
+            extra_mounts=list(self.cfg.extra_mounts),
         )
 
     # -- lifecycle -------------------------------------------------------

@@ -178,6 +178,18 @@ TEXTS: dict[str, str] = {
         "für Einstellungen, die Big Picture nicht anbietet. In beiden Fällen "
         "wird die Spiele-Bibliothek danach automatisch provisioniert.",
     "Streamed login": "Gestreamter Login",
+    "Extra mounts": "Zusätzliche Mounts",
+    "Invalid extra mount": "Ungültiger Mount",
+    "One host directory per line, mounted into the session at the "
+    "same path (start its games via non-Steam shortcuts in Big "
+    "Picture). Default is a read-only overlay like the Steam "
+    "libraries; append ':rw' for launchers that update themselves "
+    "in place.":
+        "Ein Host-Verzeichnis pro Zeile, wird unter demselben Pfad in die "
+        "Session gemountet (Spiele darin über Non-Steam-Shortcuts in Big "
+        "Picture starten). Standard ist ein read-only-Overlay wie bei den "
+        "Steam-Bibliotheken; ':rw' anhängen für Launcher, die sich selbst "
+        "aktualisieren.",
     "Boots this sandbox into Big Picture's Steam sign-in over the "
     "stream (QR code via the Steam Mobile App, or the on-screen "
     "keyboard). No window opens on the host.":

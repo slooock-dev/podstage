@@ -76,6 +76,10 @@ one stream at a time, managed from a small host GUI.
 - **Sandboxed Steam instances.** Each sandbox is an isolated `$HOME` with its
   own login, Steam settings and Steam Input layout, set up from the GUI. Keep
   as many as you like; one streams at a time.
+- **Non-Steam games and launchers.** Mount extra host directories into the
+  session per profile (read-only overlay by default, `:rw` for launchers
+  that update themselves) and start them from Big Picture via non-Steam
+  shortcuts.
 - **Input isolation.** The client's virtual input devices live on a dedicated
   seat and never touch the desktop, in either direction. That isolates input
   routing, not malware (see [Security notes](#security-notes)).
@@ -244,7 +248,7 @@ podstage setup                     # print guided (sudo) setup commands
 podstage runtime build             # (re)build the runtime image
 podstage runtime start|stop|status # drive the container directly (by HOME dir)
 podstage session list
-podstage session add <name> [--resolution R] [--port N] [--apps ID,…] [--fixed-resolution]
+podstage session add <name> [--resolution R] [--port N] [--apps ID,…] [--fixed-resolution] [--mount PATH[:rw]]…
 podstage session login <name>        # streamed first login (Big Picture sign-in)
 podstage session setup|start|stop|status <name>   # start: --resolution, --app
 podstage session pair <name> <PIN>    # complete a Moonlight pairing
@@ -353,15 +357,13 @@ the NVIDIA CDI spec) are kept unless `--all`, since other software uses them too
 
 Landed on the 0.3 branch: labwc replaces the cage kiosk as the session
 compositor, the streamed first login (`session login` / the GUI's "Streamed
-login": Big Picture sign-in over the stream, QR code included), and the
-doctor covers custom-port firewall rules. A desktop mode for playing was
-tried and cut; podstage stays focused on orchestrating the sandboxed Big
-Picture session.
+login": Big Picture sign-in over the stream, QR code included), per-profile
+non-Steam mounts, and the doctor covers custom-port firewall rules. A
+desktop mode for playing was tried and cut; podstage stays focused on
+orchestrating the sandboxed Big Picture session.
 
 Planned for 0.3:
 
-- Mount non-Steam game/launcher directories into the session, started from
-  Big Picture via non-Steam shortcuts.
 - Hide the streamed cursor when idle (the compositor's cursor has no
   idle-hide yet).
 - Optional DualSense emulation (experimental setting): real gyro in the
