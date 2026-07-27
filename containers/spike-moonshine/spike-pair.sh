@@ -20,11 +20,19 @@ set -euo pipefail
 
 PIN=${1:?usage: spike-pair.sh <PIN> [uniqueid]}
 UNIQUEID=${2:-0123456789ABCDEF}
-PORT=${PS_MS_PORT:-48989}
 SANDBOX=${PS_MS_SANDBOX:-homes/spike-scratch}
-STATE="$SANDBOX/.local/share/moonshine/state.toml"
 
 cd "$(dirname "$0")/../.."
+
+STATE="$SANDBOX/.local/share/moonshine/state.toml"
+
+# Take the port from the config the running session actually wrote, not from a
+# default: spike-run.sh shifts the block to base 48989, but a Deck test runs
+# with PS_MS_PORT=47989 so Moonlight can add the host by plain IP. Guessing
+# wrong here fails with "Could not connect" while the PIN is expiring.
+PORT=${PS_MS_PORT:-$(sed -n 's/^port = \([0-9]\+\)$/\1/p' \
+    "$SANDBOX/.config/moonshine/config.toml" 2>/dev/null | head -1)}
+PORT=${PORT:-48989}
 
 echo "== paired state before"
 grep -E 'clients|paired_certs|unique_id' -A 2 "$STATE" 2>/dev/null || echo "   (no state.toml yet)"
