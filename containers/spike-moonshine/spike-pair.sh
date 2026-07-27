@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# SPIKE: complete a Moonlight pairing against the running moonshine container.
+#   ./spike-pair.sh <PIN> [uniqueid]
+#
+# This is the moonshine equivalent of core/sunshine_api.pair(), and the
+# comparison is the point of spike question 4:
+#
+#   Sunshine   POST https://localhost:47990/api/pin   HTTPS, self-signed cert,
+#              HTTP basic auth with the per-install credentials podstage seeds
+#              headlessly into sunshine.conf, JSON body {"pin","name"}.
+#   moonshine  POST http://localhost:<base>/submit-pin   plain HTTP on the same
+#              port Moonlight talks to, NO auth at all, form body
+#              uniqueid=<id>&pin=<pin>.
+#
+# The uniqueid identifies the pending pairing attempt; Moonlight sends the
+# fixed 0123456789ABCDEF, which is why this works without scraping anything.
+# moonshine also opens a desktop notification with the PIN page — meaningless
+# in a headless container, so the GUI would drive exactly this endpoint.
+set -euo pipefail
+
+PIN=${1:?usage: spike-pair.sh <PIN> [uniqueid]}
+UNIQUEID=${2:-0123456789ABCDEF}
+PORT=${PS_MS_PORT:-48989}
+SANDBOX=${PS_MS_SANDBOX:-homes/spike-scratch}
+STATE="$SANDBOX/.local/share/moonshine/state.toml"
+
+cd "$(dirname "$0")/../.."
+
+echo "== paired state before"
+grep -E 'clients|paired_certs|unique_id' -A 2 "$STATE" 2>/dev/null || echo "   (no state.toml yet)"
+
+echo "== POST http://localhost:$PORT/submit-pin"
+curl -sS -X POST "http://localhost:$PORT/submit-pin" \
+    -d "uniqueid=$UNIQUEID&pin=$PIN" -w '\n   http %{http_code}\n'
+
+sleep 2
+echo "== paired state after"
+grep -E 'clients|paired_certs' -A 2 "$STATE" 2>/dev/null || echo "   (no state.toml)"

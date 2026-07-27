@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+# SPIKE entrypoint — moonshine instead of labwc + gamescope + Sunshine.
+#
+# The production entrypoint builds the whole chain (seatd → labwc(seat-shim) →
+# gamescope → Steam, with Sunshine capturing labwc). moonshine replaces the
+# compositor, the capture path and the streaming server at once, so this
+# entrypoint only has to provide what moonshine expects from a user session:
+#
+#   * XDG_RUNTIME_DIR                — Wayland socket + PulseAudio socket
+#   * a session D-Bus                — moonshine and Steam both need one
+#   * a stub SYSTEM D-Bus            — gamepadui's network gate (see the
+#                                      production entrypoint for the diagnosis)
+#   * org.freedesktop.systemd1       — provided by the stub, because moonshine
+#                                      launches apps as transient units only
+#
+# No seatd and no seat-shim: moonshine's compositor does not open evdev devices
+# at all. Client mouse/keyboard go straight into its Wayland seat, gamepads are
+# created as uinput/uhid devices by inputtino for the game to find.
+#
+# Modes (PS_MS_MODE):
+#   server       (default) run the moonshine server in the foreground
+#   healthcheck  run `moonshine healthcheck` against the generated config, exit
+#   hold         set the session up and idle — for `podman exec` probing
+#                (a detached container has no tty, so `shell` cannot be used
+#                for that: bash would read EOF and exit immediately)
+#   shell        drop into bash with the session (buses + stub) already up
+set -uo pipefail
+
+: "${PS_MS_MODE:=server}"
+: "${PS_RESOLUTION:=1920x1080@60}"
+: "${PS_MS_PORT:=48989}"          # base port; https = base-5, rtsp = base+21
+: "${PS_MS_NAME:=podstage-spike}"
+: "${PS_MS_APP:=Steam Big Picture}"
+: "${PS_MS_LOG:=moonshine=debug,moonshine_core=debug}"
+
+log() { printf '[spike] %s\n' "$*" >&2; }
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if ! mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null; then
+    XDG_RUNTIME_DIR="/tmp/xdg-$(id -u)"; export XDG_RUNTIME_DIR
+    mkdir -p "$XDG_RUNTIME_DIR"
+fi
+chmod 700 "$XDG_RUNTIME_DIR"
+
+# Same cursor-theme fix as production: Steam/CEF reads the GTK setting.
+export XCURSOR_THEME=Adwaita
+GTK_INI="$HOME/.config/gtk-3.0/settings.ini"
+mkdir -p "${GTK_INI%/*}"
+[ -s "$GTK_INI" ] || printf '[Settings]\ngtk-cursor-theme-name=Adwaita\n' > "$GTK_INI"
+
+export SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0
+export STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT=1
+export SRT_URLOPEN_PREFER_STEAM=1
+export SDL_JOYSTICK_DISABLE_UDEV=1   # no uevents in a rootless userns
+
+# --- session + stub system bus ---------------------------------------------
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+if [ ! -S "$XDG_RUNTIME_DIR/bus" ]; then
+    log "starting private session D-Bus at $DBUS_SESSION_BUS_ADDRESS"
+    dbus-daemon --session --address="$DBUS_SESSION_BUS_ADDRESS" \
+        --nofork --nopidfile --syslog-only >/dev/null 2>&1 &
+    for _ in $(seq 1 30); do [ -S "$XDG_RUNTIME_DIR/bus" ] && break; sleep 0.1; done
+fi
+[ -S "$XDG_RUNTIME_DIR/bus" ] || log "(warning) no session bus"
+
+if [ ! -S /run/dbus/system_bus_socket ] && mkdir -p /run/dbus 2>/dev/null; then
+    log "starting stub system D-Bus (gamepadui network gate)"
+    dbus-daemon --session --address=unix:path=/run/dbus/system_bus_socket \
+        --nofork --nopidfile --syslog-only >/dev/null 2>&1 &
+    for _ in $(seq 1 20); do [ -S /run/dbus/system_bus_socket ] && break; sleep 0.1; done
+fi
+
+# --- stub systemd1 ----------------------------------------------------------
+# PS_MS_NO_SYSTEMD_STUB=1 leaves the bus without it, which is how the spike
+# reproduces the plain "no systemd in the container" case.
+if [ "${PS_MS_NO_SYSTEMD_STUB:-0}" != 1 ]; then
+    log "starting stub org.freedesktop.systemd1"
+    podstage-systemd1-stub --verbose 2>&1 | sed 's/^/[stub] /' >&2 &
+    for _ in $(seq 1 30); do
+        dbus-send --session --dest=org.freedesktop.DBus --print-reply=literal \
+            /org/freedesktop/DBus org.freedesktop.DBus.NameHasOwner \
+            string:org.freedesktop.systemd1 2>/dev/null | grep -q true && break
+        sleep 0.2
+    done
+fi
+
+# --- config -----------------------------------------------------------------
+CONF_DIR="$HOME/.config/moonshine"
+CONF="$CONF_DIR/config.toml"
+mkdir -p "$CONF_DIR"
+
+# Moonlight derives every port from the base port with fixed offsets, so the
+# whole block moves together and a client can reach a shifted set with
+# "IP:<base>". Same offsets Sunshine uses.
+PORT_HTTP=$PS_MS_PORT               # base    (47989)
+PORT_HTTPS=$((PS_MS_PORT - 5))      # base-5  (47984)
+PORT_VIDEO=$((PS_MS_PORT + 9))      # base+9  (47998, UDP)
+PORT_CONTROL=$((PS_MS_PORT + 10))   # base+10 (47999, UDP)
+PORT_AUDIO=$((PS_MS_PORT + 11))     # base+11 (48000, UDP)
+PORT_RTSP=$((PS_MS_PORT + 21))      # base+21 (48010)
+
+if [ "${PS_MS_KEEP_CONFIG:-0}" != 1 ]; then
+    cat > "$CONF" <<EOF
+# Generated by the podstage moonshine spike entrypoint — do not hand-edit
+# (set PS_MS_KEEP_CONFIG=1 to keep your own version).
+name = "$PS_MS_NAME"
+address = "0.0.0.0"
+inhibit_sleep = false
+
+[webserver]
+port = $PORT_HTTP
+port_https = $PORT_HTTPS
+enable_pairing = true
+certificate = "\$HOME/.config/moonshine/cert.pem"
+private_key = "\$HOME/.config/moonshine/key.pem"
+
+[stream]
+port = $PORT_RTSP
+timeout = 60
+
+[stream.video]
+port = $PORT_VIDEO
+
+[stream.control]
+port = $PORT_CONTROL
+
+[stream.audio]
+port = $PORT_AUDIO
+
+[compositor]
+hdr = false
+
+[[application]]
+title = "$PS_MS_APP"
+command = ["/usr/local/bin/podstage-ms-app"]
+stdout = "file:$XDG_RUNTIME_DIR/app.log"
+stderr = "file:$XDG_RUNTIME_DIR/app.log"
+launch_timeout_secs = 5
+EOF
+    log "wrote $CONF (http=$PORT_HTTP https=$PORT_HTTPS rtsp=$PORT_RTSP" \
+        "video=$PORT_VIDEO control=$PORT_CONTROL audio=$PORT_AUDIO)"
+fi
+
+export MOONSHINE_LOG="$PS_MS_LOG"
+export PS_RESOLUTION
+
+case "$PS_MS_MODE" in
+  hold)
+    log "hold mode — session is up, exec into it: podman exec podstage-spike-ms ..."
+    log "config: $CONF"
+    exec sleep infinity
+    ;;
+  shell)
+    log "shell mode — session is up, run: moonshine $CONF"
+    exec bash
+    ;;
+  healthcheck)
+    exec moonshine healthcheck --config "$CONF"
+    ;;
+  server)
+    log "starting moonshine ($(cat /opt/moonshine/version))"
+    # inhibit_sleep is off and there is no logind in here; the health check
+    # would fail on the missing system bus services, so run it separately via
+    # PS_MS_MODE=healthcheck and start the server with the GPU probe only.
+    exec moonshine --no-health-check "$CONF"
+    ;;
+  *)
+    log "unknown PS_MS_MODE=$PS_MS_MODE"
+    exit 2
+    ;;
+esac

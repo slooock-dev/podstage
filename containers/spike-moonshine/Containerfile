@@ -1,0 +1,85 @@
+# SPIKE (v0.3.0): evaluate moonshine as an OPTIONAL streaming backend.
+#
+# moonshine (https://github.com/hgaiser/moonshine) is a Rust GameStream server
+# that brings its own headless Wayland compositor (smithay) and encodes with
+# Vulkan Video instead of NVENC/VAAPI. It would collapse our
+# labwc + Sunshine + seat-shim + keeper chain into a single server.
+#
+# This image derives from the production runtime so the comparison is against
+# the same base (same glibc, same Mesa, same CDI NVIDIA injection, same rootless
+# user) and only adds moonshine plus the pieces needed to start it without a
+# systemd user manager.
+#
+# Build:  podman build -t podstage-spike-moonshine:latest containers/spike-moonshine/
+# Not part of the production build; delete after the spike is decided.
+
+FROM localhost/podstage-runtime:latest
+
+USER root
+
+# Full upgrade first: the Rust toolchain and the moonshine build pull in fresh
+# libs; a plain -Sy install on the pinned base db would partial-upgrade.
+#
+# Build deps (moonshine README + what the crate graph actually needs):
+#   rust/clang/cmake/make/git     — the workspace, aws-lc-rs, rusqlite(bundled),
+#                                   inputtino-sys drives cmake with "Unix Makefiles"
+#   libc++, libevdev              — inputtino (C++, built by its build script)
+#   opus, libxkbcommon, wayland   — opus-sys, smithay
+#   nasm, perl                    — aws-lc-rs assembly paths
+# Runtime deps that the base image does not already carry:
+#   xorg-xwayland                 — moonshine's compositor spawns its own XWayland
+#   python-dbus, python-gobject   — the systemd1 stub (see systemd1-stub.py)
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm --needed \
+        rust clang cmake make git pkgconf \
+        libc++ libevdev opus libxkbcommon wayland \
+        nasm perl \
+        xorg-xwayland \
+        python-dbus python-gobject && \
+    pacman -Scc --noconfirm
+
+# Build moonshine from source. Pinned to a release tag: the crate graph also
+# pulls three git dependencies (ash, inputtino, pixelforge) that are themselves
+# rev-pinned by moonshine's Cargo.lock, so --locked makes the build reproducible.
+#
+# Everything happens in one layer: the release target dir is >5 GB and only the
+# artifacts are worth keeping. moonshine-bench comes along because it drives the
+# compositor + encode pipeline WITHOUT a Moonlight client — the only way to get
+# encode numbers out of a headless spike.
+# Pinned to a commit, not to the v0.13.5 release: that release's CLI is just
+# `moonshine <config>`, while this commit adds the `healthcheck` subcommand and
+# `--no-health-check`. The health report (render node, EGL, Vulkan codecs,
+# DMA-BUF, XWayland, D-Bus, XDG_RUNTIME_DIR, ports, uinput, uhid, WSI layer) is
+# the single best instrument this spike has, and it is also what a future
+# `podstage doctor` check would call.
+ARG MOONSHINE_VERSION=3f8e17c43b599545992915c56a133108333c2b89
+ENV CARGO_HOME=/tmp/cargo
+RUN git init /tmp/moonshine && \
+    cd /tmp/moonshine && \
+    git remote add origin https://github.com/hgaiser/moonshine.git && \
+    git fetch --depth 1 origin "$MOONSHINE_VERSION" && \
+    git checkout FETCH_HEAD && \
+    cargo build --release --locked --workspace && \
+    install -Dm755 target/release/moonshine /usr/local/bin/moonshine && \
+    install -Dm755 target/release/moonshine-bench /usr/local/bin/moonshine-bench && \
+    install -Dm755 target/release/libmoonshine_wsi.so \
+        /usr/lib/moonshine/vulkan-layers/libmoonshine_wsi.so && \
+    install -Dm644 dist/VkLayer_moonshine_wsi.json \
+        /usr/share/vulkan/implicit_layer.d/VkLayer_moonshine_wsi.json && \
+    install -Dm644 dist/60-moonshine.rules /opt/moonshine/60-moonshine.rules && \
+    printf '%s\n' "$MOONSHINE_VERSION" > /opt/moonshine/version && \
+    cd / && rm -rf /tmp/moonshine /tmp/cargo
+ENV CARGO_HOME=
+
+# The stub systemd1 service, plus the spike entrypoint that replaces the
+# production one (no labwc, no gamescope, no Sunshine — moonshine is all three).
+COPY systemd1-stub.py /usr/local/bin/podstage-systemd1-stub
+COPY spike-entrypoint.sh /usr/local/bin/podstage-spike-entrypoint
+COPY ms-app.sh /usr/local/bin/podstage-ms-app
+RUN chmod 755 /usr/local/bin/podstage-systemd1-stub \
+        /usr/local/bin/podstage-spike-entrypoint \
+        /usr/local/bin/podstage-ms-app
+
+USER player
+
+ENTRYPOINT ["/usr/local/bin/podstage-spike-entrypoint"]
