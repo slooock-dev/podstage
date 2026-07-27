@@ -22,6 +22,8 @@ profile dialog). The Sunshine backend stays the default.
 | config changes | live via the web API | rewrite `config.toml`, restart the session |
 | quality settings | profile `sunshine_extra`, applied live | `fec_percentage`, applied at the next start |
 | keyboard layout | host default | `compositor.keyboard` per profile |
+| GUI preview | wf-recorder on the labwc output | `gamescopectl screenshot` on the nested gamescope |
+| render size | first client's mode, locked until restart | the connecting client's mode, per session |
 
 The whole labwc bug class (seat capability churn, faked udev hotplug, cursor
 delegation) disappears structurally: moonshine's compositor never opens an
@@ -50,7 +52,7 @@ wired: `stream.video.encrypt`, `stream.timeout`. Verified absent despite the
 obvious guess: `stream.control.encrypt` (the control stream config only holds
 `gamepad`).
 
-## Two pieces that need explaining
+## Three pieces that need explaining
 
 **`systemd1-stub.py`.** moonshine's `Application::spawn` calls
 `StartTransientUnit` on the session bus with no fork/exec fallback, so without
@@ -69,6 +71,19 @@ pointing `LIBDECOR_PLUGIN_DIR` at an empty directory drops the two remaining
 frame subsurfaces that otherwise hold pointer focus and produce a stuck resize
 cursor. Also upstream-fixable: advertising xdg-decoration and answering
 "server-side" would make libdecor stand down on its own.
+
+**The preview loop in `entrypoint.sh`.** The host GUI reads
+`$HOME/.cache/podstage/thumb.png` from the mounted sandbox, and the Sunshine
+path fills it with wf-recorder. That does not work here: neither moonshine's
+compositor nor gamescope's `--expose-wayland` display implements
+wlr-screencopy (wf-recorder rejects both), and gamescope's PipeWire capture
+needs a PipeWire daemon this image deliberately does not run, because
+moonshine brings its own PulseAudio server. What does work is
+`gamescopectl screenshot <path>`: gamescope writes its own composited output,
+which is the exact picture moonshine encodes, roughly 150 ms after the
+request. The loop re-resolves the gamescope socket every round on purpose --
+gamescope only exists while a client is connected, and comes back with the
+session.
 
 ## Modes
 

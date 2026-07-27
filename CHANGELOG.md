@@ -22,11 +22,26 @@ entrypoint and both container helpers changed.
   It is narrower than Sunshine in three ways worth knowing before choosing it:
   it encodes through Vulkan Video, which rules out every pre-Arc Intel and
   pre-RDNA2 AMD GPU that streams fine via VAAPI; its pairing endpoint has no
-  authentication; and it has no config API, so there is no live quality
-  setting and no stream preview in the GUI. Its own image
+  authentication; and it has no config API, so quality settings apply at the
+  next session start instead of live. Its own image
   (`podstage runtime build --backend moonshine`) is built on top of the
   runtime image and compiles moonshine from source. See
   [`containers/moonshine/README.md`](containers/moonshine/README.md).
+- **The stream preview works on the moonshine backend too.** Its compositor
+  implements no wlr-screencopy, so the Sunshine loop (wf-recorder on the labwc
+  output) has nothing to attach to. The nested gamescope can screenshot its own
+  composited output though, which is the exact picture moonshine encodes, so
+  the preview loop asks it for one every N seconds and drops the frame where
+  the GUI already looks for it. Same setting, same interval, same file; the
+  card is no longer greyed out per backend.
+- **moonshine renders at the connecting client's resolution.** The nested
+  gamescope was pinned to the profile resolution while moonshine sized its own
+  compositor from the client's request, so a client that asked for anything
+  else got the profile canvas scaled into its screen. gamescope now takes the
+  size moonshine hands the application, and the Session card shows it. The
+  per-profile toggle applies to both backends, with the difference that
+  moonshine re-sizes on every reconnect instead of locking the first client's
+  mode until the session restarts.
 - **Two moonshine settings per profile**, both verified against the server
   rather than guessed (it ignores unknown keys but rejects a wrong type, so a
   type error is what proves a key is read): forward error correction, its one

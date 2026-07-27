@@ -33,10 +33,10 @@ TEXTS: dict[str, str] = {
     "from the next stream start.":
         "Wie oft die Vorschau im Container aufgenommen wird; 0 schaltet sie aus. "
         "Wirkt ab dem nächsten Stream-Start.",
+    "{w}x{h}@{r} · follows the connected client":
+        "{w}x{h}@{r} · folgt dem verbundenen Client",
     "Preview appears here while streaming.":
         "Die Vorschau erscheint hier während des Streams.",
-    "No preview with the {backend} backend.":
-        "Kein Vorschaubild mit dem Backend {backend}.",
     "Preview is off": "Vorschau ist aus",
     "waiting for preview …": "warte auf Vorschau …",
     "no new frames": "keine neuen Frames",

@@ -176,10 +176,9 @@ class SessionConfig:
     resolution:
       * a preset key ("deck", "1080p60", …) or "WxH@R", or
       * "ask" → chosen when you start the session.
-      With dynamic_resolution (default) the session renders at the FIRST
-      client's resolution (locked until restart) and the profile resolution
-      is only the pre-connect canvas; without it, the session renders at the
-      profile resolution.
+      With dynamic_resolution (default) the session renders at the connecting
+      client's resolution and the profile resolution is only the pre-connect
+      canvas; without it, the session renders at the profile resolution.
     app_ids:
       * empty (default) → the *whole* installed library is shared into the sandbox
         (games are picked inside Big Picture), or
@@ -190,14 +189,15 @@ class SessionConfig:
 
     name: str
     resolution: str = "deck"
-    # Render at the first client's resolution (PS_DYNAMIC_RES). Off = fixed
-    # profile resolution. Ignored by the moonshine backend, which always
-    # sizes its compositor from the connecting client's request.
+    # Render at the connecting client's resolution (PS_DYNAMIC_RES). Off =
+    # fixed profile resolution. Sunshine locks the first client's mode until
+    # the session restarts; moonshine rebuilds compositor and gamescope per
+    # session, so there it follows every reconnect (backends.res_locked).
     dynamic_resolution: bool = True
     app_ids: list[int] = field(default_factory=list)
     # Streaming backend: "sunshine" (default) or "moonshine". See
     # core/backends.py; moonshine needs a GPU with a Vulkan video-encode
-    # queue and has no live config API or host-side preview.
+    # queue and has no live config API.
     backend: str = "sunshine"
     # Moonlight base port; the rest of the port block derives from it. The
     # key keeps its historical name so existing config.toml files keep their

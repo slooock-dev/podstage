@@ -74,9 +74,11 @@ one stream at a time, managed from a small host GUI.
 - **Built for Steam, gamepad first.** The streamed session is Big Picture and
   Steam Input works natively. Mouse and keyboard streaming is optional (off by
   default, with in-game pointer lock).
-- **Resolution follows the client.** The pipeline launches on the first
-  Moonlight connect and renders at that client's resolution and refresh rate,
-  locked until the session restarts. Per-profile toggle, on by default.
+- **Resolution follows the client.** The session renders at the connecting
+  Moonlight client's resolution and refresh rate: on Sunshine the pipeline
+  launches on the first connect and stays at that mode until the session
+  restarts, on moonshine it re-sizes on every reconnect. Per-profile toggle,
+  on by default.
 - **Shared games, separate prefixes.** Game files are symlinked from your main
   Steam libraries, so nothing downloads twice, and mounted as read-only
   overlay lowerdirs, so a session cannot modify host game files. Prefixes,
@@ -204,7 +206,7 @@ is the same either way.
 | pairing | web UI or CLI, TLS + login | CLI only, plain HTTP, no auth |
 | quality settings | encoder presets in the GUI, applied live | error correction, applied at the next start |
 | keyboard layout | host default | per profile (XKB layout/variant) |
-| stream preview in the GUI | yes | no |
+| stream preview in the GUI | wf-recorder on the labwc output | screenshot of the nested gamescope |
 | image | `podstage-runtime` (~2.7 GB) | `podstage-moonshine`, built on top of it |
 
 moonshine collapses compositor, capture and streaming server into one process,
@@ -259,7 +261,7 @@ session as trusted-LAN only.
 
 | Page | What it does |
 |------|--------------|
-| **Session** | Start/stop the Big Picture stream, the active game, the Performance card (game FPS plus CPU/GPU/VRAM/encoder), a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). Preview and quality settings are Sunshine-only; on a moonshine profile they are greyed out and say so. |
+| **Session** | Start/stop the Big Picture stream, the active game, the Performance card (game FPS plus CPU/GPU/VRAM/encoder), a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). The quality settings are Sunshine-only; on a moonshine profile they are replaced by that backend's own. |
 | **Sandboxes** | Sandbox profiles including the streaming backend, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
 | **Setup** | Doctor checks grouped by host, streaming and backend (a backend group appears once a profile uses it, with its own image build) with one-click fixes, the one-time udev rules install, desktop integration, streaming toggles (mouse & keyboard, preview behavior, performance metrics), experimental features, an on-demand update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
@@ -291,9 +293,10 @@ and the network:
   the same bitrate HEVC looks noticeably better, AV1 better still. NVIDIA
   encodes all three; AMD and Intel cover H.264 and HEVC, with AV1 on newer
   GPUs.
-- **Resolution follows the first client.** Set Moonlight to the client's
-  native resolution; the session renders at whatever connects first (locked
-  until restart), later clients with a different resolution get scaled.
+- **Resolution follows the client.** Set Moonlight to the client's native
+  resolution. On Sunshine the session renders at whatever connects first and
+  scales later clients with a different resolution; moonshine rebuilds the
+  session per connect, so every client gets its own mode.
 - **Prefer a wired host.** High bitrate over Wi-Fi suffers from packet loss.
   Wiring the host, or a clean 5 GHz link, often helps more than any encoder
   setting.
@@ -396,10 +399,12 @@ Patches widening distro and GPU support are very welcome.
 - **No GPU load shown on Intel.** The meter samples `intel_gpu_top`; install
   it (igt-gpu-tools) and make the GPU PMU readable (CAP_PERFMON or a relaxed
   `perf_event_paranoid`). VRAM stays unavailable on i915/xe.
-- **The preview stays blank.** The in-container capture only produces a frame
-  while the picture is actually changing; the placeholder shows until the
-  session's first frame arrives. After that the last frame stays visible
-  through static scenes (Setup → Streaming turns that off).
+- **The preview stays blank.** On Sunshine the capture only produces a frame
+  while the picture is actually changing; on moonshine there is nothing to
+  capture until a client connects, because the compositor only exists then.
+  Either way the placeholder shows until the session's first frame arrives.
+  After that the last frame stays visible through static scenes (Setup →
+  Streaming turns that off).
 - **A game re-downloads the same update in every session.** Sandbox-side
   updates live in per-sandbox overlay storage
   (`~/.local/share/podstage/overlays/`) and are purged once the host updates
@@ -437,9 +442,9 @@ Planned for 0.3:
   workaround for the stuck resize cursor, and the focus watchdog and perf
   probe now running under that backend too.
 
-Not in 0.3, and worth knowing if you use moonshine: no stream preview in the
-GUI, no quality settings, and no way to move the mDNS name off the profile
-name. Its pairing endpoint is unauthenticated, which is upstream's design.
+Not in 0.3, and worth knowing if you use moonshine: no live quality settings
+(they apply at the next session start) and no way to move the mDNS name off
+the profile name. Its pairing endpoint is unauthenticated, which is upstream's design.
 
 
 ## Development

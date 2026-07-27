@@ -143,20 +143,25 @@ class Session:
                 f"the {backend.label} backend only supports mode=pipeline "
                 f"(got {mode!r}). desktop/steam/probe are Sunshine-only")
         env: dict[str, str] = {}
+        # Both backends run a preview loop into the same file, each capturing
+        # the way its compositor allows (see containers/moonshine/entrypoint.sh).
+        if self.cfg.preview_interval_s <= 0:
+            env["PS_THUMBNAIL"] = "disabled"
+        else:
+            env["PS_THUMBNAIL_INTERVAL"] = str(self.cfg.preview_interval_s)
+        # Both render at the connecting client's mode, each in its own way:
+        # Sunshine waits for the first client and locks that mode, moonshine
+        # sizes the nested gamescope per session from MOONSHINE_CLIENT_*.
+        env["PS_DYNAMIC_RES"] = ("enabled" if self.cfg.dynamic_resolution
+                                 else "disabled")
         # Settings that only exist on the labwc + Sunshine pipeline. Setting
         # them for moonshine would be dead env, and silently pretending they
         # apply is worse than the honest gap (see containers/moonshine/).
         if backend.name == backends.SUNSHINE.name:
             if self.cfg.sunshine_extra:
                 env["PS_SUNSHINE_EXTRA"] = runtime.sunshine_extra_env(self.cfg.sunshine_extra)
-            if self.cfg.preview_interval_s <= 0:
-                env["PS_THUMBNAIL"] = "disabled"
-            else:
-                env["PS_THUMBNAIL_INTERVAL"] = str(self.cfg.preview_interval_s)
             if self.app_config().mouse_keyboard:
                 env["PS_MOUSE_INPUT"] = "enabled"
-            env["PS_DYNAMIC_RES"] = ("enabled" if self.cfg.dynamic_resolution
-                                     else "disabled")
         else:
             # moonshine advertises itself over its own mDNS responder.
             env["PS_MOONSHINE_NAME"] = self.cfg.name

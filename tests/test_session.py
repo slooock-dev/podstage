@@ -161,14 +161,31 @@ def test_options_carry_the_profiles_backend_and_base_port():
 
 def test_moonshine_options_skip_the_sunshine_only_settings():
     """Setting these would be dead env; the honest gap is documented instead."""
-    sc = _moonshine(preview_interval_s=25, sunshine_extra={"nvenc_preset": "4"})
+    sc = _moonshine(sunshine_extra={"nvenc_preset": "4"})
     env = Session(sc, app_config=AppConfig(mouse_keyboard=True))._options().env
-    for key in ("PS_SUNSHINE_EXTRA", "PS_THUMBNAIL", "PS_THUMBNAIL_INTERVAL",
-                "PS_MOUSE_INPUT", "PS_DYNAMIC_RES"):
+    for key in ("PS_SUNSHINE_EXTRA", "PS_MOUSE_INPUT"):
         assert key not in env, key
     # What it does need: its own mDNS name, and the shared gamescope probe.
     assert env["PS_MOONSHINE_NAME"] == "tv"
     assert env["PS_PERF_METRICS"] == "enabled"
+
+
+def test_moonshine_options_carry_the_preview_settings():
+    """Both backends run a preview loop into the same file, each capturing the
+    way its compositor allows (moonshine: a nested-gamescope screenshot)."""
+    env = Session(_moonshine(preview_interval_s=25))._options().env
+    assert env["PS_THUMBNAIL_INTERVAL"] == "25"
+    assert "PS_THUMBNAIL" not in env
+    env = Session(_moonshine(preview_interval_s=0))._options().env
+    assert env["PS_THUMBNAIL"] == "disabled"
+
+
+def test_moonshine_options_carry_dynamic_resolution():
+    """app.sh sizes the nested gamescope from MOONSHINE_CLIENT_*; without the
+    opt-out it would stay pinned to the profile canvas."""
+    assert Session(_moonshine())._options().env["PS_DYNAMIC_RES"] == "enabled"
+    env = Session(_moonshine(dynamic_resolution=False))._options().env
+    assert env["PS_DYNAMIC_RES"] == "disabled"
 
 
 def test_ds5_experimental_does_not_leak_into_moonshine():

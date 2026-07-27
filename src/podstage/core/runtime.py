@@ -98,6 +98,16 @@ _COMMON_ENV: dict[str, str | None] = {
     # gamescope touch_click_mode pin (entrypoint default 1, see there).
     "PS_TOUCH_CLICK_MODE": None,
     "PS_PERF_METRICS": None,
+    # In-container thumbnail loop (both entrypoints default to enabled, every
+    # 10s). The capture differs per backend — wf-recorder on labwc for
+    # Sunshine, a gamescope screenshot for moonshine — but the setting, the
+    # interval and the file the GUI reads do not.
+    "PS_THUMBNAIL": None,
+    "PS_THUMBNAIL_INTERVAL": None,
+    # Render at the connecting client's mode. Both entrypoints default to
+    # enabled, so this is forwarded only to opt out (=disabled). Sunshine locks
+    # the mode at the first client, moonshine re-sizes on every reconnect.
+    "PS_DYNAMIC_RES": None,
     # Experimental feature (config.EXPERIMENTAL_FEATURES), "enabled".
     "PS_HDR": None,
 }
@@ -122,14 +132,6 @@ _SUNSHINE_ENV: dict[str, str | None] = {
     # ';'-separated extra sunshine.conf lines ("key = value;key2 = value2"),
     # built from the profile's sunshine_extra (quality settings).
     "PS_SUNSHINE_EXTRA": None,
-    # In-container thumbnail loop (entrypoint defaults: enabled, every 10s).
-    # moonshine has no equivalent: its compositor exposes no wlr-screencopy,
-    # so that backend has no host-side preview.
-    "PS_THUMBNAIL": None,
-    "PS_THUMBNAIL_INTERVAL": None,
-    # Entrypoint default enabled; forwarded only to opt out (=disabled).
-    # moonshine always sizes its compositor from the client's request.
-    "PS_DYNAMIC_RES": None,
     # Sunshine emulates a DualSense instead of an Xbox pad; moonshine's
     # inputtino has its own gamepad model, so this does not carry over.
     "PS_GAMEPAD_DS5": None,

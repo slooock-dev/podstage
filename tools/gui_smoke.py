@@ -8,6 +8,8 @@ in ui/ stay green there.
 
 import os
 import sys
+import tempfile
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -117,6 +119,47 @@ def check_stepper_arrows(win) -> bool:
     return True
 
 
+def check_session_card_per_backend(win) -> bool:
+    """Both backends now run a preview loop, and both report a render size.
+
+    The card used to grey itself out and the resolution row used to claim
+    "locked until the session restarts" for every backend. A rendered frame
+    shows one profile at a time, so assert the per-backend state directly.
+    """
+    page = win._session_page
+    original = page._profile
+    ok = True
+    with tempfile.TemporaryDirectory() as tmp:
+        for backend, expected in (("sunshine", "locked until"),
+                                  ("moonshine", "follows the connected")):
+            home = Path(tmp) / backend
+            (home / ".cache/podstage").mkdir(parents=True)
+            (home / ".cache/podstage/client-mode").write_text("1920 1080 60\n")
+            sc = config.SessionConfig(name=backend, backend=backend,
+                                      home=str(home), preview_interval_s=10)
+            page._profile = lambda sc=sc: sc
+
+            page._load_preview(sc)
+            if not page._preview_interval.isEnabled():
+                print(f"gui smoke: FAILED ({backend}: preview interval disabled)")
+                ok = False
+            page._update_thumbnail(True)
+            # No thumb.png yet: the honest placeholder, not a refusal.
+            if "preview" not in page._thumb.text().lower():
+                print(f"gui smoke: FAILED ({backend}: unexpected preview "
+                      f"placeholder {page._thumb.text()!r})")
+                ok = False
+
+            page._update_resolution(True)
+            text = page._resolution._value.text()
+            if "1920x1080" not in text or expected not in text:
+                print(f"gui smoke: FAILED ({backend}: resolution row is "
+                      f"{text!r}, expected {expected!r})")
+                ok = False
+    page._profile = original
+    return ok
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     if not check_sandbox_columns():
@@ -139,6 +182,7 @@ def main() -> int:
         print("gui smoke: FAILED (empty grab)")
     ok = check_click_away_drops_focus(win) and ok
     ok = check_stepper_arrows(win) and ok
+    ok = check_session_card_per_backend(win) and ok
     if win._poll is not None:
         win._poll.stop()
         win._poll.wait(5000)

@@ -73,11 +73,6 @@ _VAAPI_RC_LABELS = {
 THUMB_MAX_AGE_S = 45  # strict mode only: older previews count as stale
 
 
-def _has_preview(sc: config.SessionConfig) -> bool:
-    """Only the Sunshine pipeline runs the in-container thumbnail loop."""
-    return backends.get_or_default(sc.backend).name == backends.SUNSHINE.name
-
-
 class PairDialog(QDialog):
     """Submit the PIN Moonlight shows to pair a new client."""
 
@@ -440,15 +435,10 @@ class SessionPage(QWidget):
     def _load_preview(self, sc: config.SessionConfig) -> None:
         if self._preview_interval.hasFocus():  # don't clobber an in-progress edit
             return
-        # The preview comes from a wlr-screencopy loop next to Sunshine;
-        # moonshine's compositor exposes no such capture path (the poll below
-        # renders the matching placeholder).
-        has_preview = _has_preview(sc)
-        self._preview_interval.setEnabled(has_preview)
         self._preview_interval.blockSignals(True)
         self._preview_interval.setValue(sc.preview_interval_s)
         self._preview_interval.blockSignals(False)
-        self._sec_label.setVisible(has_preview and sc.preview_interval_s > 0)
+        self._sec_label.setVisible(sc.preview_interval_s > 0)
 
     def _persist_preview(self) -> None:
         """Save the preview interval to the profile; takes effect next start."""
@@ -550,9 +540,10 @@ class SessionPage(QWidget):
         self._update_thumbnail(snap.running)
 
     def _update_resolution(self, running: bool) -> None:
-        """With dynamic resolution the render size is only known once the
-        first client connects (the entrypoint drops it into the mounted HOME)
-        and stays locked until the session restarts."""
+        """With dynamic resolution the render size is only known once a client
+        connects (the container drops it into the mounted HOME). Sunshine locks
+        the first client's mode until the session restarts; moonshine rebuilds
+        compositor and gamescope per session, so it follows every reconnect."""
         sc = self._profile()
         if not running or sc is None:
             self._resolution.set(None)
@@ -563,11 +554,16 @@ class SessionPage(QWidget):
         try:
             w, h, r = (sc.home_dir() / ".cache/podstage/client-mode") \
                 .read_text().split()
+        except (OSError, ValueError):
+            self._resolution.set(tr("waiting for the first client …"))
+            return
+        if backends.get_or_default(sc.backend).res_locked:
             self._resolution.set(tr(
                 "{w}x{h}@{r} · locked until the session restarts",
                 w=w, h=h, r=r))
-        except (OSError, ValueError):
-            self._resolution.set(tr("waiting for the first client …"))
+        else:
+            self._resolution.set(tr(
+                "{w}x{h}@{r} · follows the connected client", w=w, h=h, r=r))
 
     def _update_thumbnail(self, running: bool) -> None:
         """Show the preview frame the in-container loop drops into the mounted
@@ -576,11 +572,6 @@ class SessionPage(QWidget):
         sc = self._profile()
         if sc is None or not running:
             self._show_thumb_placeholder(tr("Preview appears here while streaming."))
-            return
-        if not _has_preview(sc):
-            self._show_thumb_placeholder(tr(
-                "No preview with the {backend} backend.",
-                backend=backends.get_or_default(sc.backend).label))
             return
         interval = sc.preview_interval_s
         if interval <= 0:
@@ -593,8 +584,10 @@ class SessionPage(QWidget):
             self._show_thumb_placeholder(tr("waiting for preview …"))
             return
         if self._ctx.config.preview_keep_last:
-            # wlr-screencopy delivers no frame while the picture is static —
-            # keep the last one, but never a frame from a previous session.
+            # Neither capture path delivers continuously: wlr-screencopy hands
+            # out no frame while the picture is static, and under moonshine
+            # gamescope exists only while a client is connected. Keep the last
+            # frame, but never one from a previous session.
             stale = mtime < (runtime.load_state() or {}).get("started", 0)
         else:
             # Strict mode (Setup toggle): hide a frame once it is older than a

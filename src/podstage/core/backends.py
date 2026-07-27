@@ -64,6 +64,10 @@ class Backend:
     host_mdns     needs runtime.start_publisher (the host's avahi) to be
                   discoverable. moonshine answers mDNS itself
     live_config   has an API that applies config changes to a running session
+    res_locked    with dynamic resolution, renders at the FIRST client's mode
+                  and keeps it until the container restarts. moonshine
+                  relaunches compositor and app per session, so there the mode
+                  follows every reconnect
     full_dev      needs the host /dev bound wholesale (inputtino creates its
                   gamepads through /dev/uhid and Steam Input needs the
                   /dev/hidraw* node appearing with them, which cannot be
@@ -81,6 +85,7 @@ class Backend:
     web_port_off: int | None
     host_mdns: bool
     live_config: bool
+    res_locked: bool
     full_dev: bool
     vulkan_video: bool
     summary: str
@@ -99,6 +104,7 @@ SUNSHINE = Backend(
     web_port_off=1,          # Sunshine's web UI, 47990 by default
     host_mdns=True,          # no avahi in the container
     live_config=True,        # POST /api/config + /api/restart
+    res_locked=True,         # the first client's mode, until the container restarts
     full_dev=False,          # /dev/uinput + /dev/input suffice
     vulkan_video=False,
     summary="labwc + gamescope + Sunshine (NVENC/VAAPI), works on every supported GPU",
@@ -116,6 +122,7 @@ MOONSHINE = Backend(
     web_port_off=None,       # config.toml on disk, no management UI
     host_mdns=False,         # built-in mDNS responder (--network host)
     live_config=False,       # config changes need a session restart
+    res_locked=False,        # compositor and app are relaunched per session
     full_dev=True,           # inputtino: /dev/uhid + the hidraw node
     vulkan_video=True,
     summary="moonshine's own compositor + Vulkan Video, needs NVIDIA RTX, AMD RDNA2+ or Intel Arc",

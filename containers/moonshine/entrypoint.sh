@@ -25,6 +25,8 @@
 #   PS_MODE            pipeline (default) | healthcheck | shell
 #   PS_RESOLUTION      WxH@R, the pre-connect canvas; a connecting client
 #                      sizes moonshine's compositor itself
+#   PS_DYNAMIC_RES     disabled → render at PS_RESOLUTION even when the client
+#                      asks for something else (see app.sh)
 #   PS_MOONSHINE_PORT  Moonlight base port (whole block derives from it)
 #   PS_MOONSHINE_NAME  name advertised over mDNS
 #   PS_APP             Steam AppID → boot straight into that game
@@ -33,6 +35,7 @@
 #   PS_FOCUS_NUDGE(_DELAYS)  Big Picture focus watchdog (default on)
 #   PS_PERF_METRICS    enabled → per-app frametimes for the host GUI
 #   PS_TOUCH_CLICK_MODE      gamescope touch_click_mode pin (default 1)
+#   PS_THUMBNAIL(_INTERVAL)  preview capture loop
 #   PS_MOONSHINE_LOG         MOONSHINE_LOG filter
 #   PS_MOONSHINE_KEEP_CONFIG 1 → do not regenerate config.toml
 set -uo pipefail
@@ -205,19 +208,34 @@ if [ "${PS_FOCUS_NUDGE:-}" != disabled ]; then
     podstage-focus-nudge &
 fi
 
+# The name of gamescope's control socket, newest first. A gamescope that dies
+# with the client's session leaves its socket file behind, and the next one
+# takes the same slot back (it locks gamescope-N.lock, which the dead process
+# released), so picking the newest is what survives a reconnect.
+find_gamescope_socket() {
+    local newest="" sock
+    for sock in "$XDG_RUNTIME_DIR"/gamescope-*; do
+        case "$sock" in *.lock | *-ei) continue ;; esac
+        [ -S "$sock" ] || continue
+        if [ -z "$newest" ] || [ "$sock" -nt "$newest" ]; then
+            newest=$sock
+        fi
+    done
+    [ -n "$newest" ] || return 1
+    printf '%s' "${newest##*/}"
+}
+
 # Wait for gamescope's control socket, then export GAMESCOPE_WAYLAND_DISPLAY.
 # PS_GAMESCOPE_WAIT_S caps the wait in seconds; 0 (the default) waits forever,
 # since a session can idle for hours before the first client connects.
 wait_gamescope_socket() {
-    local cap=${PS_GAMESCOPE_WAIT_S:-0} elapsed=0
+    local cap=${PS_GAMESCOPE_WAIT_S:-0} elapsed=0 sock
     while :; do
-        for sock in "$XDG_RUNTIME_DIR"/gamescope-*; do
-            case "$sock" in *.lock | *-ei) continue ;; esac
-            [ -S "$sock" ] || continue
-            GAMESCOPE_WAYLAND_DISPLAY=${sock##*/}
+        if sock=$(find_gamescope_socket); then
+            GAMESCOPE_WAYLAND_DISPLAY=$sock
             export GAMESCOPE_WAYLAND_DISPLAY
             return 0
-        done
+        fi
         if [ "$cap" -gt 0 ] && [ "$elapsed" -ge "$cap" ]; then
             return 1
         fi
@@ -239,6 +257,53 @@ if [ "${PS_TOUCH_CLICK_MODE:-1}" != steam ]; then
             sleep 30
         done
     ) &
+fi
+
+# Preview for the host GUI: one scaled frame every N seconds into the mounted
+# sandbox HOME, exactly where the Sunshine loop drops it
+# (containers/runtime/runner.sh, $HOME/.cache/podstage/thumb.png).
+#
+# The capture path is a different one though. Sunshine's loop records the labwc
+# output with wf-recorder, and moonshine's compositor implements no
+# wlr-screencopy at all (verified: wf-recorder rejects both moonshine's display
+# and gamescope's --expose-wayland one). What does work is asking the NESTED
+# gamescope for a screenshot: `gamescopectl screenshot <path>` writes gamescope's
+# composited output, i.e. the very picture moonshine encodes, with no second
+# capture path and no PipeWire.
+#
+# The loop re-resolves the socket every round on purpose: gamescope only exists
+# while a client is connected, and comes and goes with the session.
+if [ "${PS_THUMBNAIL:-enabled}" != disabled ]; then
+    (
+        TD="$HOME/.cache/podstage"
+        mkdir -p "$TD" || exit 0
+        RAW="$XDG_RUNTIME_DIR/thumb-raw.png"
+        while :; do
+            if sock=$(find_gamescope_socket); then
+                rm -f "$RAW"
+                GAMESCOPE_WAYLAND_DISPLAY="$sock" \
+                    gamescopectl screenshot "$RAW" >/dev/null 2>&1
+                # gamescopectl returns as soon as gamescope accepted the
+                # request; the PNG lands a composited frame later (~150 ms
+                # measured). Wait for the size to settle so ffmpeg never reads
+                # a half-written file.
+                prev=-1
+                for _ in $(seq 1 60); do
+                    sleep 0.05
+                    cur=$(stat -c%s "$RAW" 2>/dev/null || echo 0)
+                    [ "$cur" -gt 0 ] && [ "$cur" -eq "$prev" ] && break
+                    prev=$cur
+                done
+                if [ -s "$RAW" ] &&
+                    ffmpeg -y -loglevel error -i "$RAW" -frames:v 1 \
+                        -vf scale=640:-2 "$TD/.thumb-tmp.png" 2>/dev/null; then
+                    mv -f "$TD/.thumb-tmp.png" "$TD/thumb.png"
+                fi
+                rm -f "$RAW"
+            fi
+            sleep "${PS_THUMBNAIL_INTERVAL:-10}"
+        done
+    ) >/dev/null 2>&1 &
 fi
 
 # Frametimes come from gamescope (gamescope_control PERF_QUERY), not from an
