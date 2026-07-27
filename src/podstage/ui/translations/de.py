@@ -35,6 +35,8 @@ TEXTS: dict[str, str] = {
         "Wirkt ab dem nächsten Stream-Start.",
     "Preview appears here while streaming.":
         "Die Vorschau erscheint hier während des Streams.",
+    "No preview with the {backend} backend.":
+        "Kein Vorschaubild mit dem Backend {backend}.",
     "Preview is off": "Vorschau ist aus",
     "waiting for preview …": "warte auf Vorschau …",
     "no new frames": "keine neuen Frames",
@@ -47,6 +49,14 @@ TEXTS: dict[str, str] = {
     "quality on the server side.":
         "Bitrate & Codec wählt der Moonlight-Client; diese steuern die "
         "Encoder-Qualität serverseitig.",
+    "The {backend} backend has no server-side quality settings; the Moonlight "
+    "client picks bitrate and codec.":
+        "Das Backend {backend} hat keine serverseitigen Qualitätseinstellungen; "
+        "Bitrate und Codec wählt der Moonlight-Client.",
+    "The {backend} backend has no live quality settings; these apply to "
+    "Sunshine profiles only.":
+        "Das Backend {backend} hat keine Qualitätseinstellungen zur Laufzeit; "
+        "diese gelten nur für Sunshine-Profile.",
     "VBV buffer increase (%): a larger buffer reduces artifacts in fast motion "
     "at the same bitrate. 0 = Sunshine default.":
         "VBV-Puffer-Erhöhung (%): ein größerer Puffer reduziert Artefakte bei "
@@ -75,6 +85,8 @@ TEXTS: dict[str, str] = {
         "in Moonlight neu starten und die neue PIN eintragen.",
     "Client '{name}' paired. Moonlight can stream now.":
         "Client '{name}' gepairt. Moonlight kann jetzt streamen.",
+    "Paired. Moonlight can stream now.":
+        "Gepairt. Moonlight kann jetzt streamen.",
     "Pairing failed: {msg}": "Pairing fehlgeschlagen: {msg}",
     "Applying live … (stream briefly interrupts)":
         "Wende live an … (Stream unterbricht kurz)",
@@ -217,7 +229,25 @@ TEXTS: dict[str, str] = {
     "custom": "benutzerdefiniert",
     "e.g. deck, laptop, livingroom": "z. B. deck, laptop, wohnzimmer",
     "WidthxHeight@Hz, e.g. 1920x1080@60": "BreitexHöhe@Hz, z. B. 1920x1080@60",
-    "Sunshine port": "Sunshine-Port",
+    "Moonlight port": "Moonlight-Port",
+    "Backend": "Backend",
+    "Sunshine (default) works on every supported GPU. moonshine brings "
+    "its own compositor and encodes with Vulkan Video, which needs an "
+    "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU; it has no live quality "
+    "settings and no preview picture. Check with 'podstage doctor'.":
+        "Sunshine (Standard) läuft auf jeder unterstützten GPU. moonshine "
+        "bringt einen eigenen Compositor mit und kodiert per Vulkan Video, "
+        "was eine NVIDIA RTX, AMD RDNA2+ oder Intel Arc voraussetzt; es hat "
+        "keine Qualitätseinstellungen zur Laufzeit und kein Vorschaubild. "
+        "Prüfen mit 'podstage doctor'.",
+    "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
+    "Intel Arc) and its own image "
+    "('podstage runtime build --backend moonshine'). No live "
+    "quality settings and no preview picture.":
+        "Braucht eine GPU mit Vulkan-Video-Encode (NVIDIA RTX, AMD RDNA2+, "
+        "Intel Arc) und ein eigenes Image "
+        "('podstage runtime build --backend moonshine'). Keine "
+        "Qualitätseinstellungen zur Laufzeit und kein Vorschaubild.",
     "Games in this sandbox": "Spiele in dieser Sandbox",
     "Include every installed game (and any you add later)":
         "Alle installierten Spiele einschließen (auch später hinzugefügte)",

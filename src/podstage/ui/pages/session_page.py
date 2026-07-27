@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ... import config
-from ...core import monitor, runtime, sandbox, sunshine_api
+from ...core import backends, monitor, moonshine_api, runtime, sandbox, sunshine_api
 from ...core.session import Session
 from .. import theme
 from ..i18n import tr
@@ -71,6 +71,11 @@ _VAAPI_RC_LABELS = {
 
 
 THUMB_MAX_AGE_S = 45  # strict mode only: older previews count as stale
+
+
+def _has_preview(sc: config.SessionConfig) -> bool:
+    """Only the Sunshine pipeline runs the in-container thumbnail loop."""
+    return backends.get_or_default(sc.backend).name == backends.SUNSHINE.name
 
 
 class PairDialog(QDialog):
@@ -280,11 +285,11 @@ class SessionPage(QWidget):
         self._apply_btn.setToolTip(tr("Apply immediately to the running session "
                                       "(stream briefly reconnects)"))
         self._apply_btn.clicked.connect(self._on_apply_quality)
-        web_btn = QPushButton(tr("Open Sunshine web UI"))
-        web_btn.clicked.connect(self._open_web_ui)
+        self._web_btn = QPushButton(tr("Open Sunshine web UI"))
+        self._web_btn.clicked.connect(self._open_web_ui)
         bottom.addWidget(self._quality_hint, 1)
         bottom.addWidget(self._apply_btn)
-        bottom.addWidget(web_btn)
+        bottom.addWidget(self._web_btn)
         lay.addLayout(bottom)
         return frame
 
@@ -363,15 +368,37 @@ class SessionPage(QWidget):
         if sc is None:
             return
         self._load_quality(sc)
+        self._load_backend(sc)
         self._load_preview(sc)
+
+    def _load_backend(self, sc: config.SessionConfig) -> None:
+        """Grey out what the profile's backend does not have: the quality
+        controls and the web UI are Sunshine's, driven by its config API."""
+        spec = backends.get_or_default(sc.backend)
+        self._apply_btn.setEnabled(spec.live_config)
+        self._web_btn.setEnabled(spec.web_port_off is not None)
+        if not spec.live_config:
+            self._quality_hint.setText(tr(
+                "The {backend} backend has no server-side quality settings; "
+                "the Moonlight client picks bitrate and codec.",
+                backend=spec.label))
+        else:
+            self._quality_hint.setText(tr(
+                "Bitrate & codec are chosen by the Moonlight client; these "
+                "control encoder quality on the server side."))
 
     def _load_preview(self, sc: config.SessionConfig) -> None:
         if self._preview_interval.hasFocus():  # don't clobber an in-progress edit
             return
+        # The preview comes from a wlr-screencopy loop next to Sunshine;
+        # moonshine's compositor exposes no such capture path (the poll below
+        # renders the matching placeholder).
+        has_preview = _has_preview(sc)
+        self._preview_interval.setEnabled(has_preview)
         self._preview_interval.blockSignals(True)
         self._preview_interval.setValue(sc.preview_interval_s)
         self._preview_interval.blockSignals(False)
-        self._sec_label.setVisible(sc.preview_interval_s > 0)
+        self._sec_label.setVisible(has_preview and sc.preview_interval_s > 0)
 
     def _persist_preview(self) -> None:
         """Save the preview interval to the profile; takes effect next start."""
@@ -495,6 +522,11 @@ class SessionPage(QWidget):
         sc = self._profile()
         if sc is None or not running:
             self._show_thumb_placeholder(tr("Preview appears here while streaming."))
+            return
+        if not _has_preview(sc):
+            self._show_thumb_placeholder(tr(
+                "No preview with the {backend} backend.",
+                backend=backends.get_or_default(sc.backend).label))
             return
         interval = sc.preview_interval_s
         if interval <= 0:
@@ -659,20 +691,28 @@ class SessionPage(QWidget):
         sc = self._profile()
         if sc is None:
             return
+        spec = backends.get_or_default(sc.backend)
         dlg = PairDialog(self, sc.name)
+        # moonshine records no client names, so asking for one would suggest
+        # a label that is never stored anywhere.
+        dlg.name.setEnabled(spec.name == backends.SUNSHINE.name)
         if not dlg.exec():
             return
         pin = dlg.pin.text().strip()
         name = dlg.name.text().strip() or sc.name
-        web_port = sc.sunshine_port_base + 1
+        base = sc.sunshine_port_base
         home = sc.home_dir()
         self._pair_btn.setEnabled(False)
+        failed = tr("The PIN was submitted but no pairing completed. Restart "
+                    "the pairing in Moonlight and enter the new PIN.")
 
         def _pair() -> str:
-            if not sunshine_api.pair_verified(pin, name, home, web_port):
-                raise RuntimeError(tr("The PIN was submitted but no pairing "
-                                      "completed. Restart the pairing in "
-                                      "Moonlight and enter the new PIN."))
+            if spec.name == backends.MOONSHINE.name:
+                if not moonshine_api.pair_verified(pin, home, port=base):
+                    raise RuntimeError(failed)
+                return tr("Paired. Moonlight can stream now.")
+            if not sunshine_api.pair_verified(pin, name, home, base + 1):
+                raise RuntimeError(failed)
             return tr("Client '{name}' paired. Moonlight can stream now.", name=name)
 
         start_action(self._pool, _pair, "Pairing", self._on_pair_done)
@@ -685,6 +725,12 @@ class SessionPage(QWidget):
     def _on_apply_quality(self) -> None:
         sc = self._profile()
         if sc is None:
+            return
+        if not backends.get_or_default(sc.backend).live_config:
+            self._quality_hint.setText(tr(
+                "The {backend} backend has no live quality settings; these "
+                "apply to Sunshine profiles only.",
+                backend=backends.get_or_default(sc.backend).label))
             return
         changes = self._quality_changes()
         sc.sunshine_extra.update(changes)  # already persisted on change; idempotent

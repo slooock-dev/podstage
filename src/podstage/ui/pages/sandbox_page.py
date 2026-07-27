@@ -31,7 +31,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ... import config
-from ...core import provisioner, runtime, sandbox
+from ...core import backends, provisioner, runtime, sandbox
 from ...core.session import Session
 from ..i18n import tr
 from ..widgets import card
@@ -98,7 +98,29 @@ class ProfileDialog(QDialog):
         self._port = QSpinBox()
         self._port.setRange(1024, 64000)
         self._port.setValue(existing.sunshine_port_base if existing else 47989)
-        form.addRow(tr("Sunshine port"), self._port)
+        form.addRow(tr("Moonlight port"), self._port)
+
+        # Streaming backend. The labels carry the backend key in UserData so
+        # a translated label never has to be parsed back (same approach as
+        # the resolution combo above).
+        self._backend = QComboBox()
+        for spec in backends.BACKENDS.values():
+            self._backend.addItem(spec.label, spec.name)
+        current_backend = existing.backend if existing else backends.DEFAULT
+        idx = self._backend.findData(current_backend)
+        self._backend.setCurrentIndex(max(idx, 0))
+        self._backend.setToolTip(tr(
+            "Sunshine (default) works on every supported GPU. moonshine brings "
+            "its own compositor and encodes with Vulkan Video, which needs an "
+            "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU; it has no live quality "
+            "settings and no preview picture. Check with 'podstage doctor'."))
+        self._backend.currentIndexChanged.connect(self._sync_backend_note)
+        form.addRow(tr("Backend"), self._backend)
+        self._backend_note = QLabel()
+        self._backend_note.setProperty("muted", True)
+        self._backend_note.setWordWrap(True)
+        form.addRow("", self._backend_note)
+        self._sync_backend_note()
 
         form.addRow(self._build_games(existing))
 
@@ -120,6 +142,18 @@ class ProfileDialog(QDialog):
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+
+    def _sync_backend_note(self) -> None:
+        """Spell the moonshine trade-offs out under the combo, because the tooltip
+        is not enough for a choice that can make a GPU unable to stream."""
+        if self._backend.currentData() == backends.MOONSHINE.name:
+            self._backend_note.setText(tr(
+                "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
+                "Intel Arc) and its own image "
+                "('podstage runtime build --backend moonshine'). No live "
+                "quality settings and no preview picture."))
+        else:
+            self._backend_note.setText("")
 
     def _sync_custom(self, choice: str) -> None:
         self._custom.setVisible(choice == self._custom_label)
@@ -269,6 +303,7 @@ class ProfileDialog(QDialog):
         self.result_profile = config.SessionConfig(
             name=name, resolution=resolution,
             dynamic_resolution=self._dynamic.isChecked(), app_ids=app_ids,
+            backend=self._backend.currentData() or backends.DEFAULT,
             sunshine_port_base=port, home=base.home,
             sunshine_extra=dict(base.sunshine_extra),
             preview_interval_s=base.preview_interval_s,
@@ -344,9 +379,9 @@ class SandboxPage(QWidget):
         root.setSpacing(12)
 
         frame, lay = card(tr("Steam sandboxes"))
-        self._table = QTableWidget(0, 7)
+        self._table = QTableWidget(0, 8)
         self._table.setHorizontalHeaderLabels(
-            [tr("Name"), tr("Resolution"), tr("Port"), tr("Login"),
+            [tr("Name"), tr("Resolution"), tr("Backend"), tr("Port"), tr("Login"),
              tr("Pairings"), tr("Size"), tr("Overlay")])
         self._table.verticalHeader().setVisible(False)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -432,12 +467,14 @@ class SandboxPage(QWidget):
             login = tr("✓ logged in") if info.logged_in else (
                 tr("— empty") if not info.exists else tr("✗ no login"))
             paired = ", ".join(info.paired) if info.paired else "—"
-            values = [sc.name, resolution, str(sc.sunshine_port_base), login,
+            values = [sc.name, resolution,
+                      backends.get_or_default(sc.backend).label,
+                      str(sc.sunshine_port_base), login,
                       paired, _fmt_size(self._sizes.get(sc.name)),
                       _fmt_size(self._overlay_sizes.get(sc.name))]
             for col, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                if col in (2, 5, 6):
+                if col in (3, 6, 7):   # port + the two sizes
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight
                                           | Qt.AlignmentFlag.AlignVCenter)
                 self._table.setItem(row, col, item)
