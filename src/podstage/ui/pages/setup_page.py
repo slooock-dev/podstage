@@ -242,17 +242,22 @@ class SetupPage(QWidget):
             "can lock the pointer for mouse look."))
         self._mouse_kb.setChecked(self._ctx.config.mouse_keyboard)
         self._mouse_kb.toggled.connect(self._on_mouse_kb_toggled)
-        # Sunshine-only by nature: it creates the virtual mouse/keyboard this
-        # gates, while moonshine feeds the client's input straight into its own
-        # compositor seat and has nothing to switch off.
         mkhint = QLabel(tr("Recommended off for controller-only clients. "
-                           "Applies at the next session start. Sunshine only: "
-                           "moonshine always passes the client's mouse and "
-                           "keyboard into the session."))
+                           "Applies at the next session start."))
         mkhint.setProperty("muted", True)
         mkhint.setWordWrap(True)
+        # Its own line, not a tail on the sentence above: the switch gates the
+        # virtual mouse/keyboard Sunshine creates, while moonshine feeds the
+        # client's input straight into its compositor seat and has nothing to
+        # switch off. A setting that silently does nothing on one backend has
+        # to say so where it is read, not only in the docs.
+        mkbackend = QLabel(tr("Sunshine only — moonshine always passes the "
+                              "client's mouse and keyboard into the session."))
+        mkbackend.setProperty("muted", True)
+        mkbackend.setWordWrap(True)
         slay.addWidget(self._mouse_kb)
         slay.addWidget(mkhint)
+        slay.addWidget(mkbackend)
         self._perf = QCheckBox(tr("Performance metrics (FPS)"))
         self._perf.setToolTip(tr(
             "A probe in the container asks gamescope for the presented frametime of "

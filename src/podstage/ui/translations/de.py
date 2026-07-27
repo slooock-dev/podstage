@@ -447,11 +447,13 @@ TEXTS: dict[str, str] = {
         "Leitet Maus und Tastatur des Clients in die Session; Spiele können "
         "den Zeiger für Mouse-Look locken.",
     "Recommended off for controller-only clients. Applies at the next "
-    "session start. Sunshine only: moonshine always passes the client's "
-    "mouse and keyboard into the session.":
+    "session start.":
         "Für reine Controller-Clients empfohlen: aus. Gilt ab dem nächsten "
-        "Session-Start. Nur Sunshine: moonshine reicht Maus und Tastatur des "
-        "Clients immer in die Session durch.",
+        "Session-Start.",
+    "Sunshine only — moonshine always passes the client's mouse and "
+    "keyboard into the session.":
+        "Nur Sunshine — moonshine reicht Maus und Tastatur des Clients immer "
+        "in die Session durch.",
     "Experimental features apply from the next session start.":
         "Experimentelle Features gelten ab dem nächsten Session-Start.",
     "Checks the GitHub releases for a newer version.":
