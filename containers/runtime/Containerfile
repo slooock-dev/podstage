@@ -133,6 +133,11 @@ RUN pacman -S --noconfirm --needed gcc && \
     cd / && rm -rf /tmp/build && \
     pacman -Rns --noconfirm gcc && pacman -Scc --noconfirm
 
+# Live-session diagnosis toolbox (Deck input chain, window geometry):
+# X11 pointer/window inspection previously installed ad hoc via podman exec.
+RUN pacman -Sy --noconfirm --needed xdotool xorg-xwininfo xorg-xprop && \
+    pacman -Scc --noconfirm
+
 # --- unprivileged runtime user ---------------------------------------------
 RUN useradd -u 1000 -m -s /bin/bash player
 
