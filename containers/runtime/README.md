@@ -35,7 +35,7 @@ label, so `doctor` reports the image as stale.
 | `shell` | drop into bash in the container |
 | `steam` | labwc → gamescope → Steam, **no** Sunshine (render smoke test) |
 | `pipeline` | full pipeline incl. Sunshine capture (**default**) |
-| `desktop` | like `pipeline` but without gamescope: Steam desktop UI (or `PS_DESKTOP_CMD`) as a window under labwc, mouse/keyboard enabled, cursor shown |
+| `desktop` | like `pipeline` but without gamescope: Steam desktop UI (or `PS_DESKTOP_CMD`) as a window under labwc, mouse/keyboard enabled, cursor shown. Plumbing for the headless login/setup path, not a play mode |
 
 Examples:
 

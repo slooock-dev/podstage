@@ -1,9 +1,12 @@
 <?xml version="1.0"?>
 <!-- labwc config for the streaming session (baked at /etc/xdg/labwc/rc.xml;
      a sandbox HOME with its own ~/.config/labwc would override it).
-     The stream shows exactly one main window - gamescope (Big Picture) or
-     Steam's desktop UI - so both stay undecorated; dialogs keep the server
-     decorations so they can be dragged in desktop mode. -->
+     The stream shows exactly one main window, gamescope, and it stays
+     undecorated. Steam's own X11 windows (the login/setup path without
+     gamescope) already disable decorations via Motif hints; no rule needed.
+     Note for future rules: labwc matches "identifier" against the XWayland
+     WM_CLASS *instance* (Steam's main window is "steamwebhelper", not
+     "steam"), verified live via SIGHUP reconfigure. -->
 <labwc_config>
   <core>
     <gap>0</gap>
@@ -13,15 +16,5 @@
   </focus>
   <windowRules>
     <windowRule identifier="gamescope" serverDecoration="no"/>
-    <!-- Desktop mode: Steam's main window restores its remembered size from
-         the client config (e.g. 4K from a previous desktop), overflowing the
-         headless output. Maximize it on map and drop the X11 configure
-         requests CEF sends afterwards to resize itself back. Only the main
-         window is matched; dialogs keep their own geometry. In pipeline mode
-         labwc's toplevel is gamescope, so this rule never fires there. -->
-    <windowRule identifier="steam" title="Steam" serverDecoration="no"
-                ignoreConfigureRequest="yes">
-      <action name="Maximize"/>
-    </windowRule>
   </windowRules>
 </labwc_config>

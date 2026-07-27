@@ -60,8 +60,7 @@ host GUI.
   encode via NVENC or VAAPI). No window on the host, no DRM output.
 - **Built for Steam, gamepad first.** The streamed session is Big Picture and
   Steam Input works natively. Mouse and keyboard streaming is optional (off by
-  default, with in-game pointer lock). An experimental desktop mode streams the
-  Steam desktop UI instead.
+  default, with in-game pointer lock).
 - **Resolution follows the client.** The pipeline launches on the first
   Moonlight connect and renders at that client's resolution and refresh rate,
   locked until the session restarts. Per-profile toggle, on by default.
@@ -164,8 +163,9 @@ flowchart LR
 - gamescope plus Big Picture is settled, not a placeholder: Steam forces the
   gamepad UI under gamescope (not overridable), and gamescope provides the
   Xwayland environment, fullscreen forcing and resolution scaling that the rest
-  of the pipeline builds on. Desktop mode drops gamescope and stays
-  experimental for exactly that reason.
+  of the pipeline builds on. A desktop-UI session without gamescope exists in
+  the runtime, but only as plumbing for headless Steam login/setup; it is not
+  a supported way to play.
 
 What is baked into the image vs. mounted at runtime, the exact run flags, and
 how input hotplug works inside the container is documented in
@@ -188,7 +188,7 @@ streaming needs the Moonlight pairing PIN. The image is built locally
 
 | Page | What it does |
 |------|--------------|
-| **Session** | Start/stop the stream (Big Picture or the experimental desktop mode), the active game, the Performance card (game FPS plus CPU/GPU/VRAM/encoder), a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
+| **Session** | Start/stop the Big Picture stream, the active game, the Performance card (game FPS plus CPU/GPU/VRAM/encoder), a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). |
 | **Sandboxes** | Sandbox profiles, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
 | **Setup** | Doctor checks with one-click fixes, the one-time udev rules install, desktop integration, streaming toggles (mouse & keyboard, preview behavior, performance metrics), experimental features, an on-demand update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
@@ -240,7 +240,7 @@ podstage runtime build             # (re)build the runtime image
 podstage runtime start|stop|status # drive the container directly (by HOME dir)
 podstage session list
 podstage session add <name> [--resolution R] [--port N] [--apps ID,…] [--fixed-resolution]
-podstage session setup|start|stop|status <name>   # start: --mode desktop, --resolution, --app
+podstage session setup|start|stop|status <name>   # start: --resolution, --app
 podstage session pair <name> <PIN>    # complete a Moonlight pairing
 podstage session remove <name> [--data] | clear-overlay <name>
 podstage experimental [enable|disable <feature>]
@@ -342,13 +342,15 @@ the NVIDIA CDI spec) are kept unless `--all`, since other software uses them too
 
 ## Roadmap
 
+Landed on the 0.3 branch: labwc replaces the cage kiosk as the session
+compositor, and the doctor covers custom-port firewall rules. A desktop mode
+for playing was tried and cut; podstage stays focused on orchestrating the
+sandboxed Big Picture session.
+
 Planned for 0.3:
 
-- Proper desktop mode: labwc replaces the cage kiosk. Spike-verified in the
-  sandbox: X11 popups and dialogs place correctly, where the kiosk pins every
-  popup to the top-left corner. Also a candidate for the Big Picture session.
-- Streamed first Steam login for a fully headless setup.
-- doctor check for custom-port firewall rules.
+- Streamed first Steam login for a fully headless setup (reusing the
+  gamescope-less desktop plumbing).
 - Restore the client's cursor image after the idle-hide (may come free with
   the compositor switch).
 - Optional DualSense emulation (experimental setting): real gyro in the

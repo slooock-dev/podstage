@@ -166,12 +166,6 @@ class SessionPage(QWidget):
         top.setSpacing(8)
         self._client = QComboBox()
         self._client.currentTextChanged.connect(self._on_profile_selected)
-        self._mode = QComboBox()
-        self._mode.addItem(tr("Big Picture"), "pipeline")
-        self._mode.addItem(tr("Desktop (experimental)"), "desktop")
-        self._mode.setToolTip(tr(
-            "Big Picture (gamepad) or the Steam desktop UI with mouse and "
-            "keyboard (experimental). Applies at the next start."))
         self._start_btn = QPushButton(tr("Start"))
         self._start_btn.setProperty("primary", True)
         self._start_btn.clicked.connect(self._on_start)
@@ -185,7 +179,6 @@ class SessionPage(QWidget):
         self._pair_btn.clicked.connect(self._on_pair)
         top.addWidget(QLabel(tr("Client")))
         top.addWidget(self._client, 1)
-        top.addWidget(self._mode)
         top.addWidget(self._start_btn)
         top.addWidget(self._stop_btn)
         top.addWidget(self._pair_btn)
@@ -464,7 +457,6 @@ class SessionPage(QWidget):
             self._detail.setText("")
 
         self._start_btn.setEnabled(not busy and not snap.running)
-        self._mode.setEnabled(not busy and not snap.running)
         self._stop_btn.setEnabled(not busy and snap.running)
         self._pair_btn.setEnabled(not busy and snap.running)
 
@@ -484,8 +476,7 @@ class SessionPage(QWidget):
         if not running or sc is None:
             self._resolution.set(None)
             return
-        # Desktop mode has no gamescope lock; the output follows each client.
-        if not sc.dynamic_resolution or self._mode.currentData() == "desktop":
+        if not sc.dynamic_resolution:
             self._resolution.set(None if sc.is_ask() else sc.resolution)
             return
         try:
@@ -620,13 +611,11 @@ class SessionPage(QWidget):
             if resolution is None:
                 return
 
-        mode = self._mode.currentData()
-
         def _launch() -> runtime.RuntimeStatus:
             if close_sandbox_steam and not session.close_sandbox_steam():
                 raise RuntimeError(tr(
                     "Could not close the sandbox Steam; close it manually."))
-            return session.start(resolution=resolution, mode=mode)
+            return session.start(resolution=resolution)
 
         self._last_error = ""
         self._pending = "start"
