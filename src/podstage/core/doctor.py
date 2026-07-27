@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from .. import config
 from . import runtime, steam, udev
 
 REPO_ROOT = udev.REPO_ROOT
@@ -146,16 +147,38 @@ def check_mdns() -> CheckResult:
                        fix=fix)
 
 
-# Ports Moonlight/Sunshine need for the DEFAULT sunshine base port (47989);
-# a custom base shifts these. TCP: https/http/rtsp. UDP: video/control/audio + 2.
-_STREAM_TCP = [47984, 47989, 48010]
-_STREAM_UDP = [47998, 47999, 48000, 48100, 48200]
-_STREAM_FW_FIX = (
-    "sudo firewall-cmd --permanent "
-    + " ".join(f"--add-port={p}/tcp" for p in _STREAM_TCP)
-    + " " + " ".join(f"--add-port={p}/udp" for p in _STREAM_UDP)
-    + " && sudo firewall-cmd --reload"
-)
+# Ports Moonlight/Sunshine need, as offsets from the sunshine base port; a
+# profile's custom base shifts the whole set. The default base (47989) yields
+# TCP 47984/47989/48010 and UDP 47998-48000/48100/48200.
+# TCP: https/http/rtsp. UDP: video/control/audio + 2.
+_STREAM_TCP_OFFSETS = [-5, 0, 21]
+_STREAM_UDP_OFFSETS = [9, 10, 11, 111, 211]
+
+
+def stream_port_bases() -> list[int]:
+    """The sunshine base ports the firewall must cover: one per configured
+    session profile, or the default base with no (readable) config."""
+    try:
+        bases = {s.sunshine_port_base
+                 for s in config.AppConfig.load(config.CONFIG_FILE).sessions}
+    except (OSError, ValueError, TypeError):
+        bases = set()
+    return sorted(bases) or [runtime.DEFAULT_SUNSHINE_PORT]
+
+
+def stream_ports() -> tuple[list[int], list[int]]:
+    """``(tcp, udp)`` stream ports for every configured base port."""
+    bases = stream_port_bases()
+    tcp = sorted({b + o for b in bases for o in _STREAM_TCP_OFFSETS})
+    udp = sorted({b + o for b in bases for o in _STREAM_UDP_OFFSETS})
+    return tcp, udp
+
+
+def _stream_fw_fix(tcp: list[int], udp: list[int]) -> str:
+    adds = ([f"--add-port={p}/tcp" for p in tcp]
+            + [f"--add-port={p}/udp" for p in udp])
+    return ("sudo firewall-cmd --permanent " + " ".join(adds)
+            + " && sudo firewall-cmd --reload")
 
 
 def _fw_open_ranges(list_ports_out: str) -> dict[str, list[tuple[int, int]]]:
@@ -179,27 +202,36 @@ def _fw_covered(port: int, proto: str, ranges: dict[str, list[tuple[int, int]]])
 
 
 def check_stream_firewall() -> CheckResult:
-    """Firewalld must let the Moonlight stream ports through (default base port).
+    """Firewalld must let the Moonlight stream ports through, for every
+    configured profile's base port and not just the default (a custom
+    ``sunshine_port_base`` shifts the whole port set).
 
     Range-aware: a broad high-port range counts as open (so this doesn't warn on
-    a host that opens e.g. 1025-65535). Only ports are inspected — if you opened
+    a host that opens e.g. 1025-65535). Only ports are inspected; if you opened
     them via a firewalld *service*, ignore a warning. Add-by-IP pairing still
     needs these; without them Moonlight fails to pair/stream, often silently."""
+    tcp, udp = stream_ports()
     rc, state = _run(["firewall-cmd", "--state"])
     if rc != 0 or "running" not in state:
         return CheckResult("stream firewall", Status.OK, "firewalld not running (ports unrestricted)")
     rc, out = _run(["firewall-cmd", "--list-ports"])
     if rc != 0:
         return CheckResult("stream firewall", Status.WARN,
-                           f"cannot query firewalld ({out})", fix=_STREAM_FW_FIX)
+                           f"cannot query firewalld ({out})", fix=_stream_fw_fix(tcp, udp))
     ranges = _fw_open_ranges(out)
-    missing = [f"{p}/tcp" for p in _STREAM_TCP if not _fw_covered(p, "tcp", ranges)]
-    missing += [f"{p}/udp" for p in _STREAM_UDP if not _fw_covered(p, "udp", ranges)]
-    if not missing:
-        return CheckResult("stream firewall", Status.OK, "Moonlight stream ports open")
+    missing_tcp = [p for p in tcp if not _fw_covered(p, "tcp", ranges)]
+    missing_udp = [p for p in udp if not _fw_covered(p, "udp", ranges)]
+    if not missing_tcp and not missing_udp:
+        bases = stream_port_bases()
+        detail = "Moonlight stream ports open"
+        if bases != [runtime.DEFAULT_SUNSHINE_PORT]:
+            detail += " (base " + ", ".join(str(b) for b in bases) + ")"
+        return CheckResult("stream firewall", Status.OK, detail)
+    missing = ([f"{p}/tcp" for p in missing_tcp]
+               + [f"{p}/udp" for p in missing_udp])
     return CheckResult("stream firewall", Status.WARN,
                        "closed: " + ", ".join(missing) + " — Moonlight may fail to pair/stream",
-                       fix=_STREAM_FW_FIX)
+                       fix=_stream_fw_fix(missing_tcp, missing_udp))
 
 
 def check_avahi() -> CheckResult:
