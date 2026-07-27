@@ -49,9 +49,14 @@ invisible session instead:
 [Games on Whales / Wolf](https://github.com/games-on-whales/wolf) is a
 multi-client streaming platform built on the same isolation idea;
 [Apollo](https://github.com/ClassicOldSong/Apollo) (a Sunshine fork) gives each
-client its own virtual display on Windows. podstage has a narrower scope: one
-Linux gaming PC, one stream at a time, Steam Big Picture, managed from a small
-host GUI.
+client its own virtual display on Windows;
+[moonshine](https://github.com/hgaiser/moonshine) is a headless Moonlight
+streaming server in Rust with a per-stream compositor, an alternative at the
+capture/encode layer where podstage uses Sunshine. podstage's scope sits above
+that layer: a complete containerized Steam Big Picture / gamescope instance,
+ready to stream, including the sandboxed Steam login itself (done in the
+stream, controller or QR code, no window on the host), one Linux gaming PC,
+one stream at a time, managed from a small host GUI.
 
 ## Features
 
@@ -252,8 +257,11 @@ podstage provision <app_id> <session>
 `podstage runtime start --home homes/deck --resolution 1280x800@60` is what
 `containers/runtime/run.sh` wraps.
 
-Everything works headless except the first Steam login (`session setup`
-opens the sandbox Steam visibly on the host desktop).
+Everything works headless, including the first Steam login: a fresh sandbox
+started with `podstage runtime start` boots into Big Picture's sign-in over
+the stream (QR code via the Steam Mobile App, or on-screen keyboard). The
+guided `session setup` flow still opens the sandbox Steam visibly on the
+host; a first-class streamed-login command is on the roadmap.
 
 ## Portability
 
@@ -349,15 +357,16 @@ sandboxed Big Picture session.
 
 Planned for 0.3:
 
-- Streamed first Steam login for a fully headless setup (reusing the
-  gamescope-less desktop plumbing).
-- Restore the client's cursor image after the idle-hide (may come free with
-  the compositor switch).
+- Streamed first Steam login as a first-class flow (CLI command + GUI
+  button). The mechanism is proven end to end: a fresh sandbox boots to Big
+  Picture's sign-in in the stream, QR login included.
+- Mount non-Steam game/launcher directories into the session, started from
+  Big Picture via non-Steam shortcuts.
+- Hide the streamed cursor when idle (the compositor's cursor has no
+  idle-hide yet).
 - Optional DualSense emulation (experimental setting): real gyro in the
   session instead of the default Xbox pad, for clients that send motion data.
 
-Under exploration: a second sandbox type for non-Steam launchers (own image
-with the launchers preinstalled, same streaming pipeline).
 
 ## Development
 
