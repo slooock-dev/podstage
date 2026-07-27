@@ -33,11 +33,28 @@ case "$PS_MS_TARGET" in
     exec steam
     ;;
   steam)
-    # -f -b are NOT in the production runner.sh, and they are needed here:
-    # moonshine implements no zxdg_decoration_manager_v1, so gamescope falls
-    # back to libdecor and draws its own titlebar (with a close button) around
-    # a content area smaller than the output. cage is a kiosk and labwc does
-    # server-side decorations, so neither ever showed this.
+    # Two things here are NOT in the production runner.sh, both because
+    # moonshine implements no zxdg_decoration_manager_v1 (verified: gamescope
+    # never even asks for it in a WAYLAND_DEBUG trace) while gamescope is
+    # linked against libdecor, so it decorates itself. cage is a kiosk and
+    # labwc does server-side decorations, so neither ever showed this.
+    #
+    #   -f -b                gamescope's own nested fullscreen/borderless.
+    #                        Fixes the visible frame (Deck-verified).
+    #   LIBDECOR_PLUGIN_DIR  pointed at an empty directory, libdecor logs
+    #                        "No plugins found, falling back on no decorations"
+    #                        and stops creating its two frame subsurfaces on
+    #                        gamescope's toplevel. -f -b alone does NOT remove
+    #                        them (WAYLAND_DEBUG: 9 subsurfaces with a plugin,
+    #                        7 without — the remaining 7 are gamescope's own),
+    #                        and they are the prime suspect for the stuck
+    #                        resize cursor and the unresponsive Big Picture UI.
+    #                        NOT yet confirmed on the Deck.
+    #
+    # The clean fix is upstream: moonshine advertising xdg-decoration and
+    # answering "server-side" would make libdecor stand down by itself.
+    mkdir -p "${XDG_RUNTIME_DIR:-/tmp}/no-libdecor"
+    export LIBDECOR_PLUGIN_DIR="${XDG_RUNTIME_DIR:-/tmp}/no-libdecor"
     exec gamescope --backend wayland -W "$W" -H "$H" -w "$W" -h "$H" -r "$R" \
         -f -b -C 3000 --expose-wayland --force-windows-fullscreen -e -- \
         steam $PS_STEAM_FLAGS

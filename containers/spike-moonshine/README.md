@@ -186,30 +186,42 @@ Works:
 * **Controller input** end to end — inputtino's gamepad path needs no
   equivalent of our uinput/udev plumbing.
 
-Open:
+Fixed during the E2E rounds:
 
 * **Big Picture was not fullscreen and carried a titlebar with a close button**
-  (the touchpad could click that X and end the session). **Root cause found:**
-  moonshine implements no `zxdg_decoration_manager_v1` (no occurrence of
-  "decoration" anywhere in its source) and gamescope is linked against
-  libdecor, so gamescope draws its own client-side frame around a content area
-  smaller than the output. Neither production compositor shows this — cage is a
-  kiosk, labwc does server-side decorations — which is why `runner.sh` has no
-  flag for it. Ruled out beforehand: a resolution mismatch (compositor,
-  gamescope and the Steam window were all at the client's 1280x800).
-  **Fix applied, not yet re-tested on the Deck:** `ms-app.sh` now passes
-  gamescope's nested-mode `-f -b` (fullscreen, borderless).
-* **The mouse worked on that titlebar but not inside Big Picture** — the same
-  symptom class as the current labwc architecture. Note the pointer test was
-  not clean: with a libdecor frame in place, the frame's own surfaces take
-  pointer focus, so the `-f -b` fix may change this result. Test that before
-  investigating further. If it persists, it is the known gamescope
-  `CWaylandInputThread` family of bugs, *not* the capability-drop variant the
-  keeper works around — that one is structurally impossible here (see 2 above).
+  (the touchpad could click that X and end the session). **Root cause:**
+  moonshine implements no `zxdg_decoration_manager_v1` — a `WAYLAND_DEBUG`
+  trace of gamescope under it contains not a single "decoration" line, i.e.
+  gamescope never even asks — while gamescope is linked against libdecor and
+  therefore decorates itself. Neither production compositor shows this (cage is
+  a kiosk, labwc does server-side decorations), which is why `runner.sh` has no
+  flag for it. Ruled out beforehand: a resolution mismatch — compositor,
+  gamescope and the Steam window were all at the client's 1280x800.
+  **Fix: `ms-app.sh` passes gamescope's nested `-f -b`. Deck-verified.**
+
+Open:
+
+* **The cursor moves and auto-hides, but shows a permanent window-resize glyph
+  and Big Picture does not react to it.** `-f -b` fixed the *visible* frame but
+  not libdecor itself: in the trace, gamescope's toplevel still carries 9
+  subsurfaces with a libdecor plugin present and 7 without (the remaining 7 are
+  gamescope's own, created through a different `wl_subcompositor` object). So
+  two libdecor surfaces survive fullscreen, and a frame surface holding pointer
+  focus is exactly what produces a stuck resize cursor over dead content.
+  **Candidate fix applied, NOT yet Deck-tested:** `ms-app.sh` points
+  `LIBDECOR_PLUGIN_DIR` at an empty directory; libdecor then logs
+  *"No plugins found, falling back on no decorations"* (confirmed in-container)
+  and drops those two surfaces. The clean fix is upstream — moonshine
+  advertising xdg-decoration and answering "server-side" would make libdecor
+  stand down on its own, and that is a small, well-scoped smithay change worth
+  proposing.
+  If the glyph survives that, the remaining suspect is the known gamescope
+  `CWaylandInputThread` family — but *not* the capability-drop variant the
+  keeper works around, which is structurally impossible here (see 2 above).
 * **Focus nudging is needed here too.** The production `podstage-focus-nudge`
   exists because Big Picture loses gamepad navigation when gamescope hands
   focus back after a game exits; moonshine's own `reevaluate_focus` does not
-  remove the need.
+  remove the need. Confirmed on the Deck, deferred.
 
 So the encode, transport and gamepad side of moonshine is ready and the input
 plumbing built for Sunshine (seat-shim, keeper, udev rules, PipeWire) largely
