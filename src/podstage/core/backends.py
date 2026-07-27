@@ -145,6 +145,31 @@ def get(name: str = "") -> Backend:
         ) from None
 
 
+def base_of(spec: Backend) -> Backend | None:
+    """The backend whose image ``spec`` is built FROM, if any."""
+    if not spec.derives_from:
+        return None
+    return next((b for b in BACKENDS.values() if b.image == spec.derives_from),
+                None)
+
+
+def with_bases(names_in_use: set[str]) -> set[str]:
+    """``names_in_use`` plus every backend they are built on top of.
+
+    A moonshine-only install still depends on the runtime image, so its
+    checks and its build have to stay in the picture.
+    """
+    out = set(names_in_use)
+    for name in names_in_use:
+        spec = BACKENDS.get(name)
+        while spec is not None:
+            spec = base_of(spec)
+            if spec is None:
+                break
+            out.add(spec.name)
+    return out
+
+
 def get_or_default(name: str = "") -> Backend:
     """Like :func:`get`, but an unknown name silently yields the default,
     for read paths (status lines, GUI lists) that must not crash on a config

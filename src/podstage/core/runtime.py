@@ -552,11 +552,24 @@ def runtime_src_dir(backend: str = backends.DEFAULT) -> Path:
 
 def runtime_src_hash(backend: str = backends.DEFAULT) -> str | None:
     """sha256 over the backend's image sources (relative names + contents),
-    the identity of those sources. None without a source checkout."""
+    the identity of those sources. None without a source checkout.
+
+    A derived image is only as current as the image it is built FROM, so the
+    base's hash is folded in: a change under containers/runtime/ marks the
+    moonshine image stale too, instead of leaving it silently layered on
+    outdated sources while its own label still matches.
+    """
+    spec = backends.get(backend)
     src = runtime_src_dir(backend)
     if not src.is_dir():
         return None
     h = hashlib.sha256()
+    base = backends.base_of(spec)
+    if base is not None:
+        base_hash = runtime_src_hash(base.name)
+        if base_hash is None:
+            return None
+        h.update(base_hash.encode() + b"\0")
     for p in sorted(src.rglob("*")):
         if p.is_file():
             h.update(str(p.relative_to(src)).encode() + b"\0" + p.read_bytes())
@@ -597,20 +610,22 @@ def build_image(image: str = "", backend: str = backends.DEFAULT, *,
     come through here). ``quiet=False`` streams podman's output.
 
     A backend whose image derives from another one (moonshine builds FROM the
-    runtime image) brings its base up first when it is missing. A stale but
-    present base is left alone, since rebuilding it would silently redo the
-    Sunshine image behind the user's back.
+    runtime image) brings its base up first when that base is missing OR
+    stale. Building on a stale base would be silently wrong: podman layers on
+    whatever the tag points at today, while the source hash stamped here
+    already covers the newer base sources, so the label would claim a
+    currency the image does not have.
     """
     spec = backends.get(backend)
     image = image or spec.image
     src = runtime_src_dir(backend)
     if not src.is_dir():
         raise RuntimeError(f"{src} not found — building needs a source checkout")
-    if spec.derives_from and not image_exists(spec.derives_from):
-        base = next(b.name for b in backends.BACKENDS.values()
-                    if b.image == spec.derives_from)
-        print(f"[podstage] {spec.derives_from} missing, building it first")
-        build_image(backend=base, quiet=quiet)
+    base = backends.base_of(spec)
+    if base is not None and (not image_exists(base.image)
+                             or image_is_stale(backend=base.name)):
+        print(f"[podstage] {base.image} is missing or stale, building it first")
+        build_image(backend=base.name, quiet=quiet)
     cmd = ["podman", "build", "-t", image]
     src_hash = runtime_src_hash(backend)
     if src_hash:

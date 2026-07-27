@@ -91,11 +91,15 @@ def configured_backends() -> set[str]:
 
 
 def check_image() -> CheckResult:
+    # Shown even for an install whose profiles all use another backend, as
+    # long as that backend's image is built FROM this one (see run_all).
+    role = ("" if backends.SUNSHINE.name in configured_backends()
+            else " (base image for the moonshine backend)")
     rc, _ = _run(["podman", "image", "exists", runtime.DEFAULT_IMAGE])
     if rc != 0:
         return CheckResult(
             "image", Status.FAIL,
-            f"{runtime.DEFAULT_IMAGE} not built yet",
+            f"{runtime.DEFAULT_IMAGE} not built yet{role}",
             fix="podstage runtime build",
         )
     _, img_id = _run(["podman", "image", "inspect", "--format", "{{.Id}}", runtime.DEFAULT_IMAGE])
@@ -104,10 +108,10 @@ def check_image() -> CheckResult:
     if runtime.image_is_stale():
         return CheckResult(
             "image", Status.WARN,
-            "image is stale — containers/runtime/ changed since it was built",
+            f"image is stale{role}, containers/runtime/ changed since it was built",
             fix="podstage runtime build",
         )
-    return CheckResult("image", Status.OK, f"present: {img_id[:12]}")
+    return CheckResult("image", Status.OK, f"present: {img_id[:12]}{role}")
 
 
 # -- moonshine backend ------------------------------------------------------
@@ -498,8 +502,11 @@ ALL_CHECKS: list[tuple[Callable[[], CheckResult], str]] = [
     (check_mdns, GROUP_STREAMING),
     (check_stream_firewall, GROUP_STREAMING),
     (check_avahi, GROUP_STREAMING),
+    # An always-on Sunshine occupies the base port block, which collides with
+    # a session on ANY backend, so this belongs to streaming, not to the
+    # Sunshine backend.
+    (check_sunshine_conflict, GROUP_STREAMING),
     (check_image, backends.SUNSHINE.name),
-    (check_sunshine_conflict, backends.SUNSHINE.name),
     (check_moonshine_image, backends.MOONSHINE.name),
     (check_moonshine_encode, backends.MOONSHINE.name),
 ]
@@ -514,7 +521,9 @@ def run_all() -> list[CheckResult]:
     the CLI summary report. The checks keep their own guard for direct
     callers.
     """
-    used = configured_backends()
+    # Bases count as in use: a moonshine-only install still needs the runtime
+    # image, since the moonshine image is built FROM it.
+    used = backends.with_bases(configured_backends())
     results: list[CheckResult] = []
     for check, group in ALL_CHECKS:
         if group in backends.BACKENDS and group not in used:

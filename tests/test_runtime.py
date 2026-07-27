@@ -453,3 +453,44 @@ def test_src_hash_is_per_backend(tmp_path, monkeypatch):
     (tmp_path / "containers/moonshine/Containerfile").write_text("FROM changed\n")
     assert runtime.runtime_src_hash("sunshine") == sun
     assert runtime.runtime_src_hash("moonshine") != moon
+
+
+def test_derived_src_hash_covers_the_base_sources(tmp_path, monkeypatch):
+    """A moonshine image layered on changed runtime sources must not keep
+    claiming it is current: podman builds FROM whatever the tag points at."""
+    for sub in ("runtime", "moonshine"):
+        d = tmp_path / "containers" / sub
+        d.mkdir(parents=True)
+        (d / "Containerfile").write_text(f"FROM {sub}\n")
+    monkeypatch.setattr(udev, "REPO_ROOT", tmp_path)
+    before = runtime.runtime_src_hash("moonshine")
+    (tmp_path / "containers/runtime/entrypoint.sh").write_text("#!/bin/sh\n")
+    assert runtime.runtime_src_hash("moonshine") != before
+    # ...while the base itself is unaffected by its dependant.
+    base = runtime.runtime_src_hash("sunshine")
+    (tmp_path / "containers/moonshine/app.sh").write_text("#!/bin/sh\n")
+    assert runtime.runtime_src_hash("sunshine") == base
+
+
+def test_build_brings_up_a_stale_base_first(tmp_path, monkeypatch):
+    """Building on a stale base would stamp a label the image cannot honour."""
+    for sub in ("runtime", "moonshine"):
+        d = tmp_path / "containers" / sub
+        d.mkdir(parents=True)
+        (d / "Containerfile").write_text(f"FROM {sub}\n")
+    monkeypatch.setattr(udev, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(runtime, "image_exists", lambda image: True)
+    monkeypatch.setattr(runtime, "image_is_stale",
+                        lambda image="", backend=None: backend == "sunshine")
+    built: list[str] = []
+    monkeypatch.setattr(runtime.subprocess, "run",
+                        lambda cmd, **kw: built.append(cmd[cmd.index("-t") + 1])
+                        or _Ok())
+    runtime.build_image(backend="moonshine")
+    assert built == [backends.SUNSHINE.image, backends.MOONSHINE.image]
+
+
+class _Ok:
+    returncode = 0
+    stdout = ""
+    stderr = ""

@@ -270,14 +270,18 @@ def test_run_all_stamps_groups_and_skips_unused_backends(tmp_path, monkeypatch):
     assert "moonshine encode" not in names
 
 
-def test_run_all_drops_sunshine_for_a_moonshine_only_setup(tmp_path, monkeypatch):
+def test_moonshine_only_setup_keeps_the_base_but_drops_nothing_it_needs(
+        tmp_path, monkeypatch):
+    """Only the runtime image survives from the Sunshine side, and only
+    because the moonshine image is built FROM it."""
     _cfg_with(tmp_path, monkeypatch,
               '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
     monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (0, "OK Codecs H.264"))
+    monkeypatch.setattr(doctor.runtime, "image_is_stale",
+                        lambda image="", backend=None: False)
     names = {r.name: r.group for r in doctor.run_all()}
     assert names["moonshine image"] == "moonshine"
-    assert "image" not in names
-    assert "sunshine-conflict" not in names
+    assert names["image"] == "sunshine"           # the base, kept on purpose
     assert names["podman"] == doctor.GROUP_HOST   # host checks always apply
 
 
@@ -301,3 +305,30 @@ def test_encode_check_offers_no_second_build_button(tmp_path, monkeypatch):
     res = doctor.check_moonshine_encode()
     assert res.status is doctor.Status.WARN
     assert not res.fix
+
+
+def test_base_backend_group_survives_a_moonshine_only_setup(tmp_path, monkeypatch):
+    """The moonshine image is built FROM the runtime image, so hiding the
+    Sunshine group would hide a dependency that still has to be current."""
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (0, "OK Codecs H.264"))
+    monkeypatch.setattr(doctor.runtime, "image_is_stale",
+                        lambda image="", backend=None: False)
+    rows = {r.name: r.group for r in doctor.run_all()}
+    assert rows["image"] == "sunshine"
+    assert rows["moonshine image"] == "moonshine"
+    # The port conflict hits any backend, so it is not a Sunshine-only row.
+    assert rows["sunshine-conflict"] == doctor.GROUP_STREAMING
+
+
+def test_base_image_row_says_why_it_is_there(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (0, "abc123"))
+    monkeypatch.setattr(doctor.runtime, "image_is_stale",
+                        lambda image="", backend=None: False)
+    assert "base image for the moonshine backend" in doctor.check_image().detail
+    # With a Sunshine profile present it is just the streaming image again.
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    assert "base image" not in doctor.check_image().detail
