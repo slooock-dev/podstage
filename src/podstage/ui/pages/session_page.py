@@ -197,9 +197,29 @@ class SessionPage(QWidget):
 
         self._game = InfoRow(tr("Game"))
         self._resolution = InfoRow(tr("Resolution"))
-        self._backend = InfoRow(tr("Backend"))
-        align_captions(self._game, self._resolution, self._backend)
-        for w in (self._game, self._resolution, self._backend):
+        # The backend is a per-profile setting, not just a status line: it was
+        # read-only here and only editable in the profile dialog on the other
+        # page, which is a long way round for a switch you flip while
+        # comparing the two. Editable while stopped, and it shows the running
+        # backend while a session is up, where it cannot be changed anyway.
+        self._backend_row = QWidget()
+        brow = QHBoxLayout(self._backend_row)
+        brow.setContentsMargins(0, 0, 0, 0)
+        brow.setSpacing(8)
+        caption = QLabel(tr("Backend"))
+        caption.setProperty("muted", True)
+        caption.setFixedWidth(
+            max(48, caption.fontMetrics().horizontalAdvance(tr("Backend")) + 4))
+        self._backend_row.caption_label = caption
+        self._backend = QComboBox()
+        for spec in backends.BACKENDS.values():
+            self._backend.addItem(spec.label, spec.name)
+        self._backend.currentIndexChanged.connect(self._on_backend_selected)
+        brow.addWidget(caption)
+        brow.addWidget(self._backend)
+        brow.addStretch(1)
+        align_captions(self._game, self._resolution, self._backend_row)
+        for w in (self._game, self._resolution, self._backend_row):
             lay.addWidget(w)
         return frame
 
@@ -414,6 +434,30 @@ class SessionPage(QWidget):
         self._load_backend(sc)
         self._load_preview(sc)
 
+    def _set_backend_combo(self, name: str) -> None:
+        idx = self._backend.findData(name)
+        if idx < 0 or idx == self._backend.currentIndex():
+            return
+        self._backend.blockSignals(True)
+        self._backend.setCurrentIndex(idx)
+        self._backend.blockSignals(False)
+
+    def _on_backend_selected(self) -> None:
+        """Write the picked backend to the profile.
+
+        It cannot apply to a running session (different server, different
+        pairings), so the box is disabled while one runs and this only ever
+        fires from the stopped state.
+        """
+        sc = self._profile()
+        chosen = self._backend.currentData()
+        if sc is None or not chosen or chosen == sc.backend:
+            return
+        sc.backend = chosen
+        self._ctx.save()
+        self._load_backend(sc)     # swap the quality panel with it
+        self._load_preview(sc)
+
     def _load_backend(self, sc: config.SessionConfig) -> None:
         """Show the panel that belongs to this profile's backend.
 
@@ -423,6 +467,7 @@ class SessionPage(QWidget):
         Sunshine's alone.
         """
         spec = backends.get_or_default(sc.backend)
+        self._set_backend_combo(spec.name)
         sunshine = spec.name == backends.SUNSHINE.name
         self._sunshine_panel.setVisible(sunshine)
         self._moonshine_panel.setVisible(not sunshine)
@@ -542,8 +587,18 @@ class SessionPage(QWidget):
         # The row is labelled "Backend" and used to show the container status
         # string, which said nothing. Now that a session really has a backend,
         # show that instead of two meanings for one word in the same window.
-        self._backend.set(backends.get_or_default(snap.backend).label
-                          if snap.running else None)
+        # Running: show what the container actually runs and lock the box,
+        # since switching cannot take effect. Stopped: the profile's choice,
+        # editable.
+        sc = self._profile()
+        self._set_backend_combo(snap.backend if snap.running
+                                else (sc.backend if sc else backends.DEFAULT))
+        self._backend.setEnabled(not snap.running)
+        self._backend.setToolTip(
+            tr("Stop the session to switch the backend.") if snap.running
+            else tr("Applies at the next session start. Each backend keeps its "
+                    "own pairings, so a client paired to one must be paired "
+                    "again for the other."))
         self._update_perf(snap)
         self._update_load(snap)
         self._update_thumbnail(snap.running)

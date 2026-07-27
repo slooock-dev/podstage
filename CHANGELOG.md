@@ -95,6 +95,12 @@ entrypoints and the container helpers changed.
 
 ### Changed
 
+- **The streaming backend is switchable on the Session page.** It was a
+  read-only row there and only editable in the profile dialog on the Sandboxes
+  page, which is a long way round for a switch you flip while comparing the
+  two. The row is a picker now: editable while stopped, and it shows what the
+  container actually runs while a session is up, where switching cannot take
+  effect anyway. The quality panel swaps with it.
 - **labwc replaces the patched cage kiosk as the session compositor.** Popups
   and dialogs now render where they belong; the previous kiosk drew them at
   0,0. The generated runner became static image scripts, checked by shellcheck

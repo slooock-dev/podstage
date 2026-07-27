@@ -160,6 +160,40 @@ def check_session_card_per_backend(win) -> bool:
     return ok
 
 
+def check_backend_switch(win) -> bool:
+    """The backend box in the session card writes to the profile and swaps the
+    quality panel with it, and it locks while a session runs.
+
+    A render shows one state at a time, so drive both: pick the other backend
+    and assert the profile changed and the panels followed.
+    """
+    page = win._session_page
+    original = page._profile
+    sc = config.SessionConfig(name="probe", backend="sunshine")
+    page._profile = lambda: sc
+    ok = True
+    try:
+        page._load_backend(sc)
+        if page._backend.currentData() != "sunshine":
+            print(f"gui smoke: FAILED (backend box shows "
+                  f"{page._backend.currentData()!r}, expected 'sunshine')")
+            ok = False
+        idx = page._backend.findData("moonshine")
+        page._backend.setCurrentIndex(idx)          # as a click would
+        if sc.backend != "moonshine":
+            print(f"gui smoke: FAILED (picking moonshine left the profile at "
+                  f"{sc.backend!r})")
+            ok = False
+        # isHidden(), not isVisible(): the page is not the current one in the
+        # stack here, so every widget on it reports invisible regardless.
+        if not page._sunshine_panel.isHidden() or page._moonshine_panel.isHidden():
+            print("gui smoke: FAILED (quality panel did not follow the backend)")
+            ok = False
+    finally:
+        page._profile = original
+    return ok
+
+
 def check_extra_mount_picker() -> bool:
     """The folder picker appends to the extra-mount list.
 
@@ -216,6 +250,7 @@ def main() -> int:
     ok = check_stepper_arrows(win) and ok
     ok = check_session_card_per_backend(win) and ok
     ok = check_extra_mount_picker() and ok
+    ok = check_backend_switch(win) and ok
     if win._poll is not None:
         win._poll.stop()
         win._poll.wait(5000)

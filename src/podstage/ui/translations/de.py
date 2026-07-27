@@ -521,6 +521,12 @@ TEXTS: dict[str, str] = {
         "Modus des ersten Clients bis zum Session-Neustart, moonshine folgt "
         "jedem Reconnect. Aus: es wird immer in der Profil-Auflösung "
         "gerendert.",
+    "Stop the session to switch the backend.":
+        "Zum Wechseln des Backends die Session stoppen.",
+    "Applies at the next session start. Each backend keeps its own pairings, "
+    "so a client paired to one must be paired again for the other.":
+        "Gilt ab dem nächsten Session-Start. Jedes Backend führt eigene "
+        "Pairings, ein Client muss für das andere also erneut gepairt werden.",
     "Client (auto)":
         "Client (auto)",
     "Add folder …": "Ordner hinzufügen …",
