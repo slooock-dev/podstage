@@ -103,6 +103,13 @@ entrypoint and both container helpers changed.
 
 ### Fixed
 
+- **The focus watchdog no longer knocks on the host's X server.** It probes
+  `:0`..`:9` for gamescope's display, and with `--network host` the abstract
+  socket namespace is shared, so `:0` reached the host's X server and was
+  rejected once a second ("Authorization required" in the container log). It
+  now only tries displays whose socket exists in the container's own
+  `/tmp/.X11-unix`. Most visible on the moonshine backend, where that wait
+  lasts until the first client connects.
 - **The client's absolute mouse could go missing on some sessions.** The
   seat-shim faked every udev monitor, so wlroots' DRM monitor swallowed device
   hotplugs. It now fakes only the input monitor, never drops a device, and logs
