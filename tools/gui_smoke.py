@@ -1,6 +1,7 @@
 """Offscreen GUI smoke test: builds the real main window, visits every page,
-renders one frame. Covers what pytest cannot — the suite runs without PyQt6,
-so errors in ui/ stay green there.
+renders one frame, and checks the table invariants that a render alone cannot
+see. Covers what pytest cannot, since the suite runs without PyQt6 and errors
+in ui/ stay green there.
 
     QT_QPA_PLATFORM=offscreen python tools/gui_smoke.py
 """
@@ -10,13 +11,76 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
+from podstage import config
 from podstage.ui.app import MainWindow
+from podstage.ui.pages.sandbox_page import COL, SandboxPage
+
+
+class _StubCtx(QObject):
+    """Config holder with a save() that deliberately does nothing: this test
+    must never write the developer's real config.toml."""
+
+    config_changed = pyqtSignal()
+
+    def __init__(self, cfg: config.AppConfig) -> None:
+        super().__init__()
+        self.config = cfg
+
+    def save(self) -> None:
+        pass
+
+
+def check_sandbox_columns() -> bool:
+    """The background du fills two cells of an already-rendered row.
+
+    It used to address them by literal index, so inserting a column made it
+    write the sandbox size over the pairings. Nothing about the rendered
+    frame shows that, hence this check: drive the callback and assert only
+    the size cells moved.
+    """
+    cfg = config.AppConfig(sessions=[
+        config.SessionConfig(name="alpha", backend="sunshine"),
+        config.SessionConfig(name="beta", backend="moonshine",
+                             sunshine_port_base=48989),
+    ])
+    page = SandboxPage(_StubCtx(cfg))
+    page.refresh()
+    table = page._table
+    if table.rowCount() != len(cfg.sessions):
+        print(f"gui smoke: FAILED (expected {len(cfg.sessions)} rows, "
+              f"got {table.rowCount()})")
+        return False
+
+    before = [{key: table.item(row, col).text() for key, col in COL.items()}
+              for row in range(table.rowCount())]
+    for row in range(table.rowCount()):
+        name = table.item(row, COL["name"]).text()
+        page._sizes[name] = 412 * (1 << 30)
+        page._overlay_sizes[name] = 3 * (1 << 30)
+    page._on_sizes_done(True, "sizes")
+
+    ok = True
+    for row in range(table.rowCount()):
+        for key, col in COL.items():
+            now = table.item(row, col).text()
+            if key in ("size", "overlay"):
+                if now == before[row][key]:
+                    print(f"gui smoke: FAILED (row {row} {key} never filled in)")
+                    ok = False
+            elif now != before[row][key]:
+                print(f"gui smoke: FAILED (row {row} {key} clobbered: "
+                      f"{before[row][key]!r} -> {now!r})")
+                ok = False
+    return ok
 
 
 def main() -> int:
     app = QApplication(sys.argv)
+    if not check_sandbox_columns():
+        return 1
     win = MainWindow()
     win.show()
     for row in range(win._nav.count()):

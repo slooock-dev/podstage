@@ -37,7 +37,7 @@ from ..i18n import tr
 from ..widgets import card
 from ..workers import start_action
 
-# Columns of the sandbox table, declared in one place: label, whether the
+# Columns of the sandbox table, declared in one place: key, label, whether the
 # column takes the leftover width, and whether its value is right-aligned.
 # Only Name and Pairings vary in length; everything else is a short fixed
 # token, so stretching all of them equally (the old behaviour) spent the same
@@ -45,17 +45,22 @@ from ..workers import start_action
 # actually carry information. Labels are callables so tr() still sees literals
 # (the i18n catalog test scans for them) while resolving after the language is
 # set.
+#
+# EVERY access to a cell goes through COL[key]. Inserting a column here used
+# to mean hunting down each hard-coded index, and a missed one wrote the
+# sandbox size over the pairings once the background du finished.
 _STRETCH, _FIT = True, False
 _COLUMNS: tuple[tuple, ...] = (
-    (lambda: tr("Name"), _STRETCH, False),
-    (lambda: tr("Resolution"), _FIT, False),
-    (lambda: tr("Backend"), _FIT, False),
-    (lambda: tr("Port"), _FIT, True),
-    (lambda: tr("Login"), _FIT, False),
-    (lambda: tr("Pairings"), _STRETCH, False),
-    (lambda: tr("Size"), _FIT, True),
-    (lambda: tr("Overlay"), _FIT, True),
+    ("name", lambda: tr("Name"), _STRETCH, False),
+    ("resolution", lambda: tr("Resolution"), _FIT, False),
+    ("backend", lambda: tr("Backend"), _FIT, False),
+    ("port", lambda: tr("Port"), _FIT, True),
+    ("login", lambda: tr("Login"), _FIT, False),
+    ("pairings", lambda: tr("Pairings"), _STRETCH, False),
+    ("size", lambda: tr("Size"), _FIT, True),
+    ("overlay", lambda: tr("Overlay"), _FIT, True),
 )
+COL: dict[str, int] = {key: i for i, (key, *_rest) in enumerate(_COLUMNS)}
 
 
 def _fmt_size(size: int | None) -> str:
@@ -401,7 +406,8 @@ class SandboxPage(QWidget):
 
         frame, lay = card(tr("Steam sandboxes"))
         self._table = QTableWidget(0, len(_COLUMNS))
-        self._table.setHorizontalHeaderLabels([label() for label, _, _ in _COLUMNS])
+        self._table.setHorizontalHeaderLabels(
+            [label() for _key, label, _s, _a in _COLUMNS])
         self._table.verticalHeader().setVisible(False)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -411,7 +417,7 @@ class SandboxPage(QWidget):
         # split the rest, so a long profile name or client list still fits at
         # the minimum window width.
         header = self._table.horizontalHeader()
-        for col, (_, stretch, _align) in enumerate(_COLUMNS):
+        for col, (_key, _label, stretch, _align) in enumerate(_COLUMNS):
             header.setSectionResizeMode(
                 col, QHeaderView.ResizeMode.Stretch if stretch
                 else QHeaderView.ResizeMode.ResizeToContents)
@@ -474,7 +480,7 @@ class SandboxPage(QWidget):
         row = self._table.currentRow()
         if row < 0:
             return None
-        return self._ctx.config.get(self._table.item(row, 0).text())
+        return self._ctx.config.get(self._table.item(row, COL["name"]).text())
 
     def refresh(self) -> None:
         selected = self._table.currentRow()
@@ -496,9 +502,10 @@ class SandboxPage(QWidget):
                       str(sc.sunshine_port_base), login,
                       paired, _fmt_size(self._sizes.get(sc.name)),
                       _fmt_size(self._overlay_sizes.get(sc.name))]
+            assert len(values) == len(_COLUMNS)  # one value per declared column
             for col, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                if _COLUMNS[col][2]:   # right-aligned per the column table
+                if _COLUMNS[col][3]:   # right-aligned per the column table
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight
                                           | Qt.AlignmentFlag.AlignVCenter)
                 # A long name or client list still elides at the minimum
@@ -533,12 +540,22 @@ class SandboxPage(QWidget):
         start_action(self._pool, _measure, "Sizes", self._on_sizes_done)
 
     def _on_sizes_done(self, ok: bool, _msg: str) -> None:
-        if ok:
-            for row in range(self._table.rowCount()):
-                name = self._table.item(row, 0).text()
-                self._table.item(row, 5).setText(_fmt_size(self._sizes.get(name)))
-                self._table.item(row, 6).setText(
-                    _fmt_size(self._overlay_sizes.get(name)))
+        """Fill in the two size cells the background du just measured.
+
+        By key, never by a literal index: this ran after the table was already
+        rendered, so a wrong index here silently overwrote a neighbouring
+        column rather than failing.
+        """
+        if not ok:
+            return
+        for row in range(self._table.rowCount()):
+            name = self._table.item(row, COL["name"]).text()
+            for key, values in (("size", self._sizes),
+                                ("overlay", self._overlay_sizes)):
+                item = self._table.item(row, COL[key])
+                text = _fmt_size(values.get(name))
+                item.setText(text)
+                item.setToolTip(text)
 
     # -- profile CRUD ----------------------------------------------------
     def _on_new(self) -> None:
