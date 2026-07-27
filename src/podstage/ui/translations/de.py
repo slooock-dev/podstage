@@ -49,10 +49,20 @@ TEXTS: dict[str, str] = {
     "quality on the server side.":
         "Bitrate & Codec wählt der Moonlight-Client; diese steuern die "
         "Encoder-Qualität serverseitig.",
-    "The {backend} backend has no server-side quality settings; the Moonlight "
-    "client picks bitrate and codec.":
-        "Das Backend {backend} hat keine serverseitigen Qualitätseinstellungen; "
-        "Bitrate und Codec wählt der Moonlight-Client.",
+    "Bitrate & codec are chosen by the Moonlight client. {backend} has no "
+    "config API, so this applies at the next session start.":
+        "Bitrate & Codec wählt der Moonlight-Client. {backend} hat kein "
+        "Config-API, das hier gilt also ab dem nächsten Session-Start.",
+    "Error correction": "Fehlerkorrektur",
+    "moonshine default": "moonshine-Standard",
+    "Forward error correction: how much redundancy is sent so lost "
+    "packets do not become visible artifacts. Higher survives a lossy "
+    "WiFi and costs bandwidth.":
+        "Vorwärtsfehlerkorrektur: wie viel Redundanz mitgesendet wird, damit "
+        "verlorene Pakete keine sichtbaren Artefakte werden. Höher übersteht "
+        "ein verlustbehaftetes WLAN und kostet Bandbreite.",
+    "Saved. Applies at the next session start.":
+        "Gespeichert. Gilt ab dem nächsten Session-Start.",
     "The {backend} backend has no live quality settings; these apply to "
     "Sunshine profiles only.":
         "Das Backend {backend} hat keine Qualitätseinstellungen zur Laufzeit; "
@@ -243,12 +253,18 @@ TEXTS: dict[str, str] = {
         "Die Setup-Seite prüft, ob diese Maschine das kann.",
     "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
     "Intel Arc). Save this profile, then build its image and check "
-    "the GPU on the Setup page. No live quality settings and no "
-    "preview picture.":
+    "the GPU on the Setup page. Its quality setting applies at the "
+    "next start instead of live, and there is no preview picture.":
         "Braucht eine GPU mit Vulkan-Video-Encode (NVIDIA RTX, AMD RDNA2+, "
         "Intel Arc). Profil speichern, dann auf der Setup-Seite das Image "
-        "bauen und die GPU prüfen. Keine Qualitätseinstellungen zur Laufzeit "
-        "und kein Vorschaubild.",
+        "bauen und die GPU prüfen. Die Qualitätseinstellung gilt ab dem "
+        "nächsten Start statt live, ein Vorschaubild gibt es nicht.",
+    "Keyboard": "Tastatur",
+    "variant, e.g. nodeadkeys": "Variante, z. B. nodeadkeys",
+    "XKB layout of the streamed session, empty keeps moonshine's "
+    "default (us). Affects typing in Big Picture and in games.":
+        "XKB-Belegung der gestreamten Session, leer behält moonshines "
+        "Standard (us). Betrifft Texteingabe in Big Picture und in Spielen.",
     "Games in this sandbox": "Spiele in dieser Sandbox",
     "Include every installed game (and any you add later)":
         "Alle installierten Spiele einschließen (auch später hinzugefügte)",

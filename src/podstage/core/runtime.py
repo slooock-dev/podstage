@@ -140,6 +140,11 @@ _MOONSHINE_ENV: dict[str, str | None] = {
     "PS_MOONSHINE_NAME": None,       # advertised over its built-in mDNS
     "PS_MOONSHINE_LOG": None,        # MOONSHINE_LOG filter
     "PS_MOONSHINE_KEEP_CONFIG": None,  # 1 → do not regenerate config.toml
+    # Per-profile settings; unset leaves moonshine's own default in place
+    # (see config.SessionConfig).
+    "PS_MOONSHINE_FEC": None,        # stream.video.fec_percentage
+    "PS_MOONSHINE_KB_LAYOUT": None,  # compositor.keyboard.layout
+    "PS_MOONSHINE_KB_VARIANT": None,
 }
 
 

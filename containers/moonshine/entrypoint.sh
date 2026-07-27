@@ -125,6 +125,21 @@ PORT_RTSP=$((PS_MOONSHINE_PORT + 21))
 HDR=false
 [ "${PS_HDR:-}" = enabled ] && HDR=true
 
+# Per-profile settings, written only when the host set them so an untouched
+# profile keeps moonshine's own defaults. Both keys were verified against the
+# server: it ignores unknown keys but rejects a wrong type, so the type check
+# is what proves they are read.
+FEC_LINE=""
+[ -n "${PS_MOONSHINE_FEC:-}" ] && FEC_LINE="fec_percentage = $PS_MOONSHINE_FEC"
+KEYBOARD_BLOCK=""
+if [ -n "${PS_MOONSHINE_KB_LAYOUT:-}" ]; then
+    KEYBOARD_BLOCK="
+[compositor.keyboard]
+layout = \"$PS_MOONSHINE_KB_LAYOUT\""
+    [ -n "${PS_MOONSHINE_KB_VARIANT:-}" ] && KEYBOARD_BLOCK="$KEYBOARD_BLOCK
+variant = \"$PS_MOONSHINE_KB_VARIANT\""
+fi
+
 if [ "${PS_MOONSHINE_KEEP_CONFIG:-0}" != 1 ]; then
     # inhibit_sleep is off because there is no logind in a rootless container;
     # the host is awake anyway while a session runs.
@@ -149,6 +164,7 @@ timeout = 60
 
 [stream.video]
 port = $PORT_VIDEO
+$FEC_LINE
 
 [stream.control]
 port = $PORT_CONTROL
@@ -158,6 +174,7 @@ port = $PORT_AUDIO
 
 [compositor]
 hdr = $HDR
+$KEYBOARD_BLOCK
 
 [[application]]
 title = "Steam Big Picture"
@@ -166,6 +183,8 @@ stdout = "file:$XDG_RUNTIME_DIR/app.log"
 stderr = "file:$XDG_RUNTIME_DIR/app.log"
 launch_timeout_secs = 5
 EOF
+    log "settings: fec=${PS_MOONSHINE_FEC:-default}" \
+        "keyboard=${PS_MOONSHINE_KB_LAYOUT:-default}${PS_MOONSHINE_KB_VARIANT:+,$PS_MOONSHINE_KB_VARIANT}"
     log "wrote $CONF (http=$PORT_HTTP https=$PORT_HTTPS rtsp=$PORT_RTSP" \
         "video=$PORT_VIDEO control=$PORT_CONTROL audio=$PORT_AUDIO hdr=$HDR)"
 fi

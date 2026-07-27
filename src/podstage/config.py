@@ -207,8 +207,22 @@ class SessionConfig:
     # Extra sunshine.conf lines (key → value), e.g. {"nvenc_preset": "1"}.
     # Injected via PS_SUNSHINE_EXTRA on every start — the durable counterpart
     # to live changes through the web API (which die with the container).
-    # Sunshine backend only; moonshine's config.toml is not wired for this.
+    # Sunshine backend only; moonshine has its own two settings below.
     sunshine_extra: dict[str, str] = field(default_factory=dict)
+    # moonshine backend only. Both keys were verified against the server:
+    # it ignores unknown keys silently but rejects a wrong type, so a type
+    # error proves the key is really read.
+    #
+    # Forward error correction in percent (stream.video.fec_percentage).
+    # -1 keeps moonshine's own default, which is deliberate: the value is not
+    # readable from the outside, and 0 is a legitimate setting of its own
+    # ("no FEC", fine on a wired LAN) rather than a stand-in for "unset".
+    moonshine_fec_percent: int = -1
+    # XKB layout of the streamed session (compositor.keyboard). Empty keeps
+    # moonshine's default, which is "us". The Sunshine pipeline has no
+    # equivalent setting.
+    moonshine_keyboard_layout: str = ""
+    moonshine_keyboard_variant: str = ""
     # Seconds between in-container preview-thumbnail captures; 0 disables the
     # preview. Applied at container start via PS_THUMBNAIL(_INTERVAL).
     preview_interval_s: int = 10

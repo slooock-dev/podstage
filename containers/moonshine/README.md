@@ -20,7 +20,8 @@ profile dialog). The Sunshine backend stays the default.
 | discovery | host `avahi-publish-service` (no avahi in the container) | built-in mDNS responder |
 | pairing | `POST /api/pin`, TLS + basic auth | `POST /submit-pin`, plain HTTP, **no auth** |
 | config changes | live via the web API | rewrite `config.toml`, restart the session |
-| quality settings | profile `sunshine_extra` | not wired |
+| quality settings | profile `sunshine_extra`, applied live | `fec_percentage`, applied at the next start |
+| keyboard layout | host default | `compositor.keyboard` per profile |
 
 The whole labwc bug class (seat capability churn, faked udev hotplug, cursor
 delegation) disappears structurally: moonshine's compositor never opens an
@@ -38,6 +39,16 @@ session start flag a forgotten rebuild. Expect a long first build: the image
 compiles moonshine and its Rust dependency graph from source.
 
 `MOONSHINE_VERSION` in the Containerfile pins the upstream commit.
+
+## Which config keys are real
+
+moonshine ignores unknown config keys silently but rejects a wrong type, so
+feeding a key the wrong type is what proves it is actually read. Verified that
+way and wired to the profile: `stream.video.fec_percentage`,
+`compositor.keyboard.layout` and `.variant`. Also verified present but not
+wired: `stream.video.encrypt`, `stream.timeout`. Verified absent despite the
+obvious guess: `stream.control.encrypt` (the control stream config only holds
+`gamepad`).
 
 ## Two pieces that need explaining
 

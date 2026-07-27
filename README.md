@@ -202,7 +202,8 @@ is the same either way.
 | GPU | every GPU podstage supports | NVIDIA RTX, AMD RDNA2+, Intel Arc only |
 | discovery | host avahi | built-in mDNS |
 | pairing | web UI or CLI, TLS + login | CLI only, plain HTTP, no auth |
-| quality settings | encoder settings in the GUI, live | none |
+| quality settings | encoder presets in the GUI, applied live | error correction, applied at the next start |
+| keyboard layout | host default | per profile (XKB layout/variant) |
 | stream preview in the GUI | yes | no |
 | image | `podstage-runtime` (~2.7 GB) | `podstage-moonshine`, built on top of it |
 

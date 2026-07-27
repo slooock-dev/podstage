@@ -299,3 +299,21 @@ def test_unknown_backend_falls_back_instead_of_crashing(tmp_path):
     path = tmp_path / "config.toml"
     path.write_text('[[sessions]]\nname = "a"\nbackend = "warpdrive"\n')
     assert AppConfig.load(path).get("a").backend == "sunshine"
+
+
+def test_moonshine_settings_round_trip(tmp_path):
+    path = tmp_path / "config.toml"
+    AppConfig(sessions=[SessionConfig(
+        name="tv", backend="moonshine", moonshine_fec_percent=30,
+        moonshine_keyboard_layout="de",
+        moonshine_keyboard_variant="nodeadkeys")]).save(path)
+    tv = AppConfig.load(path).get("tv")
+    assert tv.moonshine_fec_percent == 30
+    assert (tv.moonshine_keyboard_layout, tv.moonshine_keyboard_variant) == \
+        ("de", "nodeadkeys")
+
+
+def test_moonshine_settings_default_to_upstreams_own():
+    sc = SessionConfig(name="tv")
+    assert sc.moonshine_fec_percent == -1        # -1: do not write the key
+    assert sc.moonshine_keyboard_layout == ""    # empty: moonshine's "us"

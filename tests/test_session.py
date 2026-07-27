@@ -189,3 +189,49 @@ def test_moonshine_rejects_the_sunshine_only_modes():
     with pytest.raises(RuntimeError, match="only supports mode=pipeline"):
         s._options(mode="desktop")
     assert s._options(mode="pipeline").mode == "pipeline"
+
+
+# -- moonshine's own settings ------------------------------------------------
+
+def test_moonshine_settings_are_only_forwarded_when_set():
+    """An untouched profile must keep moonshine's own defaults: the FEC
+    default is not readable from the outside, so overwriting it blindly would
+    silently change upstream behaviour."""
+    env = Session(_moonshine())._options().env
+    for key in ("PS_MOONSHINE_FEC", "PS_MOONSHINE_KB_LAYOUT",
+                "PS_MOONSHINE_KB_VARIANT"):
+        assert key not in env, key
+
+
+def test_moonshine_settings_reach_the_container():
+    sc = _moonshine(moonshine_fec_percent=30,
+                    moonshine_keyboard_layout="de",
+                    moonshine_keyboard_variant="nodeadkeys")
+    env = Session(sc)._options().env
+    assert env["PS_MOONSHINE_FEC"] == "30"
+    assert env["PS_MOONSHINE_KB_LAYOUT"] == "de"
+    assert env["PS_MOONSHINE_KB_VARIANT"] == "nodeadkeys"
+
+
+def test_fec_zero_is_a_real_setting_not_an_unset_marker():
+    """0 means "no FEC", which is a legitimate choice on a wired LAN; -1 is
+    the sentinel for "leave moonshine's default alone"."""
+    assert Session(_moonshine(moonshine_fec_percent=0))._options().env[
+        "PS_MOONSHINE_FEC"] == "0"
+    assert "PS_MOONSHINE_FEC" not in Session(
+        _moonshine(moonshine_fec_percent=-1))._options().env
+
+
+def test_keyboard_variant_needs_a_layout():
+    """A variant without a layout is meaningless to XKB, so it is dropped
+    rather than written into the config on its own."""
+    env = Session(_moonshine(moonshine_keyboard_variant="nodeadkeys"))._options().env
+    assert "PS_MOONSHINE_KB_VARIANT" not in env
+    assert "PS_MOONSHINE_KB_LAYOUT" not in env
+
+
+def test_moonshine_settings_never_leak_into_a_sunshine_session():
+    sc = SessionConfig(name="deck", moonshine_fec_percent=30,
+                       moonshine_keyboard_layout="de")
+    env = Session(sc)._options().env
+    assert not [k for k in env if k.startswith("PS_MOONSHINE_")]

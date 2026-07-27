@@ -146,6 +146,25 @@ class ProfileDialog(QDialog):
         self._backend_note.setProperty("muted", True)
         self._backend_note.setWordWrap(True)
         form.addRow("", self._backend_note)
+
+        # moonshine-only: the streamed session's XKB layout. The Sunshine
+        # pipeline has no equivalent, so the row appears and disappears with
+        # the backend rather than sitting there inert.
+        self._kb_row = QWidget()
+        kb = QHBoxLayout(self._kb_row)
+        kb.setContentsMargins(0, 0, 0, 0)
+        kb.setSpacing(8)
+        self._kb_layout = QLineEdit(existing.moonshine_keyboard_layout if existing else "")
+        self._kb_layout.setPlaceholderText("de")
+        self._kb_variant = QLineEdit(existing.moonshine_keyboard_variant if existing else "")
+        self._kb_variant.setPlaceholderText(tr("variant, e.g. nodeadkeys"))
+        kb.addWidget(self._kb_layout, 1)
+        kb.addWidget(self._kb_variant, 2)
+        self._kb_row.setToolTip(tr(
+            "XKB layout of the streamed session, empty keeps moonshine's "
+            "default (us). Affects typing in Big Picture and in games."))
+        self._kb_label = QLabel(tr("Keyboard"))
+        form.addRow(self._kb_label, self._kb_row)
         self._sync_backend_note()
 
         form.addRow(self._build_games(existing))
@@ -170,14 +189,18 @@ class ProfileDialog(QDialog):
         form.addRow(buttons)
 
     def _sync_backend_note(self) -> None:
-        """Spell the moonshine trade-offs out under the combo, because the tooltip
-        is not enough for a choice that can make a GPU unable to stream."""
-        if self._backend.currentData() == backends.MOONSHINE.name:
+        """Follow the backend choice: spell out the moonshine trade-offs (the
+        tooltip is not enough for a choice that can make a GPU unable to
+        stream) and show only the fields that backend actually has."""
+        moonshine = self._backend.currentData() == backends.MOONSHINE.name
+        self._kb_row.setVisible(moonshine)
+        self._kb_label.setVisible(moonshine)
+        if moonshine:
             self._backend_note.setText(tr(
                 "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
                 "Intel Arc). Save this profile, then build its image and check "
-                "the GPU on the Setup page. No live quality settings and no "
-                "preview picture."))
+                "the GPU on the Setup page. Its quality setting applies at the "
+                "next start instead of live, and there is no preview picture."))
         else:
             self._backend_note.setText("")
 
@@ -334,6 +357,9 @@ class ProfileDialog(QDialog):
             sunshine_extra=dict(base.sunshine_extra),
             preview_interval_s=base.preview_interval_s,
             extra_mounts=mounts,
+            moonshine_fec_percent=base.moonshine_fec_percent,
+            moonshine_keyboard_layout=self._kb_layout.text().strip(),
+            moonshine_keyboard_variant=self._kb_variant.text().strip(),
         )
         self.accept()
 

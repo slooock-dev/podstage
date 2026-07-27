@@ -265,7 +265,12 @@ class SessionPage(QWidget):
 
     def _build_quality_card(self) -> QWidget:
         frame, lay = card(tr("Stream quality"))
-        row = QHBoxLayout()
+        # The two backends expose entirely different knobs, so the card swaps
+        # its panel with the selected profile's backend rather than greying
+        # one set out (see _load_backend).
+        self._sunshine_panel = QWidget()
+        row = QHBoxLayout(self._sunshine_panel)
+        row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
         # NVENC (NVIDIA) and VAAPI (AMD/Intel) expose different encoder knobs;
         # the runtime already picks the matching Sunshine encoder by GPU vendor.
@@ -273,7 +278,9 @@ class SessionPage(QWidget):
             self._build_nvenc_row(row)
         else:
             self._build_vaapi_row(row)
-        lay.addLayout(row)
+        lay.addWidget(self._sunshine_panel)
+        self._moonshine_panel = self._build_moonshine_row()
+        lay.addWidget(self._moonshine_panel)
 
         bottom = QHBoxLayout()
         self._quality_hint = QLabel(tr(
@@ -292,6 +299,38 @@ class SessionPage(QWidget):
         bottom.addWidget(self._web_btn)
         lay.addLayout(bottom)
         return frame
+
+    def _build_moonshine_row(self) -> QWidget:
+        """moonshine's one transport knob. It has no config API, so this is
+        saved to the profile and applied at the next session start."""
+        panel = QWidget()
+        row = QHBoxLayout(panel)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        self._fec = QSpinBox()
+        self._fec.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        # -1 is the minimum so it can carry the special text: 0 is a real
+        # setting of its own ("no FEC"), not a stand-in for "leave default".
+        self._fec.setRange(-1, 100)
+        self._fec.setSpecialValueText(tr("moonshine default"))
+        self._fec.setSuffix(" %")
+        self._fec.setToolTip(tr(
+            "Forward error correction: how much redundancy is sent so lost "
+            "packets do not become visible artifacts. Higher survives a lossy "
+            "WiFi and costs bandwidth."))
+        self._fec.editingFinished.connect(self._persist_moonshine)
+        row.addWidget(QLabel(tr("Error correction")))
+        row.addWidget(self._fec)
+        row.addStretch(1)
+        return panel
+
+    def _persist_moonshine(self) -> None:
+        sc = self._profile()
+        if sc is None:
+            return
+        sc.moonshine_fec_percent = self._fec.value()
+        self._ctx.save()
+        self._quality_hint.setText(tr("Saved. Applies at the next session start."))
 
     def _build_nvenc_row(self, row: QHBoxLayout) -> None:
         self._preset = QComboBox()
@@ -372,20 +411,31 @@ class SessionPage(QWidget):
         self._load_preview(sc)
 
     def _load_backend(self, sc: config.SessionConfig) -> None:
-        """Grey out what the profile's backend does not have: the quality
-        controls and the web UI are Sunshine's, driven by its config API."""
+        """Show the panel that belongs to this profile's backend.
+
+        Sunshine has encoder knobs applied through its config API; moonshine
+        has one transport knob and no API, so its value is saved to the
+        profile and takes effect at the next start. The web UI button is
+        Sunshine's alone.
+        """
         spec = backends.get_or_default(sc.backend)
-        self._apply_btn.setEnabled(spec.live_config)
-        self._web_btn.setEnabled(spec.web_port_off is not None)
-        if not spec.live_config:
-            self._quality_hint.setText(tr(
-                "The {backend} backend has no server-side quality settings; "
-                "the Moonlight client picks bitrate and codec.",
-                backend=spec.label))
-        else:
+        sunshine = spec.name == backends.SUNSHINE.name
+        self._sunshine_panel.setVisible(sunshine)
+        self._moonshine_panel.setVisible(not sunshine)
+        self._apply_btn.setVisible(spec.live_config)
+        self._web_btn.setVisible(spec.web_port_off is not None)
+        if sunshine:
             self._quality_hint.setText(tr(
                 "Bitrate & codec are chosen by the Moonlight client; these "
                 "control encoder quality on the server side."))
+        else:
+            self._fec.blockSignals(True)
+            self._fec.setValue(sc.moonshine_fec_percent)
+            self._fec.blockSignals(False)
+            self._quality_hint.setText(tr(
+                "Bitrate & codec are chosen by the Moonlight client. "
+                "{backend} has no config API, so this applies at the next "
+                "session start.", backend=spec.label))
 
     def _load_preview(self, sc: config.SessionConfig) -> None:
         if self._preview_interval.hasFocus():  # don't clobber an in-progress edit
@@ -490,7 +540,11 @@ class SessionPage(QWidget):
         self._game.set(snap.game.name if snap.game else
                        (tr("Big Picture / menu") if snap.running else None))
         self._update_resolution(snap.running)
-        self._backend.set(snap.detail if snap.running else None)
+        # The row is labelled "Backend" and used to show the container status
+        # string, which said nothing. Now that a session really has a backend,
+        # show that instead of two meanings for one word in the same window.
+        self._backend.set(backends.get_or_default(snap.backend).label
+                          if snap.running else None)
         self._update_perf(snap)
         self._update_load(snap)
         self._update_thumbnail(snap.running)

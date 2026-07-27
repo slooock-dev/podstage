@@ -348,6 +348,7 @@ class Snapshot:
     running: bool
     client_profile: str | None = None  # which podstage profile owns it
     detail: str = ""
+    backend: str = ""  # streaming backend of the running session
     game: ActiveGame | None = None
     gpu: GpuStats | None = None
     container: ContainerStats | None = None
@@ -363,6 +364,7 @@ def snapshot() -> Snapshot:
         running=True,
         client_profile=st.client,
         detail=st.detail,
+        backend=st.backend,
         game=active_game(),
         gpu=gpu_stats(),
         container=container_stats(),

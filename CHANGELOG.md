@@ -27,6 +27,17 @@ entrypoint and both container helpers changed.
   (`podstage runtime build --backend moonshine`) is built on top of the
   runtime image and compiles moonshine from source. See
   [`containers/moonshine/README.md`](containers/moonshine/README.md).
+- **Two moonshine settings per profile**, both verified against the server
+  rather than guessed (it ignores unknown keys but rejects a wrong type, so a
+  type error is what proves a key is read): forward error correction, its one
+  transport knob, and the streamed session's keyboard layout, which otherwise
+  defaults to `us`. Left untouched, both keep moonshine's own defaults.
+- **The backend-specific parts of the GUI swap with the selected profile.**
+  The Stream quality card shows Sunshine's encoder presets or moonshine's
+  error correction instead of greying one set out, and the profile dialog
+  shows the keyboard fields only for the backend that has them. The Session
+  card's "Backend" row now shows the streaming backend, which is what its
+  label always promised; it used to show the container status string.
 - **`podstage doctor` gates the moonshine backend.** Two checks that only
   exist when a profile selects it: the image is present and current, and the
   GPU can actually encode, answered by running moonshine's own health check in

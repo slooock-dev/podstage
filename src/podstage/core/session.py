@@ -160,6 +160,14 @@ class Session:
         else:
             # moonshine advertises itself over its own mDNS responder.
             env["PS_MOONSHINE_NAME"] = self.cfg.name
+            # Only forwarded when set, so an untouched profile keeps
+            # moonshine's own defaults rather than ours.
+            if self.cfg.moonshine_fec_percent >= 0:
+                env["PS_MOONSHINE_FEC"] = str(self.cfg.moonshine_fec_percent)
+            if self.cfg.moonshine_keyboard_layout:
+                env["PS_MOONSHINE_KB_LAYOUT"] = self.cfg.moonshine_keyboard_layout
+                if self.cfg.moonshine_keyboard_variant:
+                    env["PS_MOONSHINE_KB_VARIANT"] = self.cfg.moonshine_keyboard_variant
         experimental = self.app_config().experimental_env()
         if backend.name != backends.SUNSHINE.name:
             # gamepad_ds5 configures SUNSHINE's emulated pad; moonshine's
