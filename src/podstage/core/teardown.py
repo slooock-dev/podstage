@@ -37,7 +37,7 @@ def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str]:
 
 
 def _open_stream_ports() -> list[str]:
-    """podstage's Sunshine ports currently open in firewalld (exact tokens
+    """podstage's Moonlight stream ports currently open in firewalld (exact tokens
     only — a user's broad range is their config, not ours)."""
     rc, state = _run(["firewall-cmd", "--state"])
     if rc != 0 or state.strip() != "running":

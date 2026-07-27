@@ -1,3 +1,4 @@
+from podstage import config
 from podstage.core import doctor
 
 
@@ -153,3 +154,102 @@ def test_udev_check_ok_with_both_rules(tmp_path, monkeypatch):
     monkeypatch.setattr(udev, "STATIC_DEST", static)
     monkeypatch.setattr(udev, "OWNER_DEST", owner)
     assert doctor.check_udev_rules().status is doctor.Status.OK
+
+
+# -- moonshine backend checks ------------------------------------------------
+#
+# Both are inert unless a profile selects the backend: it is opt-in, and its
+# GPU requirement is narrower than Sunshine's, so warning about it on a
+# machine that never uses it would be noise.
+
+def _cfg_with(tmp_path, monkeypatch, body):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(body)
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg)
+    return cfg
+
+
+def test_configured_backends_reads_the_profiles(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "a"\n'
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    assert doctor.configured_backends() == {"sunshine", "moonshine"}
+
+
+def test_configured_backends_defaults_without_a_config(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "gone.toml")
+    assert doctor.configured_backends() == {"sunshine"}
+
+
+def test_moonshine_checks_are_silent_without_a_moonshine_profile(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    # Would blow up if it ran podman; it must not get that far.
+    monkeypatch.setattr(doctor, "_run", _boom)
+    for check in (doctor.check_moonshine_image, doctor.check_moonshine_encode):
+        res = check()
+        assert res.status is doctor.Status.OK
+        assert "not used" in res.detail
+
+
+def _boom(*_a, **_kw):
+    raise AssertionError("must not shell out")
+
+
+def test_moonshine_image_check_asks_for_a_build(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (1, ""))
+    res = doctor.check_moonshine_image()
+    assert res.status is doctor.Status.FAIL
+    assert res.fix == doctor.MOONSHINE_BUILD_FIX
+
+
+def test_moonshine_encode_reads_the_upstream_codec_line(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    report = ("OK  Render nodes  renderD128\n"
+              "OK  Codecs        H.264, HEVC, AV1\n"
+              "WARN Sleep inhibit  (logind absent)\n")
+    monkeypatch.setattr(doctor, "_run",
+                        lambda cmd, timeout=10: (0, report) if "run" in cmd else (0, ""))
+    res = doctor.check_moonshine_encode()
+    assert res.status is doctor.Status.OK
+    assert "H.264, HEVC, AV1" in res.detail
+
+
+def test_moonshine_encode_fails_on_a_gpu_without_vulkan_video(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    report = "OK  Render nodes  renderD128\nFAIL Codecs  none\n"
+    monkeypatch.setattr(doctor, "_run",
+                        lambda cmd, timeout=10: (1, report) if "run" in cmd else (0, ""))
+    res = doctor.check_moonshine_encode()
+    assert res.status is doctor.Status.FAIL
+    # A hardware fact, so no fix command is offered.
+    assert not res.fix
+    assert "sunshine backend" in res.detail
+
+
+def test_moonshine_encode_admits_an_unreadable_report(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor, "_run",
+                        lambda cmd, timeout=10: (125, "podman: error")
+                        if "run" in cmd else (0, ""))
+    res = doctor.check_moonshine_encode()
+    assert res.status is doctor.Status.WARN
+    assert "no codec line" in res.detail
+
+
+def test_avahi_is_not_required_for_a_moonshine_only_setup(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor.shutil, "which", lambda _n: None)
+    res = doctor.check_avahi()
+    assert res.status is doctor.Status.OK
+    assert "moonshine announces itself" in res.detail
+    # With a Sunshine profile in the mix the warning comes back.
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "a"\n'
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    assert doctor.check_avahi().status is doctor.Status.WARN

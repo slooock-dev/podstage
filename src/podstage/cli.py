@@ -15,7 +15,7 @@ from pathlib import Path
 
 from . import __version__, config
 from .config import AppConfig, SessionConfig
-from .core import doctor, provisioner, runtime, sunshine_api
+from .core import backends, doctor, moonshine_api, provisioner, runtime, sunshine_api
 from .core.session import Session
 
 # ANSI colours; disabled when stdout is not a TTY.
@@ -131,7 +131,8 @@ def cmd_session_list(_args: argparse.Namespace) -> int:
             res = "{}x{}@{}".format(*sc.dimensions())
         state = Session(sc).status()
         library = "whole library" if not sc.app_ids else ",".join(map(str, sc.app_ids))
-        print(f"  {sc.name:10} {state:8} {res:16}  {library}  port={sc.sunshine_port_base}")
+        print(f"  {sc.name:10} {state:8} {res:16}  {library}  "
+              f"port={sc.sunshine_port_base}  backend={sc.backend}")
     return 0
 
 
@@ -143,6 +144,7 @@ def cmd_session_add(args: argparse.Namespace) -> int:
         config.validate_client_name(args.name)
         if args.resolution != "ask":
             config.parse_dimensions(args.resolution)  # raises on garbage
+        backends.get(args.backend)  # raises on an unknown backend
     except ValueError as e:
         print(e, file=sys.stderr)
         return 1
@@ -173,6 +175,7 @@ def cmd_session_add(args: argparse.Namespace) -> int:
         return 1
     cfg.upsert(SessionConfig(name=args.name, resolution=args.resolution,
                              dynamic_resolution=not args.fixed_resolution,
+                             backend=args.backend,
                              sunshine_port_base=port, app_ids=app_ids,
                              extra_mounts=mounts))
     cfg.save()
@@ -182,7 +185,13 @@ def cmd_session_add(args: argparse.Namespace) -> int:
         res_note = args.resolution
     else:
         res_note = f"client-driven, fallback {args.resolution}"
-    print(f"Session '{args.name}' created (resolution={res_note}, port={port}).")
+    print(f"Session '{args.name}' created (resolution={res_note}, port={port}, "
+          f"backend={args.backend}).")
+    spec = backends.get(args.backend)
+    if spec.vulkan_video:
+        print(f"  {spec.label} encodes with Vulkan Video (NVIDIA RTX, AMD "
+              "RDNA2+ or Intel Arc); check with: podstage doctor")
+        print(f"  Build its image once: podstage runtime build --backend {spec.name}")
     print(f"Next: podstage session login {args.name}   (streamed first Steam login)")
     return 0
 
@@ -262,12 +271,25 @@ def cmd_session_start(args: argparse.Namespace) -> int:
         print(f"start failed: {e}", file=sys.stderr)
         return 1
     if not args.attach:
-        port = s.cfg.sunshine_port_base
         print(f"Session '{args.name}' started (container podstage-runtime).")
-        print(f"  Pair once at https://localhost:{port + 1}  (Sunshine web UI)")
-        print(f"  or: podstage session pair {args.name} <PIN>  (PIN shown by Moonlight)")
+        for line in _pair_hints(s.cfg):
+            print(line)
         print("  Logs: journalctl -f CONTAINER_NAME=podstage-runtime")
     return 0
+
+
+def _pair_hints(sc: SessionConfig) -> list[str]:
+    """How to pair with this profile's backend. Only Sunshine has a web UI."""
+    spec = backends.get_or_default(sc.backend)
+    web = spec.web_port(sc.sunshine_port_base)
+    lines = []
+    if web is not None:
+        lines.append(f"  Pair once at https://localhost:{web}  (Sunshine web UI)")
+        lines.append(f"  or: podstage session pair {sc.name} <PIN>  (PIN shown by Moonlight)")
+    else:
+        lines.append(f"  Pair once: podstage session pair {sc.name} <PIN>  "
+                     "(PIN shown by Moonlight)")
+    return lines
 
 
 def cmd_session_login(args: argparse.Namespace) -> int:
@@ -282,37 +304,45 @@ def cmd_session_login(args: argparse.Namespace) -> int:
     except (RuntimeError, ValueError) as e:
         print(f"login start failed: {e}", file=sys.stderr)
         return 1
-    port = s.cfg.sunshine_port_base
     print(f"Login session for '{args.name}' started (container podstage-runtime).")
     print("  Connect with Moonlight; Big Picture shows the Steam sign-in")
     print("  (QR code via the Steam Mobile App, or the on-screen keyboard).")
-    print(f"  First connect? Pair at https://localhost:{port + 1} or: "
-          f"podstage session pair {args.name} <PIN>")
+    for line in _pair_hints(s.cfg):
+        print(line)
     print(f"  Afterwards: podstage session stop {args.name}  (the next regular "
           "start provisions the library)")
     return 0
 
 
 def cmd_session_pair(args: argparse.Namespace) -> int:
-    """Complete a Moonlight pairing (verified against the sandbox pairing
-    state; see sunshine_api.pair_verified)."""
+    """Complete a Moonlight pairing, verified against the sandbox pairing
+    state on both backends (see the pair_verified helpers). moonshine records
+    no client names, so --device is Sunshine-only there."""
     s = _resolve_session(args.name)
     if s is None:
         return 1
     device = args.device or args.name
+    base = s.cfg.sunshine_port_base
+    moonshine = s.cfg.backend == backends.MOONSHINE.name
     try:
-        ok = sunshine_api.pair_verified(args.pin, device, s.home,
-                                        web_port=s.cfg.sunshine_port_base + 1)
-    except sunshine_api.SunshineApiError as e:
+        if moonshine:
+            ok = moonshine_api.pair_verified(args.pin, s.home, port=base)
+        else:
+            ok = sunshine_api.pair_verified(args.pin, device, s.home,
+                                            web_port=base + 1)
+    except (sunshine_api.SunshineApiError, moonshine_api.MoonshineApiError) as e:
         print(f"pair failed: {e} (is the session running?)", file=sys.stderr)
         return 1
     if not ok:
         print("PIN submitted, but no new pairing appeared; wrong/expired PIN, "
-              "or a stale pairing attempt swallowed it (Sunshine answers the "
+              "or a stale pairing attempt swallowed it (the server answers the "
               "oldest one). Restart pairing in Moonlight and retry; if it "
               "keeps failing, restart the session.", file=sys.stderr)
         return 1
-    print(f"Paired '{device}' with session '{args.name}'.")
+    if moonshine:
+        print(f"Paired with session '{args.name}'.")
+    else:
+        print(f"Paired '{device}' with session '{args.name}'.")
     return 0
 
 
@@ -408,8 +438,9 @@ def cmd_runtime_start(args: argparse.Namespace) -> int:
         mode=args.mode,
         app=args.app or "",
         attach=args.attach,
-        image=os.environ.get("PS_IMAGE", runtime.DEFAULT_IMAGE),
-        sunshine_port=int(os.environ.get("PS_SUNSHINE_PORT", runtime.DEFAULT_SUNSHINE_PORT)),
+        backend=args.backend,
+        image=os.environ.get("PS_IMAGE", ""),
+        stream_port=int(os.environ.get("PS_SUNSHINE_PORT", runtime.DEFAULT_STREAM_PORT)),
         provision=not args.no_provision,
         client=args.client or "",
     )
@@ -427,11 +458,12 @@ def cmd_runtime_start(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_runtime_build(_args: argparse.Namespace) -> int:
-    """Build the runtime image with the source-hash label doctor checks."""
+def cmd_runtime_build(args: argparse.Namespace) -> int:
+    """Build a backend's image with the source-hash label doctor checks."""
     try:
-        print(runtime.build_image(quiet=False))
-    except RuntimeError as e:
+        backends.get(args.backend)  # raises on an unknown backend
+        print(runtime.build_image(backend=args.backend, quiet=False))
+    except (RuntimeError, ValueError) as e:
         print(f"build failed: {e}", file=sys.stderr)
         return 1
     return 0
@@ -549,10 +581,14 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--no-provision", action="store_true",
                     help="skip game/library provisioning (HOME not bootstrapped yet)")
     rs.add_argument("--client", help="profile name to record as the session owner")
+    rs.add_argument("--backend", default=backends.DEFAULT, choices=backends.names(),
+                    help=f"streaming backend (default: {backends.DEFAULT})")
     rs.set_defaults(func=cmd_runtime_start)
-    rt_sub.add_parser(
-        "build", help="(re)build the runtime image from containers/runtime/"
-    ).set_defaults(func=cmd_runtime_build)
+    rb = rt_sub.add_parser(
+        "build", help="(re)build a backend's image from its containers/ dir")
+    rb.add_argument("--backend", default=backends.DEFAULT, choices=backends.names(),
+                    help=f"which image to build (default: {backends.DEFAULT})")
+    rb.set_defaults(func=cmd_runtime_build)
     rt_sub.add_parser("stop", help="stop the runtime container").set_defaults(func=cmd_runtime_stop)
     rt_sub.add_parser("status", help="show runtime container status").set_defaults(func=cmd_runtime_status)
 
@@ -622,7 +658,12 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--resolution", default="1080p60", metavar="PRESET|WxH@R|ask",
                             help="pre-connect canvas + fallback size (default: 1080p60)")
             sp.add_argument("--port", type=int,
-                            help="Sunshine base port (default: first free block)")
+                            help="Moonlight base port (default: first free block)")
+            sp.add_argument("--backend", default=backends.DEFAULT,
+                            choices=backends.names(),
+                            help="streaming backend (default: "
+                                 f"{backends.DEFAULT}; moonshine needs a GPU "
+                                 "with Vulkan video encode)")
             sp.add_argument("--apps", metavar="ID[,ID…]",
                             help="share only these Steam AppIDs (default: whole library)")
             sp.add_argument("--fixed-resolution", action="store_true",

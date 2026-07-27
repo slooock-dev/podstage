@@ -21,7 +21,7 @@ import subprocess
 import time
 
 from .. import config
-from . import provisioner, runtime, sandbox
+from . import backends, provisioner, runtime, sandbox
 
 
 def _pgrep_steam() -> str:
@@ -137,27 +137,45 @@ class Session:
     def _options(self, resolution: str | None = None, *, app: str = "",
                  attach: bool = False,
                  mode: str = "pipeline") -> runtime.RuntimeOptions:
+        backend = backends.get(self.cfg.backend)
+        if backend.name != backends.SUNSHINE.name and mode != "pipeline":
+            raise RuntimeError(
+                f"the {backend.label} backend only supports mode=pipeline "
+                f"(got {mode!r}). desktop/steam/probe are Sunshine-only")
         env: dict[str, str] = {}
-        if self.cfg.sunshine_extra:
-            env["PS_SUNSHINE_EXTRA"] = runtime.sunshine_extra_env(self.cfg.sunshine_extra)
-        if self.cfg.preview_interval_s <= 0:
-            env["PS_THUMBNAIL"] = "disabled"
+        # Settings that only exist on the labwc + Sunshine pipeline. Setting
+        # them for moonshine would be dead env, and silently pretending they
+        # apply is worse than the honest gap (see containers/moonshine/).
+        if backend.name == backends.SUNSHINE.name:
+            if self.cfg.sunshine_extra:
+                env["PS_SUNSHINE_EXTRA"] = runtime.sunshine_extra_env(self.cfg.sunshine_extra)
+            if self.cfg.preview_interval_s <= 0:
+                env["PS_THUMBNAIL"] = "disabled"
+            else:
+                env["PS_THUMBNAIL_INTERVAL"] = str(self.cfg.preview_interval_s)
+            if self.app_config().mouse_keyboard:
+                env["PS_MOUSE_INPUT"] = "enabled"
+            env["PS_DYNAMIC_RES"] = ("enabled" if self.cfg.dynamic_resolution
+                                     else "disabled")
         else:
-            env["PS_THUMBNAIL_INTERVAL"] = str(self.cfg.preview_interval_s)
-        env.update(self.app_config().experimental_env())
-        if self.app_config().mouse_keyboard:
-            env["PS_MOUSE_INPUT"] = "enabled"
+            # moonshine advertises itself over its own mDNS responder.
+            env["PS_MOONSHINE_NAME"] = self.cfg.name
+        experimental = self.app_config().experimental_env()
+        if backend.name != backends.SUNSHINE.name:
+            # gamepad_ds5 configures SUNSHINE's emulated pad; moonshine's
+            # inputtino has its own gamepad model and ignores the flag.
+            experimental.pop("PS_GAMEPAD_DS5", None)
+        env.update(experimental)
         if self.app_config().perf_metrics:
             env["PS_PERF_METRICS"] = "enabled"
-        env["PS_DYNAMIC_RES"] = ("enabled" if self.cfg.dynamic_resolution
-                                 else "disabled")
         return runtime.RuntimeOptions(
             home_dir=self.home,
             resolution=self._resolution_str(resolution),
             mode=mode,
             app=app,
             attach=attach,
-            sunshine_port=self.cfg.sunshine_port_base,
+            backend=backend.name,
+            stream_port=self.cfg.sunshine_port_base,
             client=self.cfg.name,
             app_ids=self.cfg.app_ids,
             env=env,

@@ -16,6 +16,10 @@ import tomllib
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
+# Safe at module level: core.backends is a pure registry and imports nothing
+# from podstage (core.runtime imports THIS module, not the other way round).
+from .core import backends
+
 
 def _xdg(env: str, default: Path) -> Path:
     raw = os.environ.get(env)
@@ -187,14 +191,23 @@ class SessionConfig:
     name: str
     resolution: str = "deck"
     # Render at the first client's resolution (PS_DYNAMIC_RES). Off = fixed
-    # profile resolution.
+    # profile resolution. Ignored by the moonshine backend, which always
+    # sizes its compositor from the connecting client's request.
     dynamic_resolution: bool = True
     app_ids: list[int] = field(default_factory=list)
+    # Streaming backend: "sunshine" (default) or "moonshine". See
+    # core/backends.py; moonshine needs a GPU with a Vulkan video-encode
+    # queue and has no live config API or host-side preview.
+    backend: str = "sunshine"
+    # Moonlight base port; the rest of the port block derives from it. The
+    # key keeps its historical name so existing config.toml files keep their
+    # ports (an unknown key would silently fall back to the default).
     sunshine_port_base: int = 47989
     home: str = ""
     # Extra sunshine.conf lines (key → value), e.g. {"nvenc_preset": "1"}.
     # Injected via PS_SUNSHINE_EXTRA on every start — the durable counterpart
     # to live changes through the web API (which die with the container).
+    # Sunshine backend only; moonshine's config.toml is not wired for this.
     sunshine_extra: dict[str, str] = field(default_factory=dict)
     # Seconds between in-container preview-thumbnail captures; 0 disables the
     # preview. Applied at container start via PS_THUMBNAIL(_INTERVAL).
@@ -213,6 +226,11 @@ class SessionConfig:
         # override would make that choice meaningless.
         if self.resolution == "ask":
             self.dynamic_resolution = False
+        # Same policy as AppConfig.load's unknown keys: a profile written by a
+        # newer podstage (or hand-edited) must not crash the app at startup.
+        # CLI and GUI validate their own input up front via backends.get().
+        if self.backend not in backends.BACKENDS:
+            self.backend = backends.DEFAULT
 
     def is_ask(self) -> bool:
         """True for an "ask" profile (resolution chosen at start, not fixed)."""

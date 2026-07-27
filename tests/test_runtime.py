@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from podstage import config
-from podstage.core import runtime, udev
+from podstage.core import backends, runtime, udev
 
 LIBS = [Path("/tmp/lib-a/steamapps"), Path("/tmp/lib-b/steamapps")]
 
@@ -195,7 +195,9 @@ def test_start_rejects_missing_extra_mount(tmp_path, monkeypatch):
 
     monkeypatch.setattr(runtime, "status",
                         lambda: runtime.RuntimeStatus(running=False))
-    monkeypatch.setattr(runtime, "image_is_stale", lambda image=None: False)
+    monkeypatch.setattr(runtime, "image_exists", lambda image: True)
+    monkeypatch.setattr(runtime, "image_is_stale",
+                        lambda image=None, backend=None: False)
     monkeypatch.setattr(runtime, "shared_library_paths",
                         lambda home, provision=True, app_ids=None: [])
     opts = runtime.RuntimeOptions(home_dir=tmp_path / "home", provision=False,
@@ -341,3 +343,113 @@ def test_kill_pid_checks_process_identity():
     finally:
         victim.kill()
         victim.wait(timeout=10)
+
+
+# -- backend branching -------------------------------------------------------
+
+def _ms(**kw):
+    return _opts(backend="moonshine", **kw)
+
+
+def test_moonshine_run_args_pick_its_own_image_and_bind_all_of_dev(monkeypatch):
+    """inputtino creates gamepads through /dev/uhid and Steam Input needs the
+    hidraw node appearing with them, which cannot be pre-mounted."""
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "nvidia")
+    args = runtime.podman_run_args(_ms(), library_paths=LIBS)
+    joined = " ".join(args)
+    assert args[-1] == backends.MOONSHINE.image
+    assert "/dev:/dev" in joined
+    assert "/dev/input:/dev/input" not in joined
+    # The GPU wiring and the sandbox HOME are identical to the Sunshine path.
+    assert "/dev/nvidia-modeset" in joined
+    assert "-v /tmp/home-x:/home/player" in joined
+
+
+def test_explicit_image_still_overrides_the_backends_default():
+    opts = _ms(image="podstage-moonshine:dev")
+    assert runtime.podman_run_args(opts, library_paths=[])[-1] == "podstage-moonshine:dev"
+
+
+def test_moonshine_env_drops_everything_sunshine_specific():
+    env = runtime.container_env(_ms(resolution="1280x800@60"), LIBS)
+    assert env["PS_MOONSHINE_PORT"] == str(runtime.DEFAULT_STREAM_PORT)
+    assert "PS_SUNSHINE_PORT" not in env
+    # No web UI, no encoder pick, no faked udev monitor, no seat-shim.
+    for key in ("PS_CSRF_ORIGINS", "PS_ENCODER", "PS_FAKE_UDEV", "PS_WEB_USER",
+                "PS_WEB_PASS", "PS_MOUSE_INPUT", "PS_SHOW_CURSOR",
+                "PS_NATIVE_TOUCH", "PS_DYNAMIC_RES"):
+        assert key not in env, key
+    # What both backends share: Steam, the nested gamescope, the compat mounts.
+    assert env["PS_RESOLUTION"] == "1280x800@60"
+    assert env["PS_STEAM_FLAGS"] == "-gamepadui"
+    assert env["DISABLE_GAMESCOPE_WSI"] == "1"
+    assert env["SDL_JOYSTICK_DISABLE_UDEV"] == "1"
+    assert env["STEAM_COMPAT_MOUNTS"] == "/tmp/lib-a/steamapps:/tmp/lib-b/steamapps"
+
+
+def test_sunshine_env_is_unchanged_by_the_abstraction():
+    env = runtime.container_env(_opts(), LIBS, vendor="nvidia")
+    assert env["PS_SUNSHINE_PORT"] == str(runtime.DEFAULT_STREAM_PORT)
+    assert env["PS_FAKE_UDEV"] == "1"
+    assert env["PS_ENCODER"] == "nvenc"
+    assert env["PS_CSRF_ORIGINS"]
+    assert "PS_MOONSHINE_PORT" not in env
+
+
+def test_moonshine_forwards_its_own_knobs():
+    env = runtime.container_env(
+        _ms(env={"PS_MOONSHINE_NAME": "tv", "PS_HDR": "enabled"}), LIBS)
+    assert env["PS_MOONSHINE_NAME"] == "tv"
+    assert env["PS_HDR"] == "enabled"
+
+
+def test_web_port_only_exists_for_sunshine():
+    assert _opts(stream_port=48989).web_port == 48990
+    assert _ms(stream_port=48989).web_port is None
+
+
+def test_start_skips_the_host_publisher_for_moonshine(tmp_path, monkeypatch):
+    """moonshine carries its own mDNS responder; running avahi-publish-service
+    next to it would advertise the same service twice."""
+    started: list = []
+    monkeypatch.setattr(runtime, "status", lambda: runtime.RuntimeStatus(running=False))
+    monkeypatch.setattr(runtime, "image_exists", lambda image: True)
+    monkeypatch.setattr(runtime, "image_is_stale",
+                        lambda image=None, backend=None: False)
+    monkeypatch.setattr(runtime, "shared_library_paths",
+                        lambda home, provision=True, app_ids=None: [])
+    monkeypatch.setattr(runtime, "start_publisher",
+                        lambda **kw: started.append(kw) or 4242)
+    monkeypatch.setattr(runtime, "save_state", lambda *a: None)
+    monkeypatch.setattr(runtime, "_run", lambda argv, timeout=15: (0, ""))
+    monkeypatch.setattr(config, "RUNTIME_SHARE_DIR", tmp_path / "share")
+
+    runtime.start(_ms(home_dir=tmp_path / "home", provision=False))
+    assert started == []
+    runtime.start(_opts(home_dir=tmp_path / "home", provision=False))
+    assert started == [{"port": runtime.DEFAULT_STREAM_PORT}]
+
+
+def test_start_refuses_an_unbuilt_backend_image(tmp_path, monkeypatch):
+    import pytest
+
+    monkeypatch.setattr(runtime, "status", lambda: runtime.RuntimeStatus(running=False))
+    monkeypatch.setattr(runtime, "image_exists", lambda image: False)
+    with pytest.raises(RuntimeError, match="runtime build --backend moonshine"):
+        runtime.start(_ms(home_dir=tmp_path / "home", provision=False))
+
+
+def test_src_hash_is_per_backend(tmp_path, monkeypatch):
+    """Each image hashes its own containers/<x>/, so touching one does not
+    mark the other stale."""
+    for sub in ("runtime", "moonshine"):
+        d = tmp_path / "containers" / sub
+        d.mkdir(parents=True)
+        (d / "Containerfile").write_text(f"FROM {sub}\n")
+    monkeypatch.setattr(udev, "REPO_ROOT", tmp_path)
+    sun = runtime.runtime_src_hash("sunshine")
+    moon = runtime.runtime_src_hash("moonshine")
+    assert sun and moon and sun != moon
+    (tmp_path / "containers/moonshine/Containerfile").write_text("FROM changed\n")
+    assert runtime.runtime_src_hash("sunshine") == sun
+    assert runtime.runtime_src_hash("moonshine") != moon

@@ -144,3 +144,48 @@ def test_options_forward_perf_metrics():
     assert on["PS_PERF_METRICS"] == "enabled"
     off = Session(sc, app_config=AppConfig(perf_metrics=False))._options().env
     assert "PS_PERF_METRICS" not in off
+
+
+# -- backend wiring ----------------------------------------------------------
+
+def _moonshine(name="tv", **kw):
+    return SessionConfig(name=name, backend="moonshine", **kw)
+
+
+def test_options_carry_the_profiles_backend_and_base_port():
+    opts = Session(_moonshine(sunshine_port_base=48989))._options()
+    assert opts.backend == "moonshine"
+    assert opts.stream_port == 48989
+    assert opts.image_name == "podstage-moonshine:latest"
+
+
+def test_moonshine_options_skip_the_sunshine_only_settings():
+    """Setting these would be dead env; the honest gap is documented instead."""
+    sc = _moonshine(preview_interval_s=25, sunshine_extra={"nvenc_preset": "4"})
+    env = Session(sc, app_config=AppConfig(mouse_keyboard=True))._options().env
+    for key in ("PS_SUNSHINE_EXTRA", "PS_THUMBNAIL", "PS_THUMBNAIL_INTERVAL",
+                "PS_MOUSE_INPUT", "PS_DYNAMIC_RES"):
+        assert key not in env, key
+    # What it does need: its own mDNS name, and the shared gamescope probe.
+    assert env["PS_MOONSHINE_NAME"] == "tv"
+    assert env["PS_PERF_METRICS"] == "enabled"
+
+
+def test_ds5_experimental_does_not_leak_into_moonshine():
+    """gamepad_ds5 configures Sunshine's emulated pad; inputtino has its own
+    gamepad model and would ignore the flag."""
+    app = AppConfig(experimental={"gamepad_ds5": True, "hdr": True})
+    env = Session(_moonshine(), app_config=app)._options().env
+    assert "PS_GAMEPAD_DS5" not in env
+    assert env["PS_HDR"] == "enabled"          # HDR does carry over
+    sun = Session(SessionConfig(name="deck"), app_config=app)._options().env
+    assert sun["PS_GAMEPAD_DS5"] == "enabled"
+
+
+def test_moonshine_rejects_the_sunshine_only_modes():
+    import pytest
+
+    s = Session(_moonshine())
+    with pytest.raises(RuntimeError, match="only supports mode=pipeline"):
+        s._options(mode="desktop")
+    assert s._options(mode="pipeline").mode == "pipeline"

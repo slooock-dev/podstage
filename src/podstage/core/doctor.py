@@ -18,7 +18,7 @@ from enum import Enum
 from pathlib import Path
 
 from .. import config
-from . import runtime, steam, udev
+from . import backends, runtime, steam, udev
 
 REPO_ROOT = udev.REPO_ROOT
 CDI_SPEC = Path("/etc/cdi/nvidia.yaml")
@@ -67,6 +67,17 @@ def check_podman() -> CheckResult:
     return CheckResult("podman", Status.OK, ver or "present")
 
 
+def configured_backends() -> set[str]:
+    """Backends the configured profiles actually use. Empty/unreadable config
+    → the default, since that is what a first session will run."""
+    try:
+        used = {s.backend
+                for s in config.AppConfig.load(config.CONFIG_FILE).sessions}
+    except (OSError, ValueError, TypeError):
+        used = set()
+    return used or {backends.DEFAULT}
+
+
 def check_image() -> CheckResult:
     rc, _ = _run(["podman", "image", "exists", runtime.DEFAULT_IMAGE])
     if rc != 0:
@@ -85,6 +96,103 @@ def check_image() -> CheckResult:
             fix="podstage runtime build",
         )
     return CheckResult("image", Status.OK, f"present: {img_id[:12]}")
+
+
+# -- moonshine backend ------------------------------------------------------
+#
+# Both checks below are inert unless a profile actually selects the moonshine
+# backend: it is opt-in per profile, and its GPU requirement is strictly
+# narrower than Sunshine's, so warning about it on a machine that never uses
+# it would be noise.
+
+MOONSHINE_BUILD_FIX = "podstage runtime build --backend moonshine"
+
+
+def check_moonshine_image() -> CheckResult:
+    spec = backends.MOONSHINE
+    if spec.name not in configured_backends():
+        return CheckResult("moonshine image", Status.OK,
+                           "not used by any profile")
+    rc, _ = _run(["podman", "image", "exists", spec.image])
+    if rc != 0:
+        return CheckResult("moonshine image", Status.FAIL,
+                           f"{spec.image} not built yet",
+                           fix=MOONSHINE_BUILD_FIX)
+    if runtime.image_is_stale(backend=spec.name):
+        return CheckResult("moonshine image", Status.WARN,
+                           f"image is stale, {spec.src_subdir}/ changed since "
+                           "it was built", fix=MOONSHINE_BUILD_FIX)
+    _, img_id = _run(["podman", "image", "inspect", "--format", "{{.Id}}", spec.image])
+    return CheckResult("moonshine image", Status.OK, f"present: {img_id[:12]}")
+
+
+def _moonshine_probe_argv(image: str) -> list[str]:
+    """A throwaway container running `moonshine healthcheck`.
+
+    No HOME volume, no libraries, no /run/podstage: the report needs none of
+    them. It does get the same GPU wiring and the same /dev bind a real
+    session gets (core/runtime.container_flags), so the codecs it reports and
+    its uinput/uhid lines describe what that session would actually see.
+    """
+    if runtime.gpu_vendor() in runtime.MESA_VENDORS:
+        devices = ["--device", "/dev/dri"]
+    else:
+        devices = ["--device", "nvidia.com/gpu=all",
+                   "--device", "/dev/nvidia-modeset"]
+    return (["podman", "run", "--rm", "--name", "podstage-moonshine-doctor"]
+            + devices
+            + ["--security-opt", "label=disable", "--userns=keep-id",
+               "-v", "/dev:/dev",   # inputtino: uhid + the hidraw node
+               "-e", "PS_MODE=healthcheck", image])
+
+
+def _codec_line(out: str) -> tuple[str, str] | None:
+    """``(status, detail)`` of moonshine's "Codecs" health line, if present.
+    That line is the hardware gate: no Vulkan video-encode queue, no codecs,
+    no stream."""
+    for line in out.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) >= 2 and parts[0] in ("OK", "WARN", "FAIL") \
+                and parts[1].lower().startswith("codec"):
+            return parts[0], (parts[2].strip() if len(parts) > 2 else "")
+    return None
+
+
+def check_moonshine_encode() -> CheckResult:
+    """The Vulkan Video gate, answered by moonshine's own health report.
+
+    moonshine encodes through Vulkan Video, which needs NVIDIA RTX, AMD
+    RDNA2+ or Intel Arc. Every older GPU streams fine through Sunshine's
+    NVENC/VAAPI path and cannot use this backend at all, so this is a
+    hardware fact to surface early, not something a fix can resolve.
+
+    Runs a throwaway container (a few seconds), so it only fires when a
+    profile selects the backend and its image exists.
+    """
+    spec = backends.MOONSHINE
+    if spec.name not in configured_backends():
+        return CheckResult("moonshine encode", Status.OK,
+                           "not used by any profile")
+    if _run(["podman", "image", "exists", spec.image])[0] != 0:
+        return CheckResult("moonshine encode", Status.WARN,
+                           "cannot check without the image",
+                           fix=MOONSHINE_BUILD_FIX)
+    rc, out = _run(_moonshine_probe_argv(spec.image), timeout=180)
+    codecs = _codec_line(out)
+    if codecs is None:
+        # Upstream's report did not come through, so say that rather than
+        # inventing a verdict from the exit code alone.
+        tail = " / ".join(out.strip().splitlines()[-2:])[:160]
+        return CheckResult("moonshine encode", Status.WARN,
+                           f"health check gave no codec line (exit {rc}): {tail}")
+    status, detail = codecs
+    if status == "OK":
+        return CheckResult("moonshine encode", Status.OK,
+                           f"Vulkan video encode: {detail}")
+    return CheckResult(
+        "moonshine encode", Status.FAIL,
+        f"no Vulkan video encode on this GPU ({detail or 'no codecs reported'}). "
+        "moonshine needs NVIDIA RTX, AMD RDNA2+ or Intel Arc; use the sunshine backend")
 
 
 def check_udev_rules() -> CheckResult:
@@ -147,8 +255,8 @@ def check_mdns() -> CheckResult:
                        fix=fix)
 
 
-# Ports Moonlight/Sunshine need, as offsets from the sunshine base port; a
-# profile's custom base shifts the whole set. The default base (47989) yields
+# Ports Moonlight needs, as offsets from a profile's base port; a custom
+# base shifts the whole set. Both backends use the same block. The default base (47989) yields
 # TCP 47984/47989/48010 and UDP 47998-48000/48100/48200.
 # TCP: https/http/rtsp. UDP: video/control/audio + 2.
 _STREAM_TCP_OFFSETS = [-5, 0, 21]
@@ -156,14 +264,14 @@ _STREAM_UDP_OFFSETS = [9, 10, 11, 111, 211]
 
 
 def stream_port_bases() -> list[int]:
-    """The sunshine base ports the firewall must cover: one per configured
+    """The Moonlight base ports the firewall must cover: one per configured
     session profile, or the default base with no (readable) config."""
     try:
         bases = {s.sunshine_port_base
                  for s in config.AppConfig.load(config.CONFIG_FILE).sessions}
     except (OSError, ValueError, TypeError):
         bases = set()
-    return sorted(bases) or [runtime.DEFAULT_SUNSHINE_PORT]
+    return sorted(bases) or [runtime.DEFAULT_STREAM_PORT]
 
 
 def stream_ports() -> tuple[list[int], list[int]]:
@@ -224,7 +332,7 @@ def check_stream_firewall() -> CheckResult:
     if not missing_tcp and not missing_udp:
         bases = stream_port_bases()
         detail = "Moonlight stream ports open"
-        if bases != [runtime.DEFAULT_SUNSHINE_PORT]:
+        if bases != [runtime.DEFAULT_STREAM_PORT]:
             detail += " (base " + ", ".join(str(b) for b in bases) + ")"
         return CheckResult("stream firewall", Status.OK, detail)
     missing = ([f"{p}/tcp" for p in missing_tcp]
@@ -237,6 +345,12 @@ def check_stream_firewall() -> CheckResult:
 def check_avahi() -> CheckResult:
     if shutil.which("avahi-publish-service"):
         return CheckResult("avahi", Status.OK, "avahi-publish-service present")
+    # Only the Sunshine backend announces itself through the host's avahi;
+    # moonshine carries its own mDNS responder (Backend.host_mdns).
+    if not any(backends.get_or_default(b).host_mdns
+               for b in configured_backends()):
+        return CheckResult("avahi", Status.OK,
+                           "not needed, moonshine announces itself")
     return CheckResult("avahi", Status.WARN,
                        "avahi-publish-service missing — no Moonlight auto-discovery")
 
@@ -359,6 +473,8 @@ def check_sunshine_conflict() -> CheckResult:
 ALL_CHECKS = [
     check_podman,
     check_image,
+    check_moonshine_image,
+    check_moonshine_encode,
     check_cdi,
     check_udev_rules,
     check_uinput,

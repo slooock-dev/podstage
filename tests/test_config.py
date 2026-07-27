@@ -278,3 +278,24 @@ def test_extra_mounts_save_roundtrip(tmp_path: Path):
     cfg.save(path)
     loaded = AppConfig.load(path)
     assert loaded.sessions[0].extra_mounts == ["/srv/gog-games", "/srv/heroic:rw"]
+
+
+# -- streaming backend -------------------------------------------------------
+
+def test_backend_defaults_to_sunshine():
+    assert SessionConfig(name="a").backend == "sunshine"
+
+
+def test_backend_round_trips_through_config_toml(tmp_path):
+    path = tmp_path / "config.toml"
+    AppConfig(sessions=[SessionConfig(name="tv", backend="moonshine")]).save(path)
+    assert AppConfig.load(path).get("tv").backend == "moonshine"
+
+
+def test_unknown_backend_falls_back_instead_of_crashing(tmp_path):
+    """Same policy as unknown config keys: a profile from a newer podstage
+    must not take the whole app down at startup."""
+    assert SessionConfig(name="a", backend="warpdrive").backend == "sunshine"
+    path = tmp_path / "config.toml"
+    path.write_text('[[sessions]]\nname = "a"\nbackend = "warpdrive"\n')
+    assert AppConfig.load(path).get("a").backend == "sunshine"

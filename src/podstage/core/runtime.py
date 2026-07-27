@@ -4,9 +4,17 @@ Python port of ``containers/runtime/run.sh`` so the CLI and the desktop GUI
 both drive the exact same ``podman run`` invocation. run.sh remains as a thin
 wrapper calling into this module.
 
-The container runs the full streaming pipeline (see containers/runtime/):
-private PipeWire + session D-Bus → labwc(headless, seat9) → gamescope(nested
-wayland) → Steam -gamepadui, plus Sunshine capturing labwc via wlr + NVENC.
+Two streaming backends share this module (see :mod:`podstage.core.backends`,
+which holds everything that differs; the profile picks one):
+
+  * ``sunshine`` (default): the container runs the full pipeline described in
+    containers/runtime/: private PipeWire + session D-Bus → labwc(headless,
+    seat9) → gamescope(nested wayland) → Steam -gamepadui, plus Sunshine
+    capturing labwc via wlr + NVENC/VAAPI.
+  * ``moonshine``: see containers/moonshine/. moonshine is compositor,
+    capture and server in one process, so labwc, seatd, the seat-shim and the
+    keeper fall away and the notes below on faked udev hotplug do not apply to
+    it. gamescope still runs nested inside the launched application.
 
 The container is ROOTLESS (``--userns=keep-id`` — it runs as this user, no
 sudo, no root store). The kernel delivers no udev uevents into a rootless user
@@ -38,11 +46,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import config
-from . import provisioner, steam, udev
+from . import backends, provisioner, steam, udev
 
 CONTAINER_NAME = "podstage-runtime"
-DEFAULT_IMAGE = "podstage-runtime:latest"
-DEFAULT_SUNSHINE_PORT = 47989
+DEFAULT_IMAGE = backends.SUNSHINE.image
+DEFAULT_STREAM_PORT = 47989
 STATE_FILE = config.DATA_DIR / "runtime" / "state.json"
 
 # The CDI GPU device injects only 64-bit NVIDIA userspace. Steam's client UI is
@@ -78,10 +86,25 @@ def _glxserver() -> Path | None:
     return next((p for p in _GLXSERVER_CANDIDATES if p.exists()), None)
 
 # Environment variables forwarded from the caller into the container (with
-# defaults where the pipeline needs one). PS_MOUSE_INPUT is driven by the
-# mouse & keyboard setting; gamepad stays the default input path.
-_FORWARD_ENV: dict[str, str | None] = {
+# defaults where the pipeline needs one).
+#
+# _COMMON_ENV applies to both backends: everything here is either about Steam
+# itself or about the NESTED gamescope, which survives the compositor swap.
+_COMMON_ENV: dict[str, str | None] = {
     "PS_STEAM_FLAGS": "-gamepadui",
+    # Big Picture focus watchdog: on by default, forwarded only to opt out.
+    "PS_FOCUS_NUDGE": None,
+    "PS_FOCUS_NUDGE_DELAYS": None,
+    # gamescope touch_click_mode pin (entrypoint default 1, see there).
+    "PS_TOUCH_CLICK_MODE": None,
+    "PS_PERF_METRICS": None,
+    # Experimental feature (config.EXPERIMENTAL_FEATURES), "enabled".
+    "PS_HDR": None,
+}
+
+# Sunshine-backend only: labwc, the seat-shim and Sunshine itself. PS_MOUSE_INPUT
+# is driven by the mouse & keyboard setting; gamepad stays the default input path.
+_SUNSHINE_ENV: dict[str, str | None] = {
     "PS_NATIVE_TOUCH": "disabled",
     "PS_MOUSE_INPUT": "disabled",
     "PS_SHOW_CURSOR": "",
@@ -100,20 +123,34 @@ _FORWARD_ENV: dict[str, str | None] = {
     # built from the profile's sunshine_extra (quality settings).
     "PS_SUNSHINE_EXTRA": None,
     # In-container thumbnail loop (entrypoint defaults: enabled, every 10s).
+    # moonshine has no equivalent: its compositor exposes no wlr-screencopy,
+    # so that backend has no host-side preview.
     "PS_THUMBNAIL": None,
     "PS_THUMBNAIL_INTERVAL": None,
     # Entrypoint default enabled; forwarded only to opt out (=disabled).
+    # moonshine always sizes its compositor from the client's request.
     "PS_DYNAMIC_RES": None,
-    # Big Picture focus watchdog: on by default, forwarded only to opt out.
-    "PS_FOCUS_NUDGE": None,
-    "PS_FOCUS_NUDGE_DELAYS": None,
-    # gamescope touch_click_mode pin (entrypoint default 1 — see there).
-    "PS_TOUCH_CLICK_MODE": None,
-    # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each.
-    "PS_HDR": None,
+    # Sunshine emulates a DualSense instead of an Xbox pad; moonshine's
+    # inputtino has its own gamepad model, so this does not carry over.
     "PS_GAMEPAD_DS5": None,
-    "PS_PERF_METRICS": None,
 }
+
+# moonshine-backend only (see containers/moonshine/entrypoint.sh).
+_MOONSHINE_ENV: dict[str, str | None] = {
+    "PS_MOONSHINE_NAME": None,       # advertised over its built-in mDNS
+    "PS_MOONSHINE_LOG": None,        # MOONSHINE_LOG filter
+    "PS_MOONSHINE_KEEP_CONFIG": None,  # 1 → do not regenerate config.toml
+}
+
+
+_BACKEND_ENV: dict[str, dict[str, str | None]] = {
+    backends.SUNSHINE.name: _SUNSHINE_ENV,
+    backends.MOONSHINE.name: _MOONSHINE_ENV,
+}
+
+
+def _forward_env_for(backend: backends.Backend) -> dict[str, str | None]:
+    return {**_COMMON_ENV, **_BACKEND_ENV[backend.name]}
 
 
 def sunshine_extra_env(extra: dict[str, str]) -> str:
@@ -128,8 +165,13 @@ class RuntimeOptions:
     resolution: str = "1280x800@60"
     mode: str = "pipeline"  # pipeline|desktop|steam|probe|shell
     app: str = ""  # Steam AppID → boot straight into the game
-    image: str = DEFAULT_IMAGE
-    sunshine_port: int = DEFAULT_SUNSHINE_PORT
+    # Streaming backend (config.SessionConfig.backend); see core/backends.py.
+    backend: str = backends.DEFAULT
+    # Empty → the backend's image. Only set to pin a different tag.
+    image: str = ""
+    # Moonlight base port; the whole port block derives from it
+    # (backends.ports). Named per backend inside the container.
+    stream_port: int = DEFAULT_STREAM_PORT
     provision: bool = True
     attach: bool = False
     client: str = ""  # profile name (informational, lands in the state file)
@@ -140,14 +182,24 @@ class RuntimeOptions:
     extra_mounts: list[str] = field(default_factory=list)
 
     @property
-    def web_port(self) -> int:
-        return self.sunshine_port + 1
+    def spec(self) -> backends.Backend:
+        return backends.get(self.backend)
+
+    @property
+    def image_name(self) -> str:
+        return self.image or self.spec.image
+
+    @property
+    def web_port(self) -> int | None:
+        """The backend's management web UI port, None if it has none."""
+        return self.spec.web_port(self.stream_port)
 
 
 @dataclass
 class RuntimeStatus:
     running: bool
     client: str | None = None  # from the state file, if we started it
+    backend: str = backends.DEFAULT  # from the state file
     detail: str = ""
 
 
@@ -282,7 +334,7 @@ def csrf_origins(web_port: int) -> str:
 
 def _forwarded_env(opts: RuntimeOptions) -> dict[str, str]:
     env: dict[str, str] = {}
-    for key, default in _FORWARD_ENV.items():
+    for key, default in _forward_env_for(opts.spec).items():
         val = opts.env.get(key, os.environ.get(key, default))
         if val is not None:
             env[key] = val
@@ -293,47 +345,62 @@ def _forwarded_env(opts: RuntimeOptions) -> dict[str, str]:
 
 def container_env(opts: RuntimeOptions, library_paths: list[Path],
                   vendor: str | None = None) -> dict[str, str]:
-    """The complete container environment."""
+    """The complete container environment for the profile's backend."""
     vendor = vendor or gpu_vendor()
+    backend = opts.spec
     env = {
         "PS_MODE": opts.mode,
         "PS_RESOLUTION": opts.resolution,
-        "PS_SUNSHINE_PORT": str(opts.sunshine_port),
-        "PS_CSRF_ORIGINS": csrf_origins(opts.web_port),
+        backend.port_env: str(opts.stream_port),
         "PS_APP": opts.app,
-        # Sunshine encoder for the entrypoint's sunshine.conf: NVENC on
-        # NVIDIA, VAAPI on AMD/Intel (Mesa userspace is baked into the image).
-        "PS_ENCODER": "vaapi" if vendor in MESA_VENDORS else "nvenc",
         "STEAM_COMPAT_MOUNTS": ":".join(str(p) for p in library_paths),
-        # Rootless input: no udev uevents reach the container's user
-        # namespace. The seat-shim fakes labwc's udev hotplug monitor via
-        # inotify (PS_FAKE_UDEV), and SDL/Steam falls back to its own inotify
-        # gamepad discovery (SDL dlopens libudev — a preload shim can't
-        # intercept that, but SDL ships this escape hatch).
-        "PS_FAKE_UDEV": "1",
+        # Rootless container: the kernel delivers no udev uevents into this
+        # user namespace, so Steam/SDL falls back to its own inotify gamepad
+        # discovery (SDL dlopens libudev, which a preload shim cannot intercept,
+        # that, but SDL ships this escape hatch).
         "SDL_JOYSTICK_DISABLE_UDEV": "1",
     }
     # GE-/CachyOS-Proton pop a BLOCKING Zenity box ("Creating swapchain for
     # non-Gamescope swapchain. Hooking has failed somewhere!") when the
     # gamescope WSI-bypass layer fails to hook inside our nested gamescope —
     # headless nobody can click it, so the launch hangs. (Valve Proton doesn't
-    # ship that check, hence it "just works".) We capture via wlr-screencopy
-    # and never use the bypass, so disable the layer. It inherits down
-    # gamescope → Steam → pressure-vessel → game. PS_GAMESCOPE_WSI=enabled
-    # re-enables it for experiments.
+    # ship that check, hence it "just works".) Neither backend uses the
+    # bypass, so disable the layer. It inherits down gamescope → Steam →
+    # pressure-vessel → game. PS_GAMESCOPE_WSI=enabled re-enables it.
     if opts.env.get("PS_GAMESCOPE_WSI", os.environ.get("PS_GAMESCOPE_WSI")) != "enabled":
         env["DISABLE_GAMESCOPE_WSI"] = "1"
+    if backend.name == backends.SUNSHINE.name:
+        env.update(_sunshine_only_env(opts, vendor))
     env.update(_forwarded_env(opts))
     # Desktop mode is pointer-driven; flip the defaults unless pinned.
+    # (Sunshine-only: the moonshine entrypoint rejects mode=desktop.)
     if opts.mode == "desktop":
         for key, val in (("PS_MOUSE_INPUT", "enabled"), ("PS_SHOW_CURSOR", "1")):
             if key not in opts.env and not os.environ.get(key):
                 env[key] = val
-    if "PS_WEB_USER" not in env or "PS_WEB_PASS" not in env:
+    if backend.name == backends.SUNSHINE.name and (
+            "PS_WEB_USER" not in env or "PS_WEB_PASS" not in env):
         user, password = config.sunshine_web_credentials()
         env.setdefault("PS_WEB_USER", user)
         env.setdefault("PS_WEB_PASS", password)
     return env
+
+
+def _sunshine_only_env(opts: RuntimeOptions, vendor: str) -> dict[str, str]:
+    """Env the labwc + Sunshine pipeline needs and moonshine has no use for:
+    moonshine's compositor opens no evdev device (so nothing fakes a udev
+    monitor), encodes through Vulkan Video (so there is no encoder to pick)
+    and serves no web UI (so there is no origin to allow-list)."""
+    return {
+        "PS_CSRF_ORIGINS": csrf_origins(opts.web_port or 0),
+        # Sunshine encoder for the entrypoint's sunshine.conf: NVENC on
+        # NVIDIA, VAAPI on AMD/Intel (Mesa userspace is baked into the image).
+        "PS_ENCODER": "vaapi" if vendor in MESA_VENDORS else "nvenc",
+        # The seat-shim fakes labwc's udev hotplug monitor via inotify on the
+        # bind-mounted /dev/input; device enumeration works through the
+        # mounted /run/udev DB either way.
+        "PS_FAKE_UDEV": "1",
+    }
 
 
 def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = None) -> list[str]:
@@ -350,13 +417,16 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     vendor = gpu_vendor()
     args = ["run", "--rm", "--name", CONTAINER_NAME]
     args += ["-it"] if opts.attach else ["-d"]
-    ds5 = _forwarded_env(opts).get("PS_GAMEPAD_DS5") == "enabled"
+    # The whole host /dev: on Sunshine only for the ds5 experimental feature,
+    # on moonshine always (inputtino creates its gamepads through /dev/uhid).
+    full_dev = (opts.spec.full_dev
+                or _forwarded_env(opts).get("PS_GAMEPAD_DS5") == "enabled")
     args += container_flags(library_paths, opts.home_dir, vendor=vendor,
-                            extra_mounts=opts.extra_mounts, full_dev=ds5)
+                            extra_mounts=opts.extra_mounts, full_dev=full_dev)
     args += ["-v", f"{opts.home_dir}:/home/player"]
     for key, val in container_env(opts, library_paths, vendor=vendor).items():
         args += ["-e", f"{key}={val}"]
-    args += [opts.image]
+    args += [opts.image_name]
     return args
 
 
@@ -385,13 +455,14 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     """Devices, isolation and mounts of the rootless runtime container.
     Excludes: container name/detach, the client HOME volume, env, image.
 
-    ``full_dev`` (the gamepad_ds5 experimental feature) binds the host /dev
-    wholesale instead of the uinput+input pair: Sunshine's DualSense is a
-    kernel HID device created via /dev/uhid, and Steam Input needs its
-    dynamically appearing /dev/hidraw* node, which cannot be pre-mounted.
-    Access control is unchanged either way: rootless podman has no device
-    cgroup, so device access is plain file permissions under keep-id, the
-    same the user has on the host."""
+    ``full_dev`` binds the host /dev wholesale instead of the uinput+input
+    pair, because a kernel HID device created via /dev/uhid brings a
+    dynamically appearing /dev/hidraw* node with it that Steam Input needs and
+    that cannot be pre-mounted. Sunshine needs this only for the gamepad_ds5
+    experimental feature; the moonshine backend always does, since inputtino
+    creates every gamepad that way. Access control is unchanged either way:
+    rootless podman has no device cgroup, so device access is plain file
+    permissions under keep-id, the same the user has on the host."""
     vendor = vendor or gpu_vendor()
     if vendor in MESA_VENDORS:
         # AMD/Intel: plain DRI nodes; Mesa Vulkan (RADV/ANV) + VAAPI userspace
@@ -469,20 +540,20 @@ def container_flags(library_paths: list[Path], home_dir: Path,
 
 # -- image build + staleness ------------------------------------------------
 
-# sha256 of containers/runtime/ baked in at build time; doctor and start()
-# compare it against the sources to flag a forgotten rebuild.
+# sha256 of the image's source dir baked in at build time; doctor and start()
+# compare it against the sources to flag a forgotten rebuild. Each backend
+# hashes its own containers/<x>/ (backends.Backend.src_subdir).
 SRC_HASH_LABEL = "io.podstage.src-hash"
-RUNTIME_SRC_SUBDIR = "containers/runtime"
 
 
-def runtime_src_dir() -> Path:
-    return udev.REPO_ROOT / RUNTIME_SRC_SUBDIR
+def runtime_src_dir(backend: str = backends.DEFAULT) -> Path:
+    return udev.REPO_ROOT / backends.get(backend).src_subdir
 
 
-def runtime_src_hash() -> str | None:
-    """sha256 over containers/runtime/ (relative names + contents) — the
-    identity of the image sources. None without a source checkout."""
-    src = runtime_src_dir()
+def runtime_src_hash(backend: str = backends.DEFAULT) -> str | None:
+    """sha256 over the backend's image sources (relative names + contents),
+    the identity of those sources. None without a source checkout."""
+    src = runtime_src_dir(backend)
     if not src.is_dir():
         return None
     h = hashlib.sha256()
@@ -492,8 +563,9 @@ def runtime_src_hash() -> str | None:
     return h.hexdigest()
 
 
-def image_src_hash(image: str = DEFAULT_IMAGE) -> str | None:
+def image_src_hash(image: str = "", backend: str = backends.DEFAULT) -> str | None:
     """The image's source-hash label (None: no image or unlabeled build)."""
+    image = image or backends.get(backend).image
     rc, out = _run(["podman", "image", "inspect", "--format",
                     f'{{{{index .Config.Labels "{SRC_HASH_LABEL}"}}}}', image])
     if rc != 0:
@@ -502,31 +574,50 @@ def image_src_hash(image: str = DEFAULT_IMAGE) -> str | None:
     return out if out and out != "<no value>" else None
 
 
-def image_is_stale(image: str = DEFAULT_IMAGE) -> bool | None:
+def image_is_stale(image: str = "", backend: str = backends.DEFAULT) -> bool | None:
     """True: image older than the sources (or unlabeled). False: matches.
     None: nothing to compare (no checkout or no image)."""
-    current = runtime_src_hash()
+    current = runtime_src_hash(backend)
     if current is None:
         return None
+    image = image or backends.get(backend).image
     rc, _ = _run(["podman", "image", "exists", image])
     if rc != 0:
         return None
-    return image_src_hash(image) != current
+    return image_src_hash(image, backend) != current
 
 
-def build_image(image: str = DEFAULT_IMAGE, *, quiet: bool = True) -> str:
-    """Build the runtime image with the source-hash label (CLI and GUI both
-    come through here). ``quiet=False`` streams podman's output."""
-    src = runtime_src_dir()
+def image_exists(image: str) -> bool:
+    return _run(["podman", "image", "exists", image])[0] == 0
+
+
+def build_image(image: str = "", backend: str = backends.DEFAULT, *,
+                quiet: bool = True) -> str:
+    """Build a backend's image with the source-hash label (CLI and GUI both
+    come through here). ``quiet=False`` streams podman's output.
+
+    A backend whose image derives from another one (moonshine builds FROM the
+    runtime image) brings its base up first when it is missing. A stale but
+    present base is left alone, since rebuilding it would silently redo the
+    Sunshine image behind the user's back.
+    """
+    spec = backends.get(backend)
+    image = image or spec.image
+    src = runtime_src_dir(backend)
     if not src.is_dir():
         raise RuntimeError(f"{src} not found — building needs a source checkout")
+    if spec.derives_from and not image_exists(spec.derives_from):
+        base = next(b.name for b in backends.BACKENDS.values()
+                    if b.image == spec.derives_from)
+        print(f"[podstage] {spec.derives_from} missing, building it first")
+        build_image(backend=base, quiet=quiet)
     cmd = ["podman", "build", "-t", image]
-    src_hash = runtime_src_hash()
+    src_hash = runtime_src_hash(backend)
     if src_hash:
         cmd += ["--label", f"{SRC_HASH_LABEL}={src_hash}"]
     cmd.append(str(src))
     if quiet:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=7200,
                            check=False)
         if p.returncode != 0:
             tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-8:])
@@ -540,11 +631,14 @@ def build_image(image: str = DEFAULT_IMAGE, *, quiet: bool = True) -> str:
 
 # -- mDNS discovery ---------------------------------------------------------
 
-def start_publisher(name: str = "podstage", port: int = DEFAULT_SUNSHINE_PORT) -> int | None:
+def start_publisher(name: str = "podstage", port: int = DEFAULT_STREAM_PORT) -> int | None:
     """Announce the Sunshine instance via the HOST's avahi (the container has
     no avahi daemon; ports are reachable anyway via --network host). Manual
     add-by-IP in Moonlight works without this. Requires mDNS allowed in the
     host firewall (firewalld: ``firewall-cmd --add-service=mdns``).
+
+    Only the Sunshine backend needs this (``Backend.host_mdns``); moonshine
+    answers mDNS itself from inside the container.
 
     Returns the publisher PID (caller must kill it on stop), or None.
     """
@@ -593,7 +687,8 @@ def save_state(opts: RuntimeOptions, publisher_pid: int | None) -> None:
         "client": opts.client,
         "home_dir": str(opts.home_dir),
         "resolution": opts.resolution,
-        "sunshine_port": opts.sunshine_port,
+        "backend": opts.backend,
+        "stream_port": opts.stream_port,
         "publisher_pid": publisher_pid,
         "started": int(time.time()),
     }))
@@ -622,6 +717,7 @@ def status() -> RuntimeStatus:
     state = load_state() or {}
     if _container_running():
         return RuntimeStatus(True, client=state.get("client"),
+                             backend=state.get("backend") or backends.DEFAULT,
                              detail="container running")
     return RuntimeStatus(False, detail="not running")
 
@@ -643,9 +739,15 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
         who = f" (client '{st.client}')" if st.client else ""
         raise RuntimeError(f"a podstage session is already running{who} — stop it first")
 
-    if image_is_stale(opts.image):
-        print("[podstage] runtime image is stale — containers/runtime/ changed "
-              "since it was built; rebuild with: podstage runtime build")
+    spec = opts.spec
+    if not image_exists(opts.image_name):
+        raise RuntimeError(
+            f"the {spec.label} image ({opts.image_name}) is not built. Run: "
+            f"podstage runtime build --backend {spec.name}")
+    if image_is_stale(opts.image, backend=opts.backend):
+        print(f"[podstage] the {spec.label} image is stale, {spec.src_subdir}/ "
+              "changed since it was built; rebuild with: "
+              f"podstage runtime build --backend {spec.name}")
 
     # Provision here (the one place with the side effect), then hand the
     # discovered libraries to the pure args builder.
@@ -664,8 +766,8 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     config.RUNTIME_SHARE_DIR.mkdir(parents=True, exist_ok=True)
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)
     publisher_pid = None
-    if opts.mode in ("pipeline", "desktop"):
-        publisher_pid = start_publisher(port=opts.sunshine_port)
+    if spec.host_mdns and opts.mode in ("pipeline", "desktop"):
+        publisher_pid = start_publisher(port=opts.stream_port)
     save_state(opts, publisher_pid)
     try:
         if opts.attach:
