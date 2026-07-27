@@ -177,7 +177,10 @@ class SessionPage(QWidget):
                                      "(session must be running)"))
         self._pair_btn.setEnabled(False)
         self._pair_btn.clicked.connect(self._on_pair)
-        top.addWidget(QLabel(tr("Client")))
+        # "Sandbox", not "Client": the box picks the profile whose
+        # sandbox is streamed. The clients are the Moonlight devices
+        # paired to it, which is what the Pair button next to it means.
+        top.addWidget(QLabel(tr("Sandbox")))
         top.addWidget(self._client, 1)
         top.addWidget(self._start_btn)
         top.addWidget(self._stop_btn)
