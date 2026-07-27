@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/eventfd.h>
@@ -52,8 +53,10 @@ static int fake_udev_enabled(void) {
 #define FU_INPUT_DIR "/dev/input"
 #define FU_MAXQ 128
 
+static void *fu_real(const char *name) { return dlsym(RTLD_NEXT, name); }
+
 static struct {
-    void *monitor;            /* libinput's real monitor (for udev context) */
+    void *monitor;            /* the one monitor we fake: the "input" one */
     int inotify_fd;
     int event_fd;             /* handed to libinput; EFD_SEMAPHORE, 1 per dev */
     pthread_t thread;
@@ -64,7 +67,32 @@ static struct {
     int added_idx;
 } FU = { .inotify_fd = -1, .event_fd = -1, .lock = PTHREAD_MUTEX_INITIALIZER };
 
-static void *fu_real(const char *name) { return dlsym(RTLD_NEXT, name); }
+/* Fake ONLY the monitor that filters for the "input" subsystem (libinput's).
+ * wlroots' session creates a SECOND udev monitor (DRM hotplug); faking every
+ * monitor handed both the same eventfd, so each new-device token woke two
+ * consumers and whichever read first popped the queue. Input devices randomly
+ * delivered to the session monitor were checked against DRM, unref'd, and
+ * LOST forever: that is how a session start with Sunshine's device burst
+ * ended up with the absolute mouse (and pen) never attached to labwc. */
+int udev_monitor_filter_add_match_subsystem_devtype(void *monitor,
+                                                    const char *subsystem,
+                                                    const char *devtype) {
+    int (*real)(void *, const char *, const char *) =
+        fu_real("udev_monitor_filter_add_match_subsystem_devtype");
+    if (fake_udev_enabled() && subsystem && strcmp(subsystem, "input") == 0) {
+        pthread_mutex_lock(&FU.lock);
+        FU.monitor = monitor;
+        pthread_mutex_unlock(&FU.lock);
+    }
+    return real ? real(monitor, subsystem, devtype) : 0;
+}
+
+static int fu_is_input_monitor(void *monitor) {
+    pthread_mutex_lock(&FU.lock);
+    int r = FU.monitor && FU.monitor == monitor;
+    pthread_mutex_unlock(&FU.lock);
+    return r;
+}
 
 static void fu_push(const char *name) {
     pthread_mutex_lock(&FU.lock);
@@ -84,7 +112,7 @@ static char *fu_pop(void) {
 }
 
 /* Watch /dev/input; queue one token per newly created eventN node. Removals
- * aren't synthesized — libinput drops a device itself once its evdev fd errors
+ * aren't synthesized; libinput drops a device itself once its evdev fd errors
  * out (ENODEV) after the node disappears. */
 static void *fu_thread(void *arg) {
     (void)arg;
@@ -94,8 +122,10 @@ static void *fu_thread(void *arg) {
         if (n <= 0) { if (n < 0 && errno == EINTR) continue; break; }
         for (char *p = buf; p < buf + n; ) {
             struct inotify_event *e = (struct inotify_event *)p;
-            if (e->len && (e->mask & IN_CREATE) && strncmp(e->name, "event", 5) == 0)
+            if (e->len && (e->mask & IN_CREATE) && strncmp(e->name, "event", 5) == 0) {
+                fprintf(stderr, "[seat-shim] hotplug %s\n", e->name);
                 fu_push(e->name);
+            }
             p += sizeof(struct inotify_event) + e->len;
         }
     }
@@ -104,15 +134,15 @@ static void *fu_thread(void *arg) {
 
 /* libinput calls this once and polls the returned fd. Return an eventfd that
  * carries one readable token per pending device (EFD_SEMAPHORE), fed by the
- * inotify thread — correct level-triggered semantics regardless of how
- * libinput loops receive_device(). */
+ * inotify thread: correct level-triggered semantics regardless of how
+ * libinput loops receive_device(). Non-input monitors (wlroots' DRM session
+ * monitor) keep their real netlink fd, which simply stays silent rootless. */
 int udev_monitor_get_fd(void *monitor) {
     int (*real)(void *) = fu_real("udev_monitor_get_fd");
-    if (!fake_udev_enabled())
+    if (!fake_udev_enabled() || !fu_is_input_monitor(monitor))
         return real(monitor);
     pthread_mutex_lock(&FU.lock);
     if (FU.event_fd < 0) {
-        FU.monitor = monitor;
         FU.event_fd = eventfd(0, EFD_SEMAPHORE | EFD_CLOEXEC | EFD_NONBLOCK);
         FU.inotify_fd = inotify_init1(IN_CLOEXEC);
         if (FU.inotify_fd >= 0)
@@ -125,7 +155,7 @@ int udev_monitor_get_fd(void *monitor) {
 
 void *udev_monitor_receive_device(void *monitor) {
     void *(*real)(void *) = fu_real("udev_monitor_receive_device");
-    if (!fake_udev_enabled())
+    if (!fake_udev_enabled() || !fu_is_input_monitor(monitor))
         return real(monitor);
 
     uint64_t tok;
@@ -142,19 +172,23 @@ void *udev_monitor_receive_device(void *monitor) {
     void (*unref)(void *) = fu_real("udev_device_unref");
     void *udev = get_udev(monitor);
 
-    /* The host udevd may not have written /run/udev/data (ID_SEAT) by the time
-     * inotify fires — retry briefly until the seat property is populated. */
+    /* The host udevd may not have written /run/udev/data (ID_SEAT) by the
+     * time inotify fires; retry briefly until the seat property is populated.
+     * After the budget the device is delivered ANYWAY: a NULL here would lose
+     * the hotplug forever, and libinput filters foreign seats itself. */
     void *dev = NULL;
+    int seated = 0;
     for (int i = 0; i < 50; i++) {
-        dev = new_ss(udev, "input", name);
-        if (dev) {
-            if (getprop(dev, "ID_SEAT"))
-                break;
-            unref(dev);
-            dev = NULL;
+        void *d = new_ss(udev, "input", name);
+        if (d) {
+            if (getprop(d, "ID_SEAT")) { dev = d; seated = 1; break; }
+            if (dev) unref(dev);
+            dev = d;                       /* exists, DB not ready yet */
         }
         usleep(10000);
     }
+    fprintf(stderr, "[seat-shim] deliver %s%s\n", name,
+            dev ? (seated ? "" : " (no ID_SEAT yet)") : " FAILED: no udev device");
     free(name);
     if (!dev)
         return NULL;
