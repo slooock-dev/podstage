@@ -60,10 +60,8 @@ def test_moonshine_derives_from_the_runtime_image():
     assert backends.SUNSHINE.derives_from is None
 
 
-def test_base_of_and_with_bases():
-    """A moonshine-only install still depends on the runtime image."""
+def test_base_of():
+    """The moonshine image is built FROM the runtime one, which is what makes
+    a base rebuild and the folded-in source hash necessary."""
     assert backends.base_of(backends.MOONSHINE) is backends.SUNSHINE
     assert backends.base_of(backends.SUNSHINE) is None
-    assert backends.with_bases({"moonshine"}) == {"moonshine", "sunshine"}
-    assert backends.with_bases({"sunshine"}) == {"sunshine"}
-    assert backends.with_bases(set()) == set()

@@ -45,7 +45,8 @@ from ..workers import start_action
 
 _GLYPH = {doctor.Status.OK: ("●", "ok"),
           doctor.Status.WARN: ("▲", "warn"),
-          doctor.Status.FAIL: ("✖", "fail")}
+          doctor.Status.FAIL: ("✖", "fail"),
+          doctor.Status.INFO: ("○", "info")}
 
 # Labels/tooltips for config.EXPERIMENTAL_FEATURES — one entry per key, the
 # card build fails loudly on a missing one (gui-smoke catches it).
@@ -143,6 +144,11 @@ class SetupPage(QWidget):
         self._results: list[doctor.CheckResult] = []
         self._update_info: update.UpdateInfo | None = None
         self._build()
+        # Re-check when a profile changes, so editing a sandbox on the other
+        # page (a different backend, a different port) is reflected here
+        # instead of showing a stale verdict until the next Re-check.
+        self._config_signature = doctor.config_signature(ctx.config)
+        ctx.config_changed.connect(self._on_config_changed)
         self.run_checks()
 
     # -- layout ----------------------------------------------------------
@@ -335,6 +341,20 @@ class SetupPage(QWidget):
         root.addStretch(1)
 
     # -- checks ----------------------------------------------------------
+    def _on_config_changed(self) -> None:
+        """Re-check only when a config change can actually change a result.
+
+        This page saves on every toggle it owns (language, preview behaviour,
+        mouse & keyboard), and the session page saves on every quality
+        dropdown. Re-running the checks on each of those would fire a
+        container probe per keystroke-ish event for no gain, so compare the
+        few fields the checks read instead."""
+        signature = doctor.config_signature(self._ctx.config)
+        if signature == self._config_signature:
+            return
+        self._config_signature = signature
+        self.run_checks()
+
     def run_checks(self) -> None:
         if self._busy:
             return
@@ -410,7 +430,9 @@ class SetupPage(QWidget):
         return row
 
     def _fix_button(self, r: doctor.CheckResult) -> QPushButton | None:
-        if r.status is doctor.Status.OK:
+        # INFO rows describe a path this install does not take, so there is
+        # nothing to fix; picking that backend is what makes them actionable.
+        if r.status in (doctor.Status.OK, doctor.Status.INFO):
             return None
         if r.name in ("image", "moonshine image"):
             backend = (backends.MOONSHINE.name if r.name.startswith("moonshine")

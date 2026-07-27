@@ -220,14 +220,18 @@ podstage runtime build --backend moonshine     # once, builds from source
 podstage doctor                                # checks this GPU can encode
 ```
 
-In the GUI it is the same three steps: pick the backend in the profile
-dialog, then work the Setup page, where the preflight checks are grouped by
-host, streaming and backend. The backend group only appears once a profile
-uses it, and carries its own *Build image* button.
+In the GUI it is the same steps: pick the backend in the profile dialog, then
+work the Setup page, where the preflight checks are grouped by host, streaming
+and backend, and each backend group carries its own *Build image* button.
 
-`podstage doctor` runs moonshine's own health check in a throwaway container
-and reports the codecs it finds, but only when a profile actually selects the
-backend. Details, including the two upstream workarounds it needs, are in
+Both backends are checked on every run, whether a profile uses them or not, so
+you can see whether this machine can do moonshine at all before choosing it.
+The GPU question is answered by running `vulkaninfo` in the runtime image you
+already have, which takes under a second and needs nothing built. What your
+profiles use only decides how loudly a gap is reported: a backend nobody uses
+states its missing pieces in grey and never turns `podstage doctor` red.
+
+Details, including the two upstream workarounds the backend needs, are in
 [`containers/moonshine/README.md`](containers/moonshine/README.md).
 
 ## Security notes

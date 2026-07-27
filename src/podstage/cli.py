@@ -30,11 +30,13 @@ _STATUS_COLOR = {
     doctor.Status.OK: "32",     # green
     doctor.Status.WARN: "33",   # yellow
     doctor.Status.FAIL: "31",   # red
+    doctor.Status.INFO: "90",   # grey: neither good nor bad
 }
 _STATUS_GLYPH = {
     doctor.Status.OK: "✔",    # ✔
     doctor.Status.WARN: "▲",  # ▲
     doctor.Status.FAIL: "✖",  # ✖
+    doctor.Status.INFO: "○",  # ○
 }
 
 

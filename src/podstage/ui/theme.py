@@ -67,6 +67,9 @@ QLabel#sessionState[state="error"] {{ color: {ERR}; }}
 QLabel[status="ok"] {{ color: {OK}; }}
 QLabel[status="warn"] {{ color: {WARN}; }}
 QLabel[status="fail"] {{ color: {ERR}; }}
+/* Neutral: a fact about a path this install does not take. Muted on
+   purpose, so "cannot run here" never reads as a green all-clear. */
+QLabel[status="info"] {{ color: {FAINT}; }}
 
 /* -- controls ----------------------------------------------------------- */
 QPushButton {{

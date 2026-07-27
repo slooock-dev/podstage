@@ -158,9 +158,9 @@ def test_udev_check_ok_with_both_rules(tmp_path, monkeypatch):
 
 # -- moonshine backend checks ------------------------------------------------
 #
-# Both are inert unless a profile selects the backend: it is opt-in, and its
-# GPU requirement is narrower than Sunshine's, so warning about it on a
-# machine that never uses it would be noise.
+# Every backend is checked whether a profile uses it or not, so the answer to
+# "can this machine do moonshine at all" is on screen before anyone picks it.
+# Use decides SEVERITY only: an unused backend must never turn doctor red.
 
 def _cfg_with(tmp_path, monkeypatch, body):
     cfg = tmp_path / "config.toml"
@@ -181,66 +181,6 @@ def test_configured_backends_defaults_without_a_config(tmp_path, monkeypatch):
     assert doctor.configured_backends() == {"sunshine"}
 
 
-def test_moonshine_checks_are_silent_without_a_moonshine_profile(tmp_path, monkeypatch):
-    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
-    # Would blow up if it ran podman; it must not get that far.
-    monkeypatch.setattr(doctor, "_run", _boom)
-    for check in (doctor.check_moonshine_image, doctor.check_moonshine_encode):
-        res = check()
-        assert res.status is doctor.Status.OK
-        assert "not used" in res.detail
-
-
-def _boom(*_a, **_kw):
-    raise AssertionError("must not shell out")
-
-
-def test_moonshine_image_check_asks_for_a_build(tmp_path, monkeypatch):
-    _cfg_with(tmp_path, monkeypatch,
-              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
-    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (1, ""))
-    res = doctor.check_moonshine_image()
-    assert res.status is doctor.Status.FAIL
-    assert res.fix == doctor.MOONSHINE_BUILD_FIX
-
-
-def test_moonshine_encode_reads_the_upstream_codec_line(tmp_path, monkeypatch):
-    _cfg_with(tmp_path, monkeypatch,
-              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
-    report = ("OK  Render nodes  renderD128\n"
-              "OK  Codecs        H.264, HEVC, AV1\n"
-              "WARN Sleep inhibit  (logind absent)\n")
-    monkeypatch.setattr(doctor, "_run",
-                        lambda cmd, timeout=10: (0, report) if "run" in cmd else (0, ""))
-    res = doctor.check_moonshine_encode()
-    assert res.status is doctor.Status.OK
-    assert "H.264, HEVC, AV1" in res.detail
-
-
-def test_moonshine_encode_fails_on_a_gpu_without_vulkan_video(tmp_path, monkeypatch):
-    _cfg_with(tmp_path, monkeypatch,
-              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
-    report = "OK  Render nodes  renderD128\nFAIL Codecs  none\n"
-    monkeypatch.setattr(doctor, "_run",
-                        lambda cmd, timeout=10: (1, report) if "run" in cmd else (0, ""))
-    res = doctor.check_moonshine_encode()
-    assert res.status is doctor.Status.FAIL
-    # A hardware fact, so no fix command is offered.
-    assert not res.fix
-    assert "sunshine backend" in res.detail
-
-
-def test_moonshine_encode_admits_an_unreadable_report(tmp_path, monkeypatch):
-    _cfg_with(tmp_path, monkeypatch,
-              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
-    monkeypatch.setattr(doctor, "_run",
-                        lambda cmd, timeout=10: (125, "podman: error")
-                        if "run" in cmd else (0, ""))
-    res = doctor.check_moonshine_encode()
-    assert res.status is doctor.Status.WARN
-    assert "no codec line" in res.detail
-
-
 def test_avahi_is_not_required_for_a_moonshine_only_setup(tmp_path, monkeypatch):
     _cfg_with(tmp_path, monkeypatch,
               '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
@@ -257,34 +197,6 @@ def test_avahi_is_not_required_for_a_moonshine_only_setup(tmp_path, monkeypatch)
 
 # -- grouping ----------------------------------------------------------------
 
-def test_run_all_stamps_groups_and_skips_unused_backends(tmp_path, monkeypatch):
-    """A backend nobody uses contributes no rows at all: an inert
-    'not used' line would be noise and would inflate the counters."""
-    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
-    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (0, "x"))
-    names = {r.name: r.group for r in doctor.run_all()}
-    assert names["podman"] == doctor.GROUP_HOST
-    assert names["avahi"] == doctor.GROUP_STREAMING
-    assert names["image"] == "sunshine"
-    assert "moonshine image" not in names
-    assert "moonshine encode" not in names
-
-
-def test_moonshine_only_setup_keeps_the_base_but_drops_nothing_it_needs(
-        tmp_path, monkeypatch):
-    """Only the runtime image survives from the Sunshine side, and only
-    because the moonshine image is built FROM it."""
-    _cfg_with(tmp_path, monkeypatch,
-              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
-    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (0, "OK Codecs H.264"))
-    monkeypatch.setattr(doctor.runtime, "image_is_stale",
-                        lambda image="", backend=None: False)
-    names = {r.name: r.group for r in doctor.run_all()}
-    assert names["moonshine image"] == "moonshine"
-    assert names["image"] == "sunshine"           # the base, kept on purpose
-    assert names["podman"] == doctor.GROUP_HOST   # host checks always apply
-
-
 def test_by_group_follows_the_declared_order_and_drops_empties():
     def mk(name, group):
         return doctor.CheckResult(name, doctor.Status.OK, "", group=group)
@@ -297,31 +209,6 @@ def test_by_group_follows_the_declared_order_and_drops_empties():
         ["a", "b", "c"]
 
 
-def test_encode_check_offers_no_second_build_button(tmp_path, monkeypatch):
-    """The 'moonshine image' row owns the build action."""
-    _cfg_with(tmp_path, monkeypatch,
-              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
-    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (1, ""))
-    res = doctor.check_moonshine_encode()
-    assert res.status is doctor.Status.WARN
-    assert not res.fix
-
-
-def test_base_backend_group_survives_a_moonshine_only_setup(tmp_path, monkeypatch):
-    """The moonshine image is built FROM the runtime image, so hiding the
-    Sunshine group would hide a dependency that still has to be current."""
-    _cfg_with(tmp_path, monkeypatch,
-              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
-    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (0, "OK Codecs H.264"))
-    monkeypatch.setattr(doctor.runtime, "image_is_stale",
-                        lambda image="", backend=None: False)
-    rows = {r.name: r.group for r in doctor.run_all()}
-    assert rows["image"] == "sunshine"
-    assert rows["moonshine image"] == "moonshine"
-    # The port conflict hits any backend, so it is not a Sunshine-only row.
-    assert rows["sunshine-conflict"] == doctor.GROUP_STREAMING
-
-
 def test_base_image_row_says_why_it_is_there(tmp_path, monkeypatch):
     _cfg_with(tmp_path, monkeypatch,
               '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
@@ -332,3 +219,145 @@ def test_base_image_row_says_why_it_is_there(tmp_path, monkeypatch):
     # With a Sunshine profile present it is just the streaming image again.
     _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
     assert "base image" not in doctor.check_image().detail
+
+
+# -- both backends are always reported ---------------------------------------
+
+def test_every_backend_group_is_reported_whatever_the_profiles_use(
+        tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (0, "x"))
+    groups = {r.group for r in doctor.run_all()}
+    assert groups == {doctor.GROUP_HOST, doctor.GROUP_STREAMING,
+                      "sunshine", "moonshine"}
+
+
+def test_an_unused_backend_never_produces_a_blocker(tmp_path, monkeypatch):
+    """Otherwise `podstage doctor` would exit 1 on every install that simply
+    does not use moonshine."""
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    # Nothing built, no Vulkan encode reported: the worst case.
+    monkeypatch.setattr(doctor, "_run",
+                        lambda cmd, timeout=10:
+                        (1, "") if "moonshine" in " ".join(cmd) else (0, ""))
+    for res in (doctor.check_moonshine_image(), doctor.check_moonshine_gpu()):
+        # Neutral, not green: "cannot run here" must not read as an all-clear.
+        assert res.status is doctor.Status.INFO, res
+        assert not res.fix
+    assert "no profile uses it" in doctor.check_moonshine_image().detail
+
+
+def test_the_same_gaps_block_once_a_profile_uses_the_backend(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor, "_run",
+                        lambda cmd, timeout=10:
+                        (1, "") if "moonshine" in " ".join(cmd) else (0, ""))
+    res = doctor.check_moonshine_image()
+    assert res.status is doctor.Status.FAIL
+    assert res.fix == doctor.MOONSHINE_BUILD_FIX
+
+
+# -- the GPU gate ------------------------------------------------------------
+
+_VULKANINFO = """
+	VK_KHR_video_encode_av1                       : extension revision 1
+	VK_KHR_video_encode_h264                      : extension revision 14
+	VK_KHR_video_encode_h265                      : extension revision 14
+		queueFlags = QUEUE_TRANSFER_BIT | QUEUE_VIDEO_ENCODE_BIT_KHR
+"""
+
+
+def test_parse_video_encode_reads_queue_and_codecs():
+    has_queue, codecs = doctor.parse_video_encode(_VULKANINFO)
+    assert has_queue is True
+    assert set(codecs) == {"H.264", "HEVC", "AV1"}
+
+
+def test_parse_video_encode_on_a_gpu_without_an_encode_queue():
+    # Decode-only extensions must not be mistaken for encode support.
+    has_queue, codecs = doctor.parse_video_encode(
+        "VK_KHR_video_decode_h264\nqueueFlags = QUEUE_GRAPHICS_BIT\n")
+    assert has_queue is False and codecs == []
+
+
+def test_gpu_gate_reports_the_codecs_it_found(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor, "_run",
+                        lambda cmd, timeout=10: (0, _VULKANINFO)
+                        if "run" in cmd else (0, ""))
+    res = doctor.check_moonshine_gpu()
+    assert res.status is doctor.Status.OK
+    assert "H.264" in res.detail and "AV1" in res.detail
+
+
+def test_gpu_gate_is_a_hardware_fact_with_no_fix(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor, "_run",
+                        lambda cmd, timeout=10: (0, "no video here")
+                        if "run" in cmd else (0, ""))
+    res = doctor.check_moonshine_gpu()
+    assert res.status is doctor.Status.FAIL
+    assert not res.fix
+    assert "sunshine backend is unaffected" in res.detail
+
+
+def test_gpu_gate_needs_the_runtime_image_first(tmp_path, monkeypatch):
+    _cfg_with(tmp_path, monkeypatch,
+              '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
+    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (1, ""))
+    res = doctor.check_moonshine_gpu()
+    assert res.status is doctor.Status.OK
+    assert "needs the runtime image" in res.detail
+
+
+# -- what a config change can change -----------------------------------------
+
+def test_config_signature_tracks_only_what_the_checks_read():
+    from podstage.config import AppConfig, SessionConfig
+
+    base = AppConfig(sessions=[SessionConfig(name="a")])
+    same = AppConfig(sessions=[SessionConfig(name="a")], language="de",
+                     preview_keep_last=False, mouse_keyboard=True)
+    assert doctor.config_signature(base) == doctor.config_signature(same)
+
+    for changed in (
+        AppConfig(sessions=[SessionConfig(name="a", backend="moonshine")]),
+        AppConfig(sessions=[SessionConfig(name="a", sunshine_port_base=48989)]),
+        AppConfig(sessions=[SessionConfig(name="a"), SessionConfig(name="b")]),
+        AppConfig(sessions=[SessionConfig(name="a")],
+                  experimental={"gamepad_ds5": True}),
+    ):
+        assert doctor.config_signature(base) != doctor.config_signature(changed)
+
+
+def test_info_rows_never_count_as_blockers_or_warnings(tmp_path, monkeypatch):
+    """The CLI summary and the Setup headline both count FAIL and WARN; an
+    unused backend must land outside both."""
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    monkeypatch.setattr(doctor, "_run",
+                        lambda cmd, timeout=10:
+                        (1, "") if "moonshine" in " ".join(cmd) else (0, ""))
+    results = doctor.run_all()
+    info = [r for r in results if r.status is doctor.Status.INFO]
+    assert info, "expected the unused backend to report neutrally"
+    assert all(r.status is not doctor.Status.FAIL for r in info)
+    assert all(r.status is not doctor.Status.WARN for r in info)
+
+
+def test_one_crashing_check_does_not_take_the_report_down(monkeypatch):
+    """The Setup page renders whatever run_all returns; an exception used to
+    leave it with no rows at all and every other verdict hidden."""
+    def boom():
+        raise RuntimeError("podman went missing")
+
+    monkeypatch.setattr(doctor, "ALL_CHECKS",
+                        [(boom, doctor.GROUP_HOST),
+                         (lambda: doctor.CheckResult("fine", doctor.Status.OK, ""),
+                          doctor.GROUP_HOST)])
+    results = doctor.run_all()
+    assert [r.name for r in results] == ["boom", "fine"]
+    assert results[0].status is doctor.Status.FAIL
+    assert "podman went missing" in results[0].detail

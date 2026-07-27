@@ -32,11 +32,19 @@ entrypoint and both container helpers changed.
   GPU can actually encode, answered by running moonshine's own health check in
   a throwaway container and reporting the codecs it finds.
 - **Preflight checks are grouped** by host, streaming and backend, in the
-  order they have to be worked through. A backend contributes no rows until a
-  profile uses it, except that a backend other backends are built on top of
-  stays visible, and each backend group carries its own image build button on
-  the Setup page. The summary above the list still counts across every group,
-  so nothing hides behind a heading.
+  order they have to be worked through, and each backend group carries its own
+  image build button on the Setup page. Every backend is checked whether a
+  profile uses it or not, so the answer to "can this machine run moonshine at
+  all" is on screen before the choice is made; the GPU question is answered by
+  `vulkaninfo` in the runtime image, in under a second and with nothing built.
+  What the profiles use decides severity only: a backend nobody uses reports
+  neutrally (a new grey INFO state) and can never turn `podstage doctor` red.
+  The summary above the list counts across every group, so nothing hides
+  behind a heading.
+- **The Setup page follows profile edits.** Changing a sandbox's backend or
+  port on the other page re-runs the checks, instead of showing a stale
+  verdict until the next manual re-check. Only the fields the checks actually
+  read trigger it, so the page's own toggles do not fire a container probe.
 - **Streamed first Steam login.** `podstage session login <name>` and the
   GUI's *Streamed login* boot a fresh sandbox straight into Big Picture's
   sign-in over the stream (QR code via the Steam Mobile App, or the on-screen
@@ -89,6 +97,10 @@ entrypoint and both container helpers changed.
   image brings a missing *or stale* base up first: podman layers on whatever
   the tag points at today, so building on a stale base would stamp a label
   the image cannot honour.
+- **A crashing check no longer blanks the whole report.** One failing check
+  left the Setup page with no rows at all, hiding every other verdict; it is
+  now reported as a failed row of its own. `nvidia-smi` returning success with
+  no output was one way to trigger that.
 - **Streamed mouse input stopped warping** when Steam flipped gamescope's
   `touch_click_mode` to passthrough for touch-advertising clients. The pin is
   re-asserted every 30 s.

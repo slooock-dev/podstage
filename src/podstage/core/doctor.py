@@ -34,6 +34,11 @@ class Status(str, Enum):
     OK = "OK"
     WARN = "WARN"
     FAIL = "FAIL"
+    # Neither good nor bad: a fact about a path this install does not take,
+    # such as a backend no profile uses. Reported so the choice can be made
+    # informed, but never counted as a blocker or a warning, and never
+    # dressed up in green when what it states is "this cannot run here".
+    INFO = "INFO"
 
 
 # Check groups, in the order they are meant to be worked through. The host
@@ -81,13 +86,33 @@ def check_podman() -> CheckResult:
 
 def configured_backends() -> set[str]:
     """Backends the configured profiles actually use. Empty/unreadable config
-    → the default, since that is what a first session will run."""
+    → the default, since that is what a first session will run.
+
+    Every backend is CHECKED regardless (see run_all); this only decides how
+    severely a missing prerequisite is reported.
+    """
     try:
         used = {s.backend
                 for s in config.AppConfig.load(config.CONFIG_FILE).sessions}
     except (OSError, ValueError, TypeError):
         used = set()
     return used or {backends.DEFAULT}
+
+
+def config_signature(cfg: "config.AppConfig") -> tuple:
+    """The config bits the checks actually read, so a caller can tell whether
+    a config change can change any result.
+
+    The GUI re-runs the checks on this and nothing else: the Setup page saves
+    on every toggle it owns (language, preview behaviour, mouse & keyboard),
+    and re-running a container probe on each of those would be a storm for no
+    gain.
+    """
+    return (
+        tuple(sorted((s.name, s.backend, s.sunshine_port_base)
+                     for s in cfg.sessions)),
+        bool(cfg.experimental.get("gamepad_ds5")),   # check_uhid reads this
+    )
 
 
 def check_image() -> CheckResult:
@@ -116,100 +141,103 @@ def check_image() -> CheckResult:
 
 # -- moonshine backend ------------------------------------------------------
 #
-# Both checks below are inert unless a profile actually selects the moonshine
-# backend: it is opt-in per profile, and its GPU requirement is strictly
-# narrower than Sunshine's, so warning about it on a machine that never uses
-# it would be noise.
+# Every backend is checked on every run, whether a profile uses it or not, so
+# the Setup page answers "can this machine do moonshine at all" BEFORE anyone
+# picks it. What the profiles use only decides severity: a prerequisite the
+# install does not need yet is stated, not flagged, so an unused backend can
+# never turn `podstage doctor` red.
 
 MOONSHINE_BUILD_FIX = "podstage runtime build --backend moonshine"
 
 
+def _severity(backend: str, problem: Status) -> Status:
+    """A gap only blocks when a profile actually needs that backend."""
+    return problem if backend in configured_backends() else Status.INFO
+
+
+def _unused_note(backend: str) -> str:
+    return "" if backend in configured_backends() else " (no profile uses it)"
+
+
 def check_moonshine_image() -> CheckResult:
     spec = backends.MOONSHINE
-    if spec.name not in configured_backends():
-        return CheckResult("moonshine image", Status.OK,
-                           "not used by any profile")
+    in_use = spec.name in configured_backends()
+    note = _unused_note(spec.name)
     rc, _ = _run(["podman", "image", "exists", spec.image])
     if rc != 0:
-        return CheckResult("moonshine image", Status.FAIL,
-                           f"{spec.image} not built yet",
-                           fix=MOONSHINE_BUILD_FIX)
+        return CheckResult("moonshine image", _severity(spec.name, Status.FAIL),
+                           f"{spec.image} not built yet{note}",
+                           fix=MOONSHINE_BUILD_FIX if in_use else "")
     if runtime.image_is_stale(backend=spec.name):
-        return CheckResult("moonshine image", Status.WARN,
-                           f"image is stale, {spec.src_subdir}/ changed since "
-                           "it was built", fix=MOONSHINE_BUILD_FIX)
+        return CheckResult("moonshine image", _severity(spec.name, Status.WARN),
+                           f"image is stale{note}, {spec.src_subdir}/ changed "
+                           "since it was built",
+                           fix=MOONSHINE_BUILD_FIX if in_use else "")
     _, img_id = _run(["podman", "image", "inspect", "--format", "{{.Id}}", spec.image])
     return CheckResult("moonshine image", Status.OK, f"present: {img_id[:12]}")
 
 
-def _moonshine_probe_argv(image: str) -> list[str]:
-    """A throwaway container running `moonshine healthcheck`.
+# Vulkan video encode is asked of the RUNTIME image, not of moonshine's: it
+# ships vulkaninfo, everyone has it built, and it answers in well under a
+# second where moonshine's own health check needs its image and four times as
+# long. Same question either way, since both end up at the driver.
+_VK_ENCODE_QUEUE = "QUEUE_VIDEO_ENCODE_BIT_KHR"
+_VK_CODECS = {"VK_KHR_video_encode_h264": "H.264",
+              "VK_KHR_video_encode_h265": "HEVC",
+              "VK_KHR_video_encode_av1": "AV1"}
 
-    No HOME volume, no libraries, no /run/podstage: the report needs none of
-    them. It does get the same GPU wiring and the same /dev bind a real
-    session gets (core/runtime.container_flags), so the codecs it reports and
-    its uinput/uhid lines describe what that session would actually see.
-    """
+
+def _vulkaninfo_argv() -> list[str]:
+    """A throwaway container running vulkaninfo with the same GPU wiring a
+    real session gets (core/runtime.container_flags)."""
     if runtime.gpu_vendor() in runtime.MESA_VENDORS:
         devices = ["--device", "/dev/dri"]
     else:
         devices = ["--device", "nvidia.com/gpu=all",
                    "--device", "/dev/nvidia-modeset"]
-    return (["podman", "run", "--rm", "--name", "podstage-moonshine-doctor"]
+    return (["podman", "run", "--rm", "--name", "podstage-vulkan-doctor"]
             + devices
             + ["--security-opt", "label=disable", "--userns=keep-id",
-               "-v", "/dev:/dev",   # inputtino: uhid + the hidraw node
-               "-e", "PS_MODE=healthcheck", image])
+               "--entrypoint", "/usr/sbin/vulkaninfo", runtime.DEFAULT_IMAGE])
 
 
-def _codec_line(out: str) -> tuple[str, str] | None:
-    """``(status, detail)`` of moonshine's "Codecs" health line, if present.
-    That line is the hardware gate: no Vulkan video-encode queue, no codecs,
-    no stream."""
-    for line in out.splitlines():
-        parts = line.split(None, 2)
-        if len(parts) >= 2 and parts[0] in ("OK", "WARN", "FAIL") \
-                and parts[1].lower().startswith("codec"):
-            return parts[0], (parts[2].strip() if len(parts) > 2 else "")
-    return None
+def parse_video_encode(out: str) -> tuple[bool, list[str]]:
+    """``(has_encode_queue, codecs)`` from vulkaninfo output.
+
+    Both halves matter: the queue flag says the GPU can encode at all, the
+    extensions say in which formats.
+    """
+    has_queue = _VK_ENCODE_QUEUE in out
+    codecs = [label for ext, label in _VK_CODECS.items() if ext in out]
+    return has_queue, codecs
 
 
-def check_moonshine_encode() -> CheckResult:
-    """The Vulkan Video gate, answered by moonshine's own health report.
+def check_moonshine_gpu() -> CheckResult:
+    """Can this GPU run moonshine at all?
 
     moonshine encodes through Vulkan Video, which needs NVIDIA RTX, AMD
     RDNA2+ or Intel Arc. Every older GPU streams fine through Sunshine's
-    NVENC/VAAPI path and cannot use this backend at all, so this is a
-    hardware fact to surface early, not something a fix can resolve.
-
-    Runs a throwaway container (a few seconds), so it only fires when a
-    profile selects the backend and its image exists.
+    NVENC/VAAPI path and cannot use this backend, so this is a hardware fact
+    to surface before the choice is made, not something a fix can resolve.
     """
-    spec = backends.MOONSHINE
-    if spec.name not in configured_backends():
-        return CheckResult("moonshine encode", Status.OK,
-                           "not used by any profile")
-    if _run(["podman", "image", "exists", spec.image])[0] != 0:
-        # No fix here on purpose: the "moonshine image" row right above owns
-        # the build action, and two build buttons on one card is one too many.
-        return CheckResult("moonshine encode", Status.WARN,
-                           "cannot check until the image is built")
-    rc, out = _run(_moonshine_probe_argv(spec.image), timeout=180)
-    codecs = _codec_line(out)
-    if codecs is None:
-        # Upstream's report did not come through, so say that rather than
-        # inventing a verdict from the exit code alone.
-        tail = " / ".join(out.strip().splitlines()[-2:])[:160]
-        return CheckResult("moonshine encode", Status.WARN,
-                           f"health check gave no codec line (exit {rc}): {tail}")
-    status, detail = codecs
-    if status == "OK":
-        return CheckResult("moonshine encode", Status.OK,
-                           f"Vulkan video encode: {detail}")
+    name = backends.MOONSHINE.name
+    if _run(["podman", "image", "exists", runtime.DEFAULT_IMAGE])[0] != 0:
+        # Nothing to probe with yet; the runtime image row says so already.
+        return CheckResult("moonshine gpu", Status.OK,
+                           "not checked yet, needs the runtime image",
+                           group=name)
+    rc, out = _run(_vulkaninfo_argv(), timeout=120)
+    has_queue, codecs = parse_video_encode(out)
+    if has_queue and codecs:
+        return CheckResult("moonshine gpu", Status.OK,
+                           "Vulkan video encode: " + ", ".join(codecs))
+    if rc != 0 and not out.strip():
+        return CheckResult("moonshine gpu", Status.WARN,
+                           f"vulkaninfo could not be run (exit {rc})")
     return CheckResult(
-        "moonshine encode", Status.FAIL,
-        f"no Vulkan video encode on this GPU ({detail or 'no codecs reported'}). "
-        "moonshine needs NVIDIA RTX, AMD RDNA2+ or Intel Arc; use the sunshine backend")
+        "moonshine gpu", _severity(name, Status.FAIL),
+        "this GPU has no Vulkan video-encode queue, so the moonshine backend "
+        "cannot run here; the sunshine backend is unaffected")
 
 
 def check_udev_rules() -> CheckResult:
@@ -454,9 +482,11 @@ def check_gpu() -> CheckResult:
                            "nvidia-smi not found (non-NVIDIA or driver issue)")
     rc, out = _run(["nvidia-smi", "--query-gpu=name,driver_version",
                     "--format=csv,noheader"])
-    if rc != 0:
-        return CheckResult("gpu/encoder", Status.WARN, "nvidia-smi failed")
-    detail = out.splitlines()[0].strip()
+    lines = out.splitlines()
+    if rc != 0 or not lines:
+        return CheckResult("gpu/encoder", Status.WARN,
+                           f"nvidia-smi gave nothing usable (exit {rc})")
+    detail = lines[0].strip()
     # DLSS needs the driver's wine NGX DLLs mounted in; without them Proton
     # just runs without it (no error anywhere).
     if runtime.nvidia_wine_dll_dir() is None:
@@ -507,28 +537,30 @@ ALL_CHECKS: list[tuple[Callable[[], CheckResult], str]] = [
     # Sunshine backend.
     (check_sunshine_conflict, GROUP_STREAMING),
     (check_image, backends.SUNSHINE.name),
+    (check_moonshine_gpu, backends.MOONSHINE.name),
     (check_moonshine_image, backends.MOONSHINE.name),
-    (check_moonshine_encode, backends.MOONSHINE.name),
 ]
 
 
 def run_all() -> list[CheckResult]:
-    """Every check that applies to this install, stamped with its group.
+    """Every check, stamped with its group.
 
-    A backend's checks are skipped entirely unless a profile uses it. An
-    inert "not used by any profile" row is noise on a machine that will never
-    run that backend, and it would inflate the counters the Setup page and
-    the CLI summary report. The checks keep their own guard for direct
-    callers.
+    Nothing is filtered by what the profiles happen to use: a user deciding
+    between backends needs to see whether the other one is even possible on
+    this machine. Whether a backend is in use decides SEVERITY instead, so an
+    unused backend states its missing prerequisites without ever turning the
+    summary red.
     """
-    # Bases count as in use: a moonshine-only install still needs the runtime
-    # image, since the moonshine image is built FROM it.
-    used = backends.with_bases(configured_backends())
     results: list[CheckResult] = []
     for check, group in ALL_CHECKS:
-        if group in backends.BACKENDS and group not in used:
-            continue
-        result = check()
+        try:
+            result = check()
+        except Exception as exc:  # noqa: BLE001
+            # One check blowing up must not take the whole report with it:
+            # the Setup page would show no rows at all, hiding every other
+            # verdict behind a single unexpected failure.
+            result = CheckResult(check.__name__.removeprefix("check_"),
+                                 Status.FAIL, f"check crashed: {exc!r}")
         result.group = group
         results.append(result)
     return results
