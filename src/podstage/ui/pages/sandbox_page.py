@@ -200,7 +200,7 @@ class ProfileDialog(QDialog):
         self._mount_writable = QCheckBox(tr("writable"))
         self._mount_writable.setToolTip(tr(
             "Add the chosen folder as ':rw'. Only for launchers that update "
-            "themselves in place — a writable mount lets the session change "
+            "themselves in place: a writable mount lets the session change "
             "host files."))
         picker.addWidget(browse)
         picker.addWidget(self._mount_writable)

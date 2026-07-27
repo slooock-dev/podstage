@@ -251,8 +251,7 @@ class SetupPage(QWidget):
         # client's input straight into its compositor seat and has nothing to
         # switch off. A setting that silently does nothing on one backend has
         # to say so where it is read, not only in the docs.
-        mkbackend = QLabel(tr("Sunshine only — moonshine always passes the "
-                              "client's mouse and keyboard into the session."))
+        mkbackend = QLabel(tr("Sunshine only."))
         mkbackend.setProperty("muted", True)
         mkbackend.setWordWrap(True)
         slay.addWidget(self._mouse_kb)

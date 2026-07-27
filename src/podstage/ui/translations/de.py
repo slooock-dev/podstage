@@ -450,10 +450,7 @@ TEXTS: dict[str, str] = {
     "session start.":
         "Für reine Controller-Clients empfohlen: aus. Gilt ab dem nächsten "
         "Session-Start.",
-    "Sunshine only — moonshine always passes the client's mouse and "
-    "keyboard into the session.":
-        "Nur Sunshine — moonshine reicht Maus und Tastatur des Clients immer "
-        "in die Session durch.",
+    "Sunshine only.": "Nur Sunshine.",
     "Experimental features apply from the next session start.":
         "Experimentelle Features gelten ab dem nächsten Session-Start.",
     "Checks the GitHub releases for a newer version.":
@@ -527,7 +524,7 @@ TEXTS: dict[str, str] = {
     "Add folder …": "Ordner hinzufügen …",
     "writable": "schreibbar",
     "Add the chosen folder as ':rw'. Only for launchers that update "
-    "themselves in place — a writable mount lets the session change "
+    "themselves in place: a writable mount lets the session change "
     "host files.":
         "Fügt den gewählten Ordner als »:rw« hinzu. Nur für Launcher, die "
         "sich selbst an Ort und Stelle aktualisieren: ein schreibbarer Mount "
