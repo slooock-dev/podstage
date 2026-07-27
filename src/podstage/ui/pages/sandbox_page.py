@@ -37,6 +37,26 @@ from ..i18n import tr
 from ..widgets import card
 from ..workers import start_action
 
+# Columns of the sandbox table, declared in one place: label, whether the
+# column takes the leftover width, and whether its value is right-aligned.
+# Only Name and Pairings vary in length; everything else is a short fixed
+# token, so stretching all of them equally (the old behaviour) spent the same
+# width on a "—" as on a profile name and truncated the two columns that
+# actually carry information. Labels are callables so tr() still sees literals
+# (the i18n catalog test scans for them) while resolving after the language is
+# set.
+_STRETCH, _FIT = True, False
+_COLUMNS: tuple[tuple, ...] = (
+    (lambda: tr("Name"), _STRETCH, False),
+    (lambda: tr("Resolution"), _FIT, False),
+    (lambda: tr("Backend"), _FIT, False),
+    (lambda: tr("Port"), _FIT, True),
+    (lambda: tr("Login"), _FIT, False),
+    (lambda: tr("Pairings"), _STRETCH, False),
+    (lambda: tr("Size"), _FIT, True),
+    (lambda: tr("Overlay"), _FIT, True),
+)
+
 
 def _fmt_size(size: int | None) -> str:
     if size is None:
@@ -380,18 +400,21 @@ class SandboxPage(QWidget):
         root.setSpacing(12)
 
         frame, lay = card(tr("Steam sandboxes"))
-        self._table = QTableWidget(0, 8)
-        self._table.setHorizontalHeaderLabels(
-            [tr("Name"), tr("Resolution"), tr("Backend"), tr("Port"), tr("Login"),
-             tr("Pairings"), tr("Size"), tr("Overlay")])
+        self._table = QTableWidget(0, len(_COLUMNS))
+        self._table.setHorizontalHeaderLabels([label() for label, _, _ in _COLUMNS])
         self._table.verticalHeader().setVisible(False)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setAlternatingRowColors(True)
-        # All columns share the width evenly and follow window resizes.
-        self._table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch)
+        # Fixed-token columns take exactly what they need; Name and Pairings
+        # split the rest, so a long profile name or client list still fits at
+        # the minimum window width.
+        header = self._table.horizontalHeader()
+        for col, (_, stretch, _align) in enumerate(_COLUMNS):
+            header.setSectionResizeMode(
+                col, QHeaderView.ResizeMode.Stretch if stretch
+                else QHeaderView.ResizeMode.ResizeToContents)
         self._table.setMinimumHeight(160)
         self._table.itemSelectionChanged.connect(self._update_login_btn)
         lay.addWidget(self._table)
@@ -475,9 +498,12 @@ class SandboxPage(QWidget):
                       _fmt_size(self._overlay_sizes.get(sc.name))]
             for col, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                if col in (3, 6, 7):   # port + the two sizes
+                if _COLUMNS[col][2]:   # right-aligned per the column table
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight
                                           | Qt.AlignmentFlag.AlignVCenter)
+                # A long name or client list still elides at the minimum
+                # window width; the tooltip keeps it readable.
+                item.setToolTip(value)
                 self._table.setItem(row, col, item)
         if 0 <= selected < len(sessions):
             self._table.selectRow(selected)
