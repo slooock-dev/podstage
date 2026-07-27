@@ -15,6 +15,9 @@
 #        gamescope hides its own cursor 3 s after the last use)
 #   PS_POINTER_ACCEL  flat → seat-shim forces flat (1:1) libinput accel on
 #       pointers (desktop-mode default; anything else keeps libinput defaults)
+#   PS_GAMEPAD_DS5  enabled → Sunshine emulates a DualSense (real gyro)
+#       instead of the X360 pad; the host runtime binds /dev for the
+#       hidraw node (experimental)
 #   PS_CURSOR_IDLE_MS  outer-cursor idle-hide timeout in ms (seat-shim;
 #       default 3000 to match gamescope's own hide, 0 disables). gamescope
 #       delegates cursor drawing to labwc and never clears it on its internal
@@ -258,6 +261,13 @@ pkey = $SUN_STATE_DIR/cakey.pem
 file_apps = $SUN_CONF_DIR/apps.json
 log_path = $SUN_CONF_DIR/sunshine.log
 CONF
+    # DualSense emulation (gamepad_ds5 experimental): Sunshine creates a DS5
+    # via /dev/uhid instead of the default X360 pad, so motion-capable
+    # clients get real gyro in the session. The host runtime binds the whole
+    # /dev for this, Steam must reach the dynamically created hidraw node.
+    if [ "${PS_GAMEPAD_DS5:-}" = enabled ]; then
+        echo "gamepad = ds5" >> "$SUN_CONF_DIR/sunshine.conf"
+    fi
     # Profile quality settings: ';'-separated "key = value" pairs appended
     # verbatim (e.g. PS_SUNSHINE_EXTRA="nvenc_preset = 4;nvenc_twopass = full_res").
     if [ -n "${PS_SUNSHINE_EXTRA:-}" ]; then

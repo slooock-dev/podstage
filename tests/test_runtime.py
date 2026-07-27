@@ -204,6 +204,27 @@ def test_start_rejects_missing_extra_mount(tmp_path, monkeypatch):
         runtime.start(opts)
 
 
+def test_full_dev_mount_for_ds5():
+    home = Path("/tmp/home-x")
+    flags = runtime.container_flags(LIBS, home, vendor="nvidia")
+    assert "/dev/input:/dev/input" in flags and "--device" in flags
+    assert "/dev:/dev" not in flags
+    ds5 = runtime.container_flags(LIBS, home, vendor="nvidia", full_dev=True)
+    assert "/dev:/dev" in ds5
+    assert "/dev/input:/dev/input" not in ds5   # covered by the full bind
+    assert "/dev/uinput" not in ds5
+
+
+def test_ds5_env_switches_run_args(tmp_path, monkeypatch):
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "amd")
+    opts = runtime.RuntimeOptions(home_dir=tmp_path,
+                                  env={"PS_GAMEPAD_DS5": "enabled"})
+    args = runtime.podman_run_args(opts, library_paths=[])
+    joined = " ".join(args)
+    assert "/dev:/dev" in joined
+    assert "PS_GAMEPAD_DS5=enabled" in joined
+
+
 def test_overlay_dirs_distinct_per_library_and_sandbox():
     home = Path("/tmp/home-x")
     uppers = {config.overlay_dirs(home, lib)[0] for lib in LIBS}

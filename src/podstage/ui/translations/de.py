@@ -370,6 +370,15 @@ TEXTS: dict[str, str] = {
         "Globale Schalter, gelten ab dem nächsten Session-Start. "
         "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
     "HDR stream": "HDR-Stream",
+    "DualSense pad (gyro)": "DualSense-Pad (Gyro)",
+    "The session pad becomes a DualSense with real gyro for clients "
+    "that send motion data. On a Steam Deck, disable Steam Input for "
+    "Moonlight (trade-off: trackpad-as-mouse). Mounts the host /dev "
+    "into the session container.":
+        "Das Session-Pad wird ein DualSense mit echtem Gyro für Clients, "
+        "die Bewegungsdaten senden. Am Steam Deck dafür Steam Input für "
+        "Moonlight deaktivieren (Trade-off: Trackpad-als-Maus). Mountet "
+        "das Host-/dev in den Session-Container.",
     "gamescope advertises an HDR output and games see DXVK_HDR. Unverified "
     "end to end.":
         "gamescope meldet einen HDR-Output und Spiele sehen DXVK_HDR. "

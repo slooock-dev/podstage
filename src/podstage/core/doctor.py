@@ -273,6 +273,31 @@ def check_uinput() -> CheckResult:
         fix="sudo udevadm trigger --sysname-match=uinput")
 
 
+def check_uhid() -> CheckResult:
+    """The DualSense experimental feature (gamepad_ds5) creates the emulated
+    pad as a kernel HID device through /dev/uhid; without access the feature
+    silently degrades to no pad at all. Only meaningful when enabled."""
+    try:
+        enabled = config.AppConfig.load(config.CONFIG_FILE) \
+            .experimental.get("gamepad_ds5", False)
+    except (OSError, ValueError, TypeError):
+        enabled = False
+    if not enabled:
+        return CheckResult("uhid (DS5)", Status.OK,
+                           "not needed (DualSense feature off)")
+    dev = Path("/dev/uhid")
+    if not dev.exists():
+        return CheckResult("uhid (DS5)", Status.FAIL,
+                           "/dev/uhid missing; DualSense emulation cannot work")
+    if os.access(dev, os.R_OK | os.W_OK):
+        return CheckResult("uhid (DS5)", Status.OK, "/dev/uhid accessible")
+    return CheckResult(
+        "uhid (DS5)", Status.FAIL,
+        "/dev/uhid not accessible; the generated owner rule grants it "
+        "(reinstall the udev rules), or disable the DualSense feature",
+        fix=UDEV_FIX)
+
+
 def check_gpu() -> CheckResult:
     vendor = runtime.gpu_vendor()
     if vendor == "amd":
@@ -337,6 +362,7 @@ ALL_CHECKS = [
     check_cdi,
     check_udev_rules,
     check_uinput,
+    check_uhid,
     check_mdns,
     check_stream_firewall,
     check_avahi,

@@ -100,6 +100,32 @@ def test_stream_firewall_ok_names_custom_base(tmp_path, monkeypatch):
     assert "48989" in res.detail
 
 
+def test_uhid_check_off_and_on(tmp_path, monkeypatch):
+    from podstage import config
+
+    # feature off (no config): informational OK
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "missing.toml")
+    res = doctor.check_uhid()
+    assert res.status is doctor.Status.OK and "off" in res.detail
+    # feature on, /dev/uhid inaccessible: FAIL with the udev fix
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("[experimental]\ngamepad_ds5 = true\n")
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg)
+    monkeypatch.setattr(doctor.os, "access", lambda p, m: False)
+    res = doctor.check_uhid()
+    if res.status is doctor.Status.FAIL:
+        assert "uhid" in res.detail
+    else:  # host without /dev/uhid at all also FAILs; OK impossible here
+        raise AssertionError(res)
+
+
+def test_owner_rule_covers_uhid():
+    from podstage.core import udev
+
+    text = udev.owner_rule_text("someone")
+    assert 'KERNEL=="uhid"' in text and 'OWNER="someone"' in text
+
+
 def test_udev_check_fails_without_owner_rule(tmp_path, monkeypatch):
     from podstage.core import udev
 

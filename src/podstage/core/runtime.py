@@ -111,6 +111,7 @@ _FORWARD_ENV: dict[str, str | None] = {
     "PS_TOUCH_CLICK_MODE": None,
     # Experimental features (config.EXPERIMENTAL_FEATURES), "enabled" each.
     "PS_HDR": None,
+    "PS_GAMEPAD_DS5": None,
     "PS_PERF_METRICS": None,
 }
 
@@ -349,8 +350,9 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     vendor = gpu_vendor()
     args = ["run", "--rm", "--name", CONTAINER_NAME]
     args += ["-it"] if opts.attach else ["-d"]
+    ds5 = _forwarded_env(opts).get("PS_GAMEPAD_DS5") == "enabled"
     args += container_flags(library_paths, opts.home_dir, vendor=vendor,
-                            extra_mounts=opts.extra_mounts)
+                            extra_mounts=opts.extra_mounts, full_dev=ds5)
     args += ["-v", f"{opts.home_dir}:/home/player"]
     for key, val in container_env(opts, library_paths, vendor=vendor).items():
         args += ["-e", f"{key}={val}"]
@@ -378,9 +380,18 @@ def extra_mount_paths(extra_mounts: list[str]) -> tuple[list[Path], list[Path]]:
 
 def container_flags(library_paths: list[Path], home_dir: Path,
                     vendor: str | None = None,
-                    extra_mounts: list[str] | None = None) -> list[str]:
+                    extra_mounts: list[str] | None = None,
+                    full_dev: bool = False) -> list[str]:
     """Devices, isolation and mounts of the rootless runtime container.
-    Excludes: container name/detach, the client HOME volume, env, image."""
+    Excludes: container name/detach, the client HOME volume, env, image.
+
+    ``full_dev`` (the gamepad_ds5 experimental feature) binds the host /dev
+    wholesale instead of the uinput+input pair: Sunshine's DualSense is a
+    kernel HID device created via /dev/uhid, and Steam Input needs its
+    dynamically appearing /dev/hidraw* node, which cannot be pre-mounted.
+    Access control is unchanged either way: rootless podman has no device
+    cgroup, so device access is plain file permissions under keep-id, the
+    same the user has on the host."""
     vendor = vendor or gpu_vendor()
     if vendor in MESA_VENDORS:
         # AMD/Intel: plain DRI nodes; Mesa Vulkan (RADV/ANV) + VAAPI userspace
@@ -414,8 +425,13 @@ def container_flags(library_paths: list[Path], home_dir: Path,
         # and in-game/Steam clocks are off for non-UTC hosts.
         "--tz", "local",
         "--shm-size=1g",
-        "--device", "/dev/uinput",
-        "-v", "/dev/input:/dev/input",
+    ]
+    if full_dev:
+        args += ["-v", "/dev:/dev"]
+    else:
+        args += ["--device", "/dev/uinput",
+                 "-v", "/dev/input:/dev/input"]
+    args += [
         # seatd binds /run/seatd.sock unconditionally → /run must be writable;
         # libinput needs /run/udev for device enumeration (the udev DB is
         # readable through the mount even rootless — only uevents are not).

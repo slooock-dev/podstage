@@ -42,11 +42,17 @@ _GLYPH = {doctor.Status.OK: ("●", "ok"),
 # card build fails loudly on a missing one (gui-smoke catches it).
 _EXPERIMENTAL_LABELS = {
     "hdr": lambda: tr("HDR stream"),
+    "gamepad_ds5": lambda: tr("DualSense pad (gyro)"),
 }
 _EXPERIMENTAL_DETAILS = {
     "hdr": lambda: tr(
         "gamescope advertises an HDR output and games see DXVK_HDR. "
         "Unverified end to end."),
+    "gamepad_ds5": lambda: tr(
+        "The session pad becomes a DualSense with real gyro for clients "
+        "that send motion data. On a Steam Deck, disable Steam Input for "
+        "Moonlight (trade-off: trackpad-as-mouse). Mounts the host /dev "
+        "into the session container."),
 }
 
 

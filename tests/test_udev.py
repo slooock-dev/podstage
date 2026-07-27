@@ -5,7 +5,7 @@ from podstage.core import udev
 
 def test_owner_rule_grants_exactly_the_user():
     text = udev.owner_rule_text(user="alice")
-    assert text.count('OWNER="alice"') == 4
+    assert text.count('OWNER="alice"') == 5  # input x3 + uinput + uhid
     # DAC is purely owner-based — groups don't map through the rootless userns.
     assert "GROUP" not in text
 

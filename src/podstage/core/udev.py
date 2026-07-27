@@ -48,6 +48,10 @@ SUBSYSTEMS=="input", ATTRS{{id/vendor}}=="28de", OWNER="{user}"
 # Sunshine (in the container, as this uid) creates its virtual devices on the
 # REAL /dev/uinput — own it so the rootless container can open it.
 KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", OWNER="{user}"
+# The DualSense feature (gamepad_ds5) additionally creates a kernel HID
+# device through /dev/uhid; some distros (Bazzite) already grant the seated
+# user via ACL, this covers the rest.
+KERNEL=="uhid", SUBSYSTEM=="misc", OPTIONS+="static_node=uhid", OWNER="{user}"
 """
 
 

@@ -365,8 +365,10 @@ session.
 
 Planned for 0.3:
 
-- Optional DualSense emulation (experimental setting): real gyro in the
-  session instead of the default Xbox pad, for clients that send motion data.
+- Verify the optional DualSense emulation end to end (landed as an
+  experimental setting: real gyro in the session instead of the default
+  Xbox pad, for clients that send motion data; needs a motion-capable
+  client with Steam Input disabled).
 
 
 ## Development
