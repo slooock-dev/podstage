@@ -99,8 +99,8 @@ _COMMON_ENV: dict[str, str | None] = {
     "PS_TOUCH_CLICK_MODE": None,
     "PS_PERF_METRICS": None,
     # In-container thumbnail loop (both entrypoints default to enabled, every
-    # 10s). The capture differs per backend — wf-recorder on labwc for
-    # Sunshine, a gamescope screenshot for moonshine — but the setting, the
+    # 10s). The capture differs per backend (wf-recorder on labwc for
+    # Sunshine, a gamescope screenshot for moonshine), but the setting, the
     # interval and the file the GUI reads do not.
     "PS_THUMBNAIL": None,
     "PS_THUMBNAIL_INTERVAL": None,

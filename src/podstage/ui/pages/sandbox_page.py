@@ -239,7 +239,7 @@ class ProfileDialog(QDialog):
         if not chosen:
             return
         if Path(chosen) in paths:
-            return  # already on the list — adding it twice is a no-op
+            return  # already on the list, adding it twice is a no-op
         lines.append(f"{chosen}:rw" if self._mount_writable.isChecked() else chosen)
         self._mounts.setPlainText("\n".join(lines))
 

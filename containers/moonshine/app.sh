@@ -26,9 +26,9 @@ W=${WH%x*}; H=${WH#*x}
 # MOONSHINE_CLIENT_*; gamescope has to be sized to match, or the client gets
 # the profile canvas scaled into its own (a 1280x800 Big Picture blown up to a
 # 1080p client, letterboxed at the wrong aspect). The profile resolution stays
-# the fallback, and PS_DYNAMIC_RES=disabled pins it — same meaning the setting
-# has on the Sunshine pipeline, except moonshine re-sizes on every reconnect
-# instead of locking until the container restarts.
+# the fallback, and PS_DYNAMIC_RES=disabled pins it. Same meaning the setting
+# has on the Sunshine pipeline, except that moonshine re-sizes on every
+# reconnect instead of locking until the container restarts.
 is_num() { case ${1:-} in "" | *[!0-9]*) return 1 ;; *) return 0 ;; esac; }
 if [ "${PS_DYNAMIC_RES:-enabled}" != disabled ] &&
     is_num "${MOONSHINE_CLIENT_WIDTH:-}" && is_num "${MOONSHINE_CLIENT_HEIGHT:-}"; then
