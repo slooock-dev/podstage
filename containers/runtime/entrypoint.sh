@@ -113,6 +113,23 @@ start_dbus() {
     for _ in $(seq 1 30); do [ -S "$XDG_RUNTIME_DIR/bus" ] && break; sleep 0.1; done
 }
 
+# --- stub SYSTEM bus: unblock gamepadui's network gate ---------------------
+# A logged-out gamepadui waits forever on "Waiting for network" when there is
+# NO system bus at all: its NetworkManager client cannot even connect, and
+# the login screen never appears (with a bus but no NM service it moves on
+# after seconds; steam-for-linux #9966). A rootless container cannot run a
+# real system bus, but an empty session-type bus at the system socket path
+# satisfies the client and Steam falls back to its own connectivity test.
+start_system_bus_stub() {
+    command -v dbus-daemon >/dev/null || return 0
+    [ -S /run/dbus/system_bus_socket ] && return 0
+    mkdir -p /run/dbus 2>/dev/null || return 0
+    log "starting stub system D-Bus (gamepadui network gate)"
+    dbus-daemon --session --address=unix:path=/run/dbus/system_bus_socket \
+        --nofork --nopidfile --syslog-only >/dev/null 2>&1 &
+    for _ in $(seq 1 20); do [ -S /run/dbus/system_bus_socket ] && break; sleep 0.1; done
+}
+
 # --- input: seatd session for labwc's libinput backend ---------------------
 # Sunshine injects Moonlight input as virtual evdev devices (via the real
 # /dev/uinput, passed in by the host runtime); labwc picks them up from
@@ -265,6 +282,7 @@ fi
 rm -f "$HOME/.cache/podstage/client-mode"   # stale = from a previous session
 
 start_dbus
+start_system_bus_stub
 start_pipewire
 start_seatd
 
