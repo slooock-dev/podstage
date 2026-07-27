@@ -358,14 +358,13 @@ the NVIDIA CDI spec) are kept unless `--all`, since other software uses them too
 Landed on the 0.3 branch: labwc replaces the cage kiosk as the session
 compositor, the streamed first login (`session login` / the GUI's "Streamed
 login": Big Picture sign-in over the stream, QR code included), per-profile
-non-Steam mounts, and the doctor covers custom-port firewall rules. A
-desktop mode for playing was tried and cut; podstage stays focused on
-orchestrating the sandboxed Big Picture session.
+non-Steam mounts, the streamed cursor hides when idle, and the doctor
+covers custom-port firewall rules. A desktop mode for playing was tried and
+cut; podstage stays focused on orchestrating the sandboxed Big Picture
+session.
 
 Planned for 0.3:
 
-- Hide the streamed cursor when idle (the compositor's cursor has no
-  idle-hide yet).
 - Optional DualSense emulation (experimental setting): real gyro in the
   session instead of the default Xbox pad, for clients that send motion data.
 

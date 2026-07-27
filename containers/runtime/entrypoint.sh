@@ -15,6 +15,10 @@
 #        gamescope hides its own cursor 3 s after the last use)
 #   PS_POINTER_ACCEL  flat → seat-shim forces flat (1:1) libinput accel on
 #       pointers (desktop-mode default; anything else keeps libinput defaults)
+#   PS_CURSOR_IDLE_MS  outer-cursor idle-hide timeout in ms (seat-shim;
+#       default 3000 to match gamescope's own hide, 0 disables). gamescope
+#       delegates cursor drawing to labwc and never clears it on its internal
+#       idle-hide, so the shim hides and restores the outer image itself.
 #   PS_SUNSHINE_PORT  base port                                    (default 47989)
 #   PS_WEB_USER / PS_WEB_PASS   Sunshine web-manager login
 #       (normally passed in by the host runtime; unset PS_WEB_PASS falls back

@@ -35,6 +35,7 @@
 #include <string.h>
 #include <sys/eventfd.h>
 #include <sys/inotify.h>
+#include <time.h>
 #include <unistd.h>
 
 const char *libseat_seat_name(void *seat) {
@@ -228,21 +229,122 @@ static int show_cursor(void) {
     return v && v[0] && v[0] != '0';
 }
 
+/* ---- cursor idle-hide ----------------------------------------------------
+ * gamescope hides its own cursor after idle (-C 3000), but in the nested
+ * setup it DELEGATES cursor drawing to the outer compositor via
+ * wl_pointer.set_cursor and never clears that image on its internal hide:
+ * labwc keeps rendering the last arrow forever, burned into the stream.
+ * Verified by comparing the wlr capture (arrow persists) against gamescope's
+ * own screenshot (no cursor) after idle. So the shim hides it: remember the
+ * last cursor image the compositor set, track pointer activity in
+ * wlr_cursor_move/warp_absolute, clear the image once idle (piggybacked on
+ * wl_display_flush_clients, which runs on the compositor thread), and replay
+ * the remembered image on the next motion. PS_CURSOR_IDLE_MS overrides the
+ * timeout (default 3000, matching gamescope; 0 disables). Only active with
+ * PS_SHOW_CURSOR, the cursor is blanked entirely otherwise. */
+enum { CUR_NONE, CUR_XCURSOR, CUR_BUFFER, CUR_SURFACE };
+static struct {
+    void *cursor;             /* labwc's wlr_cursor */
+    int kind;                 /* last image set: CUR_* */
+    void *a;                  /* manager / buffer / surface */
+    char name[64];            /* xcursor name */
+    int32_t hx, hy;
+    float scale;
+    uint64_t last_activity_ms;
+    int hidden;
+} CI;
+
+static uint64_t ci_now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)(ts.tv_nsec / 1000000);
+}
+
+static uint64_t ci_timeout_ms(void) {
+    const char *v = getenv("PS_CURSOR_IDLE_MS");
+    if (!v || !v[0])
+        return 3000;
+    return (uint64_t)strtoul(v, NULL, 10);
+}
+
+static void ci_replay(void) {
+    if (CI.kind == CUR_XCURSOR) {
+        void (*real)(void *, void *, const char *) = fu_real("wlr_cursor_set_xcursor");
+        if (real) real(CI.cursor, CI.a, CI.name);
+    } else if (CI.kind == CUR_BUFFER) {
+        void (*real)(void *, void *, int32_t, int32_t, float) = fu_real("wlr_cursor_set_buffer");
+        if (real) real(CI.cursor, CI.a, CI.hx, CI.hy, CI.scale);
+    } else if (CI.kind == CUR_SURFACE) {
+        void (*real)(void *, void *, int32_t, int32_t) = fu_real("wlr_cursor_set_surface");
+        if (real) real(CI.cursor, CI.a, CI.hx, CI.hy);
+    }
+    CI.hidden = 0;
+}
+
+static void ci_activity(void *cur) {
+    if (cur)
+        CI.cursor = cur;
+    CI.last_activity_ms = ci_now_ms();
+    if (CI.hidden)
+        ci_replay();
+}
+
+void wlr_cursor_move(void *cur, void *dev, double dx, double dy) {
+    void (*real)(void *, void *, double, double) = fu_real("wlr_cursor_move");
+    if (show_cursor())
+        ci_activity(cur);
+    if (real) real(cur, dev, dx, dy);
+}
+
+void wlr_cursor_warp_absolute(void *cur, void *dev, double x, double y) {
+    void (*real)(void *, void *, double, double) = fu_real("wlr_cursor_warp_absolute");
+    if (show_cursor())
+        ci_activity(cur);
+    if (real) real(cur, dev, x, y);
+}
+
+/* Runs every compositor event-loop turn (clients keep the loop busy), so it
+ * doubles as the idle timer without touching wlroots from a foreign thread. */
+void wl_display_flush_clients(void *display) {
+    void (*real)(void *) = fu_real("wl_display_flush_clients");
+    uint64_t timeout = ci_timeout_ms();
+    if (show_cursor() && timeout && !CI.hidden && CI.cursor
+            && CI.kind != CUR_NONE
+            && ci_now_ms() - CI.last_activity_ms > timeout) {
+        void (*set_buf)(void *, void *, int32_t, int32_t, float) =
+            fu_real("wlr_cursor_set_buffer");
+        if (set_buf) {
+            set_buf(CI.cursor, NULL, 0, 0, 1.0f);  /* NULL buffer = no image */
+            CI.hidden = 1;
+        }
+    }
+    if (real) real(display);
+}
+
 void wlr_cursor_set_xcursor(void *cur, void *manager, const char *name) {
     if (show_cursor()) {
         void (*real)(void *, void *, const char *) = dlsym(RTLD_NEXT, "wlr_cursor_set_xcursor");
+        CI.cursor = cur; CI.kind = CUR_XCURSOR; CI.a = manager;
+        snprintf(CI.name, sizeof CI.name, "%s", name ? name : "");
+        CI.hidden = 0;
         if (real) real(cur, manager, name);
     }
 }
 void wlr_cursor_set_buffer(void *cur, void *buffer, int32_t hx, int32_t hy, float scale) {
     if (show_cursor()) {
         void (*real)(void *, void *, int32_t, int32_t, float) = dlsym(RTLD_NEXT, "wlr_cursor_set_buffer");
+        CI.cursor = cur; CI.kind = buffer ? CUR_BUFFER : CUR_NONE; CI.a = buffer;
+        CI.hx = hx; CI.hy = hy; CI.scale = scale;
+        CI.hidden = 0;
         if (real) real(cur, buffer, hx, hy, scale);
     }
 }
 void wlr_cursor_set_surface(void *cur, void *surface, int32_t hx, int32_t hy) {
     if (show_cursor()) {
         void (*real)(void *, void *, int32_t, int32_t) = dlsym(RTLD_NEXT, "wlr_cursor_set_surface");
+        CI.cursor = cur; CI.kind = surface ? CUR_SURFACE : CUR_NONE; CI.a = surface;
+        CI.hx = hx; CI.hy = hy;
+        CI.hidden = 0;
         if (real) real(cur, surface, hx, hy);
     }
 }
