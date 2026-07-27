@@ -175,8 +175,38 @@ The missing config API is the one regression for the GUI: quality/encoder
 changes mean rewriting `config.toml` and restarting the container, instead of
 `sunshine_api.set_options` + `/api/restart`.
 
-## Not verified here
+## Deck E2E (2026-07-27)
 
-A real Moonlight connect — pointer delivery to the nested gamescope surface,
-gamepad through inputtino, image quality, latency under load. See the Deck steps
-in the spike summary.
+Real Moonlight client on a Steam Deck, `PS_MS_PORT=47989`, server mode.
+
+Works:
+
+* Discovery, pairing (`spike-pair.sh`), connect.
+* Steam login through the streamed Big Picture session.
+* **Controller input** end to end — inputtino's gamepad path needs no
+  equivalent of our uinput/udev plumbing.
+
+Open, and the reason this is not a drop-in replacement for the Sunshine path:
+
+* **Big Picture is not fullscreen and carries a window bar at the top.** Not a
+  resolution mismatch: the compositor came up at the client's 1280x800
+  (`Compositor started: 1280x800 @ 60Hz`), `ms-app.sh` sized gamescope to the
+  same, and gamescope's own buffer is a correct fullscreen 1280x800 with the
+  Steam window at 1280x800 inside it. The geometry therefore breaks on
+  moonshine's compositing/presentation side, not in our gamescope invocation.
+  Worth checking next: whether a second toplevel (Steam helper windows,
+  xdg-desktop-portal) gets mapped on moonshine's own XWayland and composited
+  alongside gamescope's surface, and what `reevaluate_focus` picks.
+* **Mouse input and cursor still need solving.** The structural argument above
+  only rules out the specific labwc failure mode (seat POINTER capability
+  dropping and the lost `wl_pointer.enter`); it does not mean the pointer path
+  is finished. Same class of work as the seat-shim/keeper effort on the
+  Sunshine path, different cause.
+* **Focus nudging is needed here too.** The production
+  `podstage-focus-nudge` exists because Big Picture loses gamepad navigation
+  when gamescope hands focus back after a game exits; moonshine's own
+  `reevaluate_focus` does not remove the need.
+
+So the encode and transport side of moonshine is ready and the input plumbing we
+built for Sunshine largely falls away, but the window-management and pointer
+work does not — it reappears in a different form.
