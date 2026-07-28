@@ -3,6 +3,11 @@
 Thanks for your interest! podstage is early and the architecture is still
 solidifying; issues and design discussion are especially welcome.
 
+podstage is developed with AI coding assistants under human direction. Changes
+are reviewed, tested and verified on real hardware before they land; what could
+not be verified is marked as such in the CHANGELOG. Contributions are held to
+the same bar, whatever tooling produced them.
+
 ## Development setup
 
 ```bash
