@@ -1,4 +1,4 @@
-/* LD_PRELOAD shim for labwc (wlroots): four jobs, all compositor-only.
+/* LD_PRELOAD shim for labwc (wlroots): five jobs, all compositor-only.
  *
  * 1. Seat name — report the STREAMING seat instead of seatd's hardcoded
  *    "seat0". wlroots passes libseat_seat_name() to
@@ -22,8 +22,20 @@
  *    udev_monitor_receive_device() resolves each new eventN to a REAL
  *    udev_device via the visible DB. Gated by PS_FAKE_UDEV (the host runtime
  *    always sets it); without the env the real netlink monitor is untouched.
- *    This is what lets the container run rootless — the sole reason it needed
+ *    This is what lets the container run rootless: the sole reason it needed
  *    root was uevent delivery.
+ *
+ * 5. Cursor idle-hide (only with PS_SHOW_CURSOR, since the cursor is blanked
+ *    entirely otherwise): gamescope delegates cursor drawing to the outer
+ *    compositor and never clears the image when it hides its own, so labwc
+ *    keeps rendering the last arrow into the capture. The shim remembers the
+ *    image, tracks pointer motion and clears it after PS_CURSOR_IDLE_MS
+ *    (default 3000, matching gamescope). Details at that section below.
+ *
+ * Logging: hotplug and delivery each print one line to stderr, on purpose and
+ * ungated. They fire per device event rather than continuously, and they are
+ * the only signal that a device was seen but never attached, which is the
+ * failure this file exists to prevent.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -69,12 +81,12 @@ static struct {
 } FU = { .inotify_fd = -1, .event_fd = -1, .lock = PTHREAD_MUTEX_INITIALIZER };
 
 /* Fake ONLY the monitor that filters for the "input" subsystem (libinput's).
- * wlroots' session creates a SECOND udev monitor (DRM hotplug); faking every
- * monitor handed both the same eventfd, so each new-device token woke two
- * consumers and whichever read first popped the queue. Input devices randomly
- * delivered to the session monitor were checked against DRM, unref'd, and
- * LOST forever: that is how a session start with Sunshine's device burst
- * ended up with the absolute mouse (and pen) never attached to labwc. */
+ * wlroots' session creates a SECOND udev monitor for DRM hotplug, and faking
+ * every monitor hands both the same eventfd: every new-device token then wakes
+ * two consumers, and whichever reads first pops the queue. An input device
+ * that lands on the session monitor is checked against DRM, unref'd and lost
+ * for good, which under Sunshine's device burst at session start costs the
+ * absolute mouse and the pen their attachment to labwc. */
 int udev_monitor_filter_add_match_subsystem_devtype(void *monitor,
                                                     const char *subsystem,
                                                     const char *devtype) {

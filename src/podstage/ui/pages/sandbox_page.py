@@ -628,9 +628,9 @@ class SandboxPage(QWidget):
     def _on_sizes_done(self, ok: bool, _msg: str) -> None:
         """Fill in the two size cells the background du just measured.
 
-        By key, never by a literal index: this ran after the table was already
-        rendered, so a wrong index here silently overwrote a neighbouring
-        column rather than failing.
+        By key, never by a literal index. This writes into an already rendered
+        table, so a wrong index overwrites a neighbouring column instead of
+        failing, and nothing about the result looks wrong.
         """
         if not ok:
             return

@@ -40,10 +40,10 @@ class _StubCtx(QObject):
 def check_sandbox_columns() -> bool:
     """The background du fills two cells of an already-rendered row.
 
-    It used to address them by literal index, so inserting a column made it
-    write the sandbox size over the pairings. Nothing about the rendered
-    frame shows that, hence this check: drive the callback and assert only
-    the size cells moved.
+    A cell addressed by literal index writes the sandbox size over the
+    pairings as soon as a column is inserted, and the rendered frame looks
+    perfectly fine either way. So drive the callback and assert that only the
+    size cells moved.
     """
     cfg = config.AppConfig(sessions=[
         config.SessionConfig(name="alpha", backend="sunshine"),
@@ -121,11 +121,11 @@ def check_stepper_arrows(win) -> bool:
 
 
 def check_session_card_per_backend(win) -> bool:
-    """Both backends now run a preview loop, and both report a render size.
+    """Both backends run a preview loop, and both report a render size.
 
-    The card used to grey itself out and the resolution row used to claim
-    "locked until the session restarts" for every backend. A rendered frame
-    shows one profile at a time, so assert the per-backend state directly.
+    Neither the greyed-out card nor a resolution row claiming "locked until
+    the session restarts" is correct for both. A rendered frame only ever
+    shows one profile, so assert the per-backend state directly.
     """
     page = win._session_page
     original = page._profile
@@ -198,12 +198,12 @@ def check_backend_switch(win) -> bool:
 def check_load_card_is_host_wide(win) -> bool:
     """The Load card reads whole-machine numbers, unscaled.
 
-    The meters used to take the container cgroup's CPU, which counts 100% per
-    core and so had to be divided by the core count, and they came off a
-    snapshot field that no longer exists. Renaming that field would fail here
-    at runtime and nowhere else: pytest cannot import this module, and a
-    rendered frame shows a card that simply reads "—", exactly like a machine
-    that reports nothing. So drive both states.
+    Two ways this breaks without anything noticing. A cgroup CPU value counts
+    100% per core and has to be divided by the core count, a host one does
+    not, and both look plausible on the bar. And renaming the snapshot field
+    fails here at runtime and nowhere else, since pytest cannot import this
+    module. Either way the card just reads "—", exactly like a machine that
+    reports nothing, so drive both states.
     """
     page = win._session_page
     snap = monitor.Snapshot(

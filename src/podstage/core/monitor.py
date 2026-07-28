@@ -223,12 +223,11 @@ def _intel_gpu_stats() -> GpuStats | None:
 
 # -- host CPU / RAM ---------------------------------------------------------
 #
-# Whole machine, not the session's cgroup. Two reasons. It is the number that
-# answers the question the panel is there for, namely whether this box still
-# has room to encode and stream, and the desktop's own load counts towards
-# that. And it is backend-independent: the cgroup was located through the
-# labwc command line, which does not exist on the moonshine backend, so both
-# meters simply stayed empty there.
+# Whole machine, not the session's cgroup. Two reasons. It answers the question
+# the panel is there for, namely whether this box still has room to encode and
+# stream, and the desktop's own load counts towards that. And it needs nothing
+# from the container, so it works on both backends: locating the cgroup means
+# finding the session compositor, and moonshine runs none.
 
 def _proc_stat_cpu() -> tuple[int, int] | None:
     """``(busy, total)`` jiffies from the aggregate ``cpu`` line."""

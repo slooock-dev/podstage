@@ -73,7 +73,7 @@ RUN pacman -Sy --noconfirm dbus && pacman -Scc --noconfirm
 
 # Capture + AMD/Intel userspace (separate layer, keeps the big layer cached):
 #  * wf-recorder + ffmpeg — thumbnail loop (entrypoint) and headless frame
-#    verification, previously installed ad hoc via podman exec.
+#    verification.
 #  * RADV Vulkan ICDs + Mesa VAAPI drivers — the AMD GPU path (host NVIDIA
 #    userspace comes via CDI instead; Mesa has no host-version coupling).
 #  * ANV Vulkan ICDs + iHD VAAPI driver (Broadwell+): the Intel GPU path.
@@ -134,7 +134,7 @@ RUN pacman -S --noconfirm --needed gcc && \
     pacman -Rns --noconfirm gcc && pacman -Scc --noconfirm
 
 # Live-session diagnosis toolbox (Deck input chain, window geometry):
-# X11 pointer/window inspection previously installed ad hoc via podman exec.
+# X11 pointer/window inspection inside a running session.
 RUN pacman -Sy --noconfirm --needed xdotool xorg-xwininfo xorg-xprop && \
     pacman -Scc --noconfirm
 

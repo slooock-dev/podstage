@@ -47,26 +47,19 @@ def ports(base: int) -> dict[str, int]:
     return {name: base + off for name, off in PORT_OFFSETS.items()}
 
 
-# An underscore in the announced name makes moonlight-qt drop the session.
-# Everything below is measured, not assumed, because the failure is completely
-# silent: the service is announced correctly, the client queries, receives PTR,
-# SRV, TXT and A in one packet within 0.1 s, caches it, and then lists no host.
-# Neither side logs anything, so the session just looks absent.
+# An underscore in the announced name makes moonlight-qt drop the session, and
+# it does so silently at every layer: the service is announced correctly, the
+# client queries, receives PTR, SRV, TXT and A in one packet within 0.1 s,
+# caches them, and lists no host. Nothing on either side logs a word, so the
+# session simply looks absent. moonlight-android is NOT affected, it resolves
+# the SRV explicitly, so a phone that finds the session proves nothing about
+# the desktop clients.
 #
-# A/B/A against one running server, one UUID, one port, one SRV target, with
-# the client's host list emptied before each run (an entry that merely comes
-# back online is indistinguishable from a fresh find, which cost us hours):
-#   "podstagelan"    listed after 10 s
-#   "podstage_lan"   never listed
-#   "podstagelan2"   listed after 10 s
-# Reproduced across three devices and thirteen runs. moonlight-android is NOT
-# affected (it resolves the SRV explicitly), so a phone finding the session
-# says nothing about the desktop clients.
-#
-# Underscores are what a profile name plausibly carries ("sandbox_steam"), so
-# this cannot be left to the separator alone. The kept set is deliberately
-# narrow: the failure mode is silent and a plainer label costs nothing.
-# `isalnum` keeps non-ASCII letters, so "Wohnzimmer-Süd" survives.
+# A profile name plausibly carries an underscore ("sandbox_steam"), so a safe
+# separator is not enough, the whole name has to pass through here. The kept
+# set is deliberately narrow: the failure mode is invisible and a plainer
+# label costs nothing. `isalnum` keeps non-ASCII letters, so "Wohnzimmer-Süd"
+# survives. Established by A/B/A measurement, see the commit that added this.
 _NAME_KEEP = "-"
 
 

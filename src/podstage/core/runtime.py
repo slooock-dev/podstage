@@ -665,14 +665,13 @@ def build_image(image: str = "", backend: str = backends.DEFAULT, *,
 # -- mDNS discovery ---------------------------------------------------------
 
 # Host name the announced service points at, instead of the machine's own.
-# avahi publishes the machine name on every interface it has, so on the box
-# running podstage it also carries 127.0.0.1 (the `lo` announcement) and a
-# scope-less link-local IPv6. A Moonlight client on that same machine then
-# lists no host at all, silently. Measured A/B/A against one running Sunshine
-# session with the client's host list emptied per run: machine name only, not
-# listed; plus a name carrying only the LAN IPv4, listed after 10 s; machine
-# name only again, not listed. Remote clients are unaffected either way, they
-# only ever see the interface-scoped announcement.
+# The machine name resolves to every address avahi knows for it, which on the
+# box running podstage includes 127.0.0.1 (from the `lo` announcement) and a
+# scope-less link-local IPv6 that is not reachable at all. A Moonlight client
+# on that same machine then lists no host, and as silently as the underscore
+# above. Remote clients never see the difference, they only get the
+# interface-scoped announcement. Established by A/B/A measurement, see the
+# commit that added this.
 STREAM_HOSTNAME = "podstage-stream.local"
 
 
