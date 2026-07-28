@@ -4,228 +4,173 @@
 desktop keeps doing its own thing.**
 
 podstage runs each stream as a headless, isolated Steam Big Picture session
-inside a container: its own display, its own audio, its own Steam login and
-settings, but shared game downloads with your main install. The game renders on
-a virtual [gamescope](https://github.com/ValveSoftware/gamescope) display and
-[Sunshine](https://github.com/LizardByte/Sunshine) captures only that session.
-Streaming to the couch never takes over your monitors, your sound, or your
-Steam config.
+inside a rootless container: its own display, audio, Steam login and settings,
+but shared game downloads with your main install. The game renders on a nested
+[gamescope](https://github.com/ValveSoftware/gamescope) display, and a
+streaming backend captures and encodes only that session:
+[Sunshine](https://github.com/LizardByte/Sunshine) or
+[moonshine](https://github.com/hgaiser/moonshine). Your monitors,
+your sound and your Steam config stay untouched.
 
-It is built for one powerful gaming PC that you want to play from the couch, a
-laptop, or a Steam Deck, controller in hand, with Steam's Big Picture UI on the
-screen. A small PyQt6 management GUI on the host does the rest: it walks you
-through the one-time setup, creates and logs in the sandboxed Steam instances,
-then starts, monitors, and tunes the stream. No config files to edit.
+A PyQt6 GUI on the host handles setup, sandboxes and sessions. Every step is
+also a CLI command, including the first Steam login, so a machine without a
+desktop works the same way.
 
 ![podstage streaming Path of Exile 2 to a Steam Deck](docs/screenshots/session.png)
 
-## How it started
+## Why podstage
 
 The idea came on the couch: my gaming PC playing YouTube on the TV while I
-played a game on the Steam Deck, graphics down, fan roaring, FPS fluctuating. The
-powerful machine sat idle while the little one did the hard work.
+played on the Steam Deck, graphics down, fan roaring. The powerful machine sat
+idle while the little one did the work.
 
-## Why not just Steam Remote Play or plain Sunshine?
-
-Both mirror your actual desktop session. Streaming to another room takes over
-the screen you are sitting at, grabs the audio, and shares one set of Steam
-settings and one logged-in account's input. podstage spins up a separate,
+Steam Remote Play and a plain Sunshine install mirror your desktop session:
+streaming takes over the screen you are sitting at, grabs the audio, and shares
+one Steam config and one logged-in account. podstage spins up a separate,
 invisible session instead:
 
-- The desktop keeps its monitors, audio, and Steam settings untouched. You can
-  use it as usual while someone streams a game: YouTube, Plex, music, work.
-  (By default the desktop Steam client closes when a stream starts. You can turn
-  that off in Setup to keep it running, e.g. to stream from a second Steam
-  account while you keep playing on the desktop.)
-- Input from the client stays inside the streaming session and cannot reach
-  the desktop, or the other way around.
-- You can keep several sandboxed Steam instances side by side, each with its
-  own login, Steam settings, Steam Input layout, and per-game graphics
-  presets. Use one per client, one per account, or one per use case; the
-  streaming session picks the sandbox you point it at.
+- The desktop keeps its monitors, audio and Steam settings, and stays usable
+  while someone streams. (Desktop Steam closes on session start by default; a
+  Setup toggle keeps it running, e.g. for a second account.)
+- Input from the client stays inside the session, in both directions.
+- Sandboxes sit side by side, each with its own login, Steam settings, Input
+  layout and per-game presets. One per client, per account, or per use case.
 
-## Related projects
+A headless server like moonshine already isolates the stream. podstage drives
+it as one of its two backends and adds the sandboxed Steam around it: isolated
+login, games shared from your host libraries instead of downloaded twice, plus
+the setup, provisioning and monitoring you would otherwise assemble by hand.
 
-[Games on Whales / Wolf](https://github.com/games-on-whales/wolf) is a
-multi-client streaming platform built on the same isolation idea;
-[Apollo](https://github.com/ClassicOldSong/Apollo) (a Sunshine fork) gives each
-client its own virtual display on Windows;
-[moonshine](https://github.com/hgaiser/moonshine) is a headless Moonlight
-streaming server in Rust with a per-stream compositor; podstage can use it
-instead of Sunshine as a per-profile backend (see
-[Streaming backends](#streaming-backends)). podstage's scope sits above the
-capture/encode layer either way: a complete containerized Steam Big Picture /
-gamescope instance,
-ready to stream, including the sandboxed Steam login itself (done in the
-stream, controller or QR code, no window on the host), one Linux gaming PC,
-one stream at a time, managed from a small host GUI.
+## What podstage does
 
-## Features
+podstage is an orchestrator. It writes no compositor, no encoder and no
+streaming server; it assembles existing ones into one disposable session and
+manages its lifecycle:
 
-- **Headless isolated session.** `labwc` → `gamescope` (Vulkan) → Steam
-  `-gamepadui`, captured by a bundled Sunshine (wlr screencopy, hardware
-  encode via NVENC or VAAPI). No window on the host, no DRM output.
-- **Two streaming backends, per profile.** Sunshine is the default and runs on
-  every supported GPU. [moonshine](https://github.com/hgaiser/moonshine)
-  replaces compositor, capture and server with one process and encodes through
-  Vulkan Video, which drops the whole labwc input-plumbing layer but needs an
-  NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU. See
-  [Streaming backends](#streaming-backends).
-- **Built for Steam, gamepad first.** The streamed session is Big Picture and
-  Steam Input works natively. Mouse and keyboard streaming is optional (off by
-  default, with in-game pointer lock).
-- **Resolution follows the client.** The session renders at the connecting
-  Moonlight client's resolution and refresh rate: on Sunshine the pipeline
-  launches on the first connect and stays at that mode until the session
-  restarts, on moonshine it re-sizes on every reconnect. Per-profile toggle,
-  on by default.
-- **Shared games, separate prefixes.** Game files are symlinked from your main
-  Steam libraries, so nothing downloads twice, and mounted as read-only
-  overlay lowerdirs, so a session cannot modify host game files. Prefixes,
-  saves and a session's own writes stay in per-sandbox storage.
-- **Sandboxed Steam instances.** Each sandbox is an isolated `$HOME` with its
-  own login, Steam settings and Steam Input layout, set up from the GUI. Keep
-  as many as you like; one streams at a time.
-- **Non-Steam games and launchers.** Mount extra host directories into the
-  session per profile (read-only overlay by default, `:rw` for launchers
-  that update themselves) and start them from Big Picture via non-Steam
-  shortcuts.
-- **Input isolation.** The client's virtual input devices live on a dedicated
-  seat and never touch the desktop, in either direction. That isolates input
-  routing, not malware (see [Security notes](#security-notes)).
-- **Light on the host, not on disk.** No daemons, no system services, nothing
-  running as root; setup installs two udev rules, the only sudo podstage ever
-  needs. Disk is the trade-off: about 2.7 GB for the runtime image, plus each
-  sandbox's own Steam data and overlay writes, where tens of gigabytes are
-  normal. Only the game files are shared instead of duplicated, and where the
-  sandboxes live is configurable.
-- **Management GUI.** One-click setup fixes, sandbox management, live
-  CPU/GPU/VRAM/encoder telemetry plus game FPS from the compositor, a stream
-  preview, pairing, and encoder settings that follow the GPU. English and German, following the system
-  locale (override in Setup or via `PS_LANG`).
+- **builds the runtime image**, the container that carries the whole session
+  stack, so the host installs nothing but podman
+- **creates sandboxes**, one isolated `$HOME` per client or account, with its
+  own Steam login, settings and Input layout
+- **provisions games**, symlinked from your host Steam libraries and mounted
+  read-only, so nothing downloads twice and a session cannot write to host
+  game files
+- **wires the container to the machine**: GPU (CDI or `/dev/dri`), the host's
+  32-bit GL and NGX libraries, input devices and `/dev/uinput`, the ports
+- **starts and supervises the session**: compositor, gamescope, Big Picture,
+  the streaming backend, plus a focus watchdog and a performance probe inside
+  the container
+- **handles what surrounds the stream**: sunshine/Moonlight pairing, mDNS, encoder
+  settings, telemetry, the preview, and the first Steam login over the stream
 
-## Requirements
-
-- Linux with a Wayland desktop. Developed on Bazzite-DX (Fedora-based, KDE
-  Plasma); other modern distros should work.
-- podman
-- A GPU with hardware video encode: NVIDIA (NVENC, via CDI injection), AMD or
-  Intel (both VAAPI, via `/dev/dri`; Intel needs Broadwell+ for the iHD
-  driver). The GUI adapts its encoder controls and telemetry to the detected
-  vendor. NVIDIA has the most testing, AMD is validated on one iGPU, Intel is
-  confirmed by a community report (Arc B580).
-- Steam installed on the host; its libraries are shared into the sandboxes.
-- Python ≥ 3.11 for the CLI/core, PyQt6 ≥ 6.6 for the GUI (`./ui.sh` tries to find a suitable interpreter).
-- A Moonlight client with a gamepad (Steam Deck, laptop, phone with
-  controller); mouse & keyboard work via a Setup-page toggle.
-
-> **Tested configuration.** Developed and verified end-to-end on Bazzite-DX 43
-> (KDE Plasma, Wayland) with an NVIDIA RTX 4080 SUPER, streaming to a Steam
-> Deck. AMD is validated on a Rembrandt iGPU, Intel confirmed by a community
-> report (Arc B580). Other distros and non-KDE compositors are untested (see
-> [Portability](#portability)); reports welcome.
-
-## Quick start
-
-```bash
-git clone https://github.com/slooock-dev/podstage && cd podstage
-python3 -m venv .venv && . .venv/bin/activate
-pip install -e '.[ui]' # core + CLI + management GUI
-
-podstage runtime build
-
-./ui.sh
-```
-
-> Sunshine's web UI is reachable on your LAN. Its login is generated randomly
-> per install (there is no default credential), and streaming requires the
-> Moonlight pairing PIN. See [Security notes](#security-notes).
-
-Then, in the GUI:
-
-1. **Setup**: work top to bottom. Each red/amber check has a fix button;
-   root-gated ones open a pkexec prompt. Build the image, install the two udev
-   rules, open the mDNS firewall port. Everything after setup runs without a
-   password.
-2. **Sandboxes**: create a sandbox profile (name, resolution, port, streaming
-   backend),
-   then click *Start Steam login*. An isolated Steam opens on the desktop, you
-   log in, close it, and the game library is provisioned automatically.
-3. **Session**: pick the client, *Start*, then *Pair* with the PIN Moonlight
-   shows. Connect from Moonlight and play.
-
-Prefer the terminal? `podstage doctor` validates the environment, `podstage
-setup` prints the guided commands, and `podstage runtime start --home
-homes/deck` runs a container directly. See [CLI](#cli).
-
-## Architecture
+Only one session runs at a time, by design. The container is disposable:
+stopping a session tears it down, while the sandbox it used (Steam login,
+settings, saves, prefixes) stays on disk and is what the next session starts
+from.
 
 ```mermaid
 flowchart LR
     subgraph host["Host · Linux · Wayland · NVIDIA / AMD / Intel GPU"]
-        gui["Management GUI (PyQt6)<br/>setup · sandboxes · session · telemetry · logs"]
+        gui["Management GUI (PyQt6) or CLI<br/>setup · sandboxes · session · telemetry · logs"]
         libs[("Shared Steam libraries")]
-        subgraph container["podstage-runtime container · rootless podman"]
-            pipeline["labwc → gamescope (Vulkan) → Steam Big Picture (-gamepadui) → game (Proton)<br/>private PipeWire · isolated $HOME volume"]
-            sunshine["Sunshine · wlr screencopy capture"]
-            pipeline -->|captures| sunshine
+        home[("Sandbox $HOME<br/>login · settings · prefixes")]
+        subgraph container["container · rootless podman"]
+            pipeline["compositor → gamescope (Vulkan) → Steam Big Picture → game (Proton)<br/>private audio"]
+            backend["Streaming backend<br/>Sunshine or moonshine"]
+            pipeline -->|captures| backend
         end
-        gui -->|starts / stops| container
-        libs -.->|symlinked, no re-download| pipeline
+        gui -->|starts · stops · monitors| container
+        libs -.->|symlinked, read-only overlay| pipeline
+        home -.->|mounted| pipeline
     end
-    sunshine -->|encode| moonlight["Moonlight client"]
+    backend -->|encode| moonlight["Moonlight client"]
 ```
 
-- One active session at a time; the runtime enforces that.
-- The client's virtual input devices live on a dedicated seat and stay
-  isolated from the desktop in both directions.
-- The container runs as your user.
-- gamescope plus Big Picture is settled, not a placeholder: Steam forces the
-  gamepad UI under gamescope (not overridable), and gamescope provides the
-  Xwayland environment, fullscreen forcing and resolution scaling that the rest
-  of the pipeline builds on. A desktop-UI session without gamescope exists in
-  the runtime, but only as plumbing for headless Steam login/setup; it is not
-  a supported way to play.
+gamescope plus Big Picture is settled, not a placeholder: Steam forces the
+gamepad UI under gamescope, and gamescope provides the Xwayland environment,
+fullscreen forcing and scaling the rest builds on. A desktop-UI session exists
+in the runtime as a debug path, not as a way to play; the streamed first login
+runs the normal Big Picture pipeline.
 
 What is baked into the image vs. mounted at runtime, the exact run flags, and
-how input hotplug works inside the container is documented in
+how input hotplug works inside the container is in
 [`containers/runtime/README.md`](containers/runtime/README.md).
+
+## Built on
+
+podstage bundles and drives upstream projects; none of them is forked or
+patched. Two small helpers are its own code.
+
+| | Component | Role |
+|---|---|---|
+| Host | [podman](https://podman.io) (rootless) | the sandbox itself: one container per session, running as your user, no daemon, no root |
+| | Python ≥ 3.11 · [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) | CLI, core and the management GUI |
+| | udev rules · avahi | client input pinned to a dedicated seat, and the mDNS announcement for the Sunshine backend |
+| | OverlayFS | host game libraries read-only, per-sandbox writes on top |
+| Container | [gamescope](https://github.com/ValveSoftware/gamescope) | nested Vulkan compositor: Big Picture, fullscreen, resolution and scaling. Same on both backends |
+| | Steam · [Proton](https://github.com/ValveSoftware/Proton) | the game session itself (`-gamepadui`) |
+| | [Sunshine](https://github.com/LizardByte/Sunshine) | default backend: capture, hardware encode (NVENC/VAAPI), GameStream server |
+| | [labwc](https://labwc.github.io) · [PipeWire](https://pipewire.org) | the Wayland output Sunshine captures, and a private audio graph, host audio untouched |
+| | [moonshine](https://github.com/hgaiser/moonshine) | alternative backend: compositor, capture, Vulkan Video encode, mDNS and server in one Rust process, with its own PulseAudio |
+| | `seat-shim.c` · `keeper.c` | podstage's own: pins labwc to the streaming seat and fakes udev hotplug in the rootless namespace, and keeps the pointer capability alive across Sunshine's device churn |
 
 ## Streaming backends
 
 How the picture is composited, captured and encoded is a per-profile choice.
-Everything else (the sandbox, the shared libraries, the provisioning, the GUI)
-is the same either way.
+Everything else stays the same, gamescope included: it renders the session on
+both backends, and the game never sees a difference. What differs is everything
+around it.
+
+```mermaid
+flowchart TB
+    subgraph sun["sunshine · default"]
+        direction TB
+        s1["labwc<br/>headless wlroots compositor"] --> s2["gamescope"] --> s3["Steam Big Picture → game"]
+        s1 -->|wlr-screencopy| s4["Sunshine<br/>capture · NVENC/VAAPI · server"]
+        s4 -->|host avahi| s5(["Moonlight"])
+    end
+    subgraph moon["moonshine"]
+        direction TB
+        m1["moonshine<br/>compositor · capture · Vulkan Video · server"] --> m2["gamescope"] --> m3["Steam Big Picture → game"]
+        m1 -->|built-in mDNS| m5(["Moonlight"])
+    end
+    classDef shared stroke-width:2px
+    class s2,s3,m2,m3 shared
+```
 
 | | `sunshine` (default) | `moonshine` |
 |---|---|---|
-| pipeline | labwc → gamescope → Steam, Sunshine captures via wlr-screencopy | moonshine's own compositor → gamescope → Steam |
 | encode | NVENC / VAAPI | Vulkan Video |
-| GPU | every GPU podstage supports | NVIDIA RTX, AMD RDNA2+, Intel Arc only |
+| GPU | any GPU with NVENC or VAAPI: NVIDIA, AMD, Intel (Broadwell+) | Vulkan video encode: NVIDIA RTX, AMD RDNA2+, Intel Arc |
+| audio | private PipeWire | moonshine's own PulseAudio |
 | discovery | host avahi | built-in mDNS |
 | name in the client | `<profile>-sunshine` | `<profile>-moonshine` |
 | pairing | web UI or CLI, TLS + login | CLI only, plain HTTP, no auth |
 | quality settings | encoder presets in the GUI, applied live | error correction, applied at the next start |
 | keyboard layout | host default | per profile (XKB layout/variant) |
 | mouse & keyboard | per-install toggle | always streamed, no switch |
+| render size | first client's mode, locked until restart | the connecting client's mode, per connect |
 | stream preview in the GUI | wf-recorder on the labwc output | screenshot of the nested gamescope |
-| image | `podstage-runtime` (~2.7 GB) | `podstage-moonshine`, built on top of it |
+| image | `podstage-runtime` (about 3 GB) | `podstage-moonshine`, built on top of it |
 
-moonshine collapses compositor, capture and streaming server into one process,
-which structurally removes the parts of the Sunshine path that were hardest to
-get right: the dedicated seat, the faked udev hotplug, the pointer-capability
-keeper. In exchange it is narrower: the Vulkan video-encode requirement rules
-out every pre-Arc Intel and pre-RDNA2 AMD GPU that streams fine through VAAPI,
-its pairing endpoint has no authentication, and it has no config API, so
-quality changes mean editing the profile and restarting the session.
+**Sunshine** was the initial approach: labwc composites the session, Sunshine
+captures that output through wlr-screencopy and encodes it with NVENC or VAAPI,
+so it runs on anything with a hardware encoder. The cost is the plumbing
+between the parts: a dedicated seat for the client's input devices, faked udev
+hotplug in the rootless namespace, and a pointer capability held up so
+gamescope keeps mouse input. Most of podstage's container work went there.
 
-It also flickers in-game at a high bitrate, briefly and only inside a game.
-Around 10 to 17 Mbit/s streams cleanly on the setup this was measured on, while
-50 flickers on a link that carries Sunshine at 50. The source picture, the
-error correction and a different reading of the requested number are all ruled
-out by measurement; the receiving side has not been read yet. Details and the
-next step are under *Known limits* in
-[`containers/moonshine/README.md`](containers/moonshine/README.md).
+**moonshine** does all of it in one
+process: compositor, capture, Vulkan Video encode, mDNS and GameStream server,
+written in Rust (BSD-2-Clause) around the same idea podstage is built on. Steam
+and gamescope sit on top unchanged, but the input layer below disappears,
+because that compositor never opens an evdev device. At a high bitrate the
+picture can flicker briefly in-game, at least on my machine; lowering it helps,
+and the cause is still being investigated (see
+[`containers/moonshine/README.md`](containers/moonshine/README.md)).
+
+Both exist because neither is strictly better: Sunshine reaches every machine,
+moonshine is the simpler path where the GPU allows it. Neither backend is
+forked or patched; both are upstream projects the runtime bundles and drives.
 
 ```bash
 podstage session add tv --backend moonshine
@@ -233,47 +178,82 @@ podstage runtime build --backend moonshine     # once, builds from source
 podstage doctor                                # checks this GPU can encode
 ```
 
-In the GUI it is the same steps: pick the backend in the profile dialog, then
-work the Setup page, where the preflight checks are grouped by host, streaming
-and backend, and each backend group carries its own *Build image* button.
+Both backends are checked on every `podstage doctor` run, whether a profile
+uses them or not, so you can see whether this machine can do moonshine before
+choosing it. The GUI does the same, with a *Build image* button per backend
+group on the Setup page.
 
-Both backends are checked on every run, whether a profile uses them or not, so
-you can see whether this machine can do moonshine at all before choosing it.
-The GPU question is answered by running `vulkaninfo` in the runtime image you
-already have, which takes under a second and needs nothing built. What your
-profiles use only decides how loudly a gap is reported: a backend nobody uses
-states its missing pieces in grey and never turns `podstage doctor` red.
+## Requirements
 
-Details, including the two upstream workarounds the backend needs, are in
-[`containers/moonshine/README.md`](containers/moonshine/README.md).
+- Linux with a Wayland desktop. Developed on Bazzite-DX (Fedora-based, KDE
+  Plasma); other modern distros should work.
+- podman.
+- A GPU with hardware video encode: NVIDIA (NVENC, via CDI injection), AMD or
+  Intel (VAAPI via `/dev/dri`, Broadwell+ on Intel). The moonshine backend
+  wants more, see [Streaming backends](#streaming-backends). The GUI adapts its
+  encoder controls and telemetry to the detected vendor.
+- Steam on the host; its libraries are shared into the sandboxes.
+- Python ≥ 3.11 for the CLI and core. PyQt6 ≥ 6.6 only for the GUI, which is
+  optional.
+- A Moonlight client with a gamepad (Steam Deck, laptop, phone with
+  controller); mouse and keyboard are a toggle.
 
-## Security notes
+> **Tested configuration.** Verified end to end on Bazzite-DX 43 (KDE Plasma,
+> Wayland) with an NVIDIA RTX 4080 SUPER, streaming to a Steam Deck. AMD is
+> validated on a Rembrandt iGPU, Intel confirmed by a community report (Arc
+> B580). Other distros and non-KDE compositors are untested (see
+> [Portability](#portability)); reports welcome.
 
-Everything runs as your user; after the one-time setup, nothing needs root. The
-container is a compatibility sandbox, not a security boundary: it shares your
-network and the real `/dev/uinput`. Your Steam libraries are read-only overlay
-lowerdirs, so a hostile game cannot modify host game files and its writes stay
-in per-sandbox storage. Otherwise treat games with the same trust you would
-on the desktop.
+## Getting started
 
-Sunshine is reachable on your LAN; its web-UI login is random per install and
-streaming needs the Moonlight pairing PIN. The image is built locally
-(digest-pinned base, sha256-verified Sunshine).
+```bash
+git clone https://github.com/slooock-dev/podstage && cd podstage
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e '.[ui]'       # core + CLI + GUI; drop [ui] for CLI only
 
-The moonshine backend is weaker here and it is worth knowing before you pick
-it: its PIN endpoint sits on the stream port over plain HTTP with no
-authentication at all, so anyone who can reach that port while a pairing is
-pending can complete it. Streaming still requires a completed pairing, and
-podstage cannot tighten this, it is how the server works. Treat a moonshine
-session as trusted-LAN only.
+podstage runtime build
+```
 
-## GUI overview
+### With the GUI
+
+`./ui.sh`, then work three pages top to bottom:
+
+1. **Setup**: every red or amber check has a fix button, root-gated ones open a
+   pkexec prompt. Build the image, install the two udev rules, open the mDNS
+   firewall port. Everything after this runs without a password.
+2. **Sandboxes**: create a profile (name, resolution, port, backend), then
+   *Start Steam login*. An isolated Steam opens on the desktop, you log in,
+   close it, and the library is provisioned automatically.
+3. **Session**: pick the sandbox, *Start*, then *Pair* with the PIN Moonlight
+   shows.
+
+### Headless, from the CLI
+
+```bash
+podstage doctor                              # what is missing
+podstage setup                               # prints the (sudo) setup commands
+podstage session add deck --resolution 1280x800@60
+podstage session login deck                  # first Steam login, over the stream
+podstage session start deck
+podstage session pair deck 1234              # PIN from Moonlight
+```
+
+Everything the GUI does is a command, the first Steam login included:
+`session login` boots a fresh sandbox into Big Picture's sign-in over the
+stream (QR code via the Steam Mobile App, or the on-screen keyboard), and Steam
+bootstraps entirely in-container. The one step that still wants a desktop is
+`session setup`, which opens the sandbox's Steam visibly on the host for
+settings Big Picture does not expose.
+
+## Managing a session
+
+### The GUI
 
 | Page | What it does |
 |------|--------------|
-| **Session** | Start/stop the Big Picture stream, the active game, the Performance card (game FPS plus CPU/GPU/VRAM/encoder), a live preview, pairing, and encoder quality settings (NVENC or VAAPI depending on the GPU). The quality settings are Sunshine-only; on a moonshine profile they are replaced by that backend's own. |
-| **Sandboxes** | Sandbox profiles including the streaming backend, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), the visible Steam-login bootstrap. |
-| **Setup** | Doctor checks grouped by host, streaming and backend (a backend group appears once a profile uses it, with its own image build) with one-click fixes, the one-time udev rules install, desktop integration, streaming toggles (mouse & keyboard, preview behavior, performance metrics), experimental features, an on-demand update check, UI language. |
+| **Session** | Start and stop the stream, the running game, the Performance card (game FPS, plus GPU/VRAM/encoder and the whole machine's CPU and RAM), a live preview, pairing, and the backend's quality settings: NVENC or VAAPI presets on Sunshine, error correction on moonshine. |
+| **Sandboxes** | Profiles including the streaming backend, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), and the Steam-login bootstrap. |
+| **Setup** | Doctor checks grouped by host, streaming and backend, each with a one-click fix; the one-time udev rules install, desktop integration, streaming toggles (mouse and keyboard, preview, performance metrics), experimental features, an update check, UI language. |
 | **Logs** | Live journald tail of the runtime container. |
 
 <p align="center">
@@ -281,105 +261,83 @@ session as trusted-LAN only.
   <img src="docs/screenshots/setup.png" width="49%" alt="Setup page">
 </p>
 
-The GUI needs PyQt6; everything else runs under any Python ≥ 3.11. `./ui.sh`
-selects the interpreter (`$PS_QT_PYTHON` if set, otherwise the first of
-`python3`, `python`, Homebrew's `python3` that can `import PyQt6`) and hands
-Qt's plugin path (PyQt6's bundled `Qt6/plugins`, else Homebrew's `qtbase`
-plugins) to the app, which applies it in-process, so child processes keep a
-clean environment. A caller-set `$QT_PLUGIN_PATH` overrides.
+English and German, following the system locale (override in Setup or via
+`PS_LANG`). `./ui.sh` picks the interpreter that can `import PyQt6`
+(`$PS_QT_PYTHON` overrides) and hands Qt's plugin path to the app in-process,
+so child processes keep a clean environment.
 
-## Image quality
+### The CLI
+
+```
+podstage doctor                    # validate the environment
+podstage setup                     # print guided (sudo) setup commands
+podstage runtime build [--backend sunshine|moonshine]
+podstage runtime start|stop|status # drive the container directly (by HOME dir)
+podstage session list
+podstage session add <name> [--resolution R] [--port N] [--backend B] [--apps ID,…] [--fixed-resolution] [--mount PATH[:rw]]…
+podstage session login <name>      # streamed first login (Big Picture sign-in)
+podstage session setup|start|stop|status <name>   # start: --resolution, --app
+podstage session pair <name> <PIN>
+podstage session remove <name> [--data] | clear-overlay <name>
+podstage experimental [enable|disable <feature>]
+podstage config mouse-keyboard [on|off]
+podstage desktop [menu|autostart [on|off]]
+podstage provision <app_id> <session>
+```
+
+`podstage runtime start --home homes/deck --resolution 1280x800@60` is what
+`containers/runtime/run.sh` wraps. Live container logs:
+`journalctl -f CONTAINER_NAME=podstage-runtime`.
+
+## Tuning the picture
 
 The encoder controls on the Session page (NVENC preset, two-pass and VBV on
-NVIDIA; the VAAPI quality profile and rate control otherwise) only decide how well
-the encoder spends the bitrate it is given. The bigger wins are on the client
-and the network:
+NVIDIA, the VAAPI quality profile and rate control otherwise) only decide how
+well the encoder spends the bitrate it is given. The bigger wins are on the
+client and the network:
 
-- **Raise the Moonlight bitrate.** Sunshine streams whatever the client
-  requests, and Moonlight's default of 10–20 Mbps is low. On a LAN, try
-  50–100+ Mbps. A washed-out, blocky picture in motion is almost always too
-  little bitrate.
+- **Raise the Moonlight bitrate.** The session streams what the client asks
+  for, and Moonlight's default of 10-20 Mbps is low. On a LAN, try 50-100+
+  Mbps. A washed-out, blocky picture in motion is almost always too little
+  bitrate.
 - **Prefer HEVC or AV1** over H.264 (Moonlight → Settings → Video codec). At
   the same bitrate HEVC looks noticeably better, AV1 better still. NVIDIA
   encodes all three; AMD and Intel cover H.264 and HEVC, with AV1 on newer
   GPUs.
-- **Resolution follows the client.** Set Moonlight to the client's native
-  resolution. On Sunshine the session renders at whatever connects first and
-  scales later clients with a different resolution; moonshine rebuilds the
+- **Match the client's native resolution.** On Sunshine the session renders at
+  whatever connects first and scales later clients; moonshine rebuilds the
   session per connect, so every client gets its own mode.
 - **Prefer a wired host.** High bitrate over Wi-Fi suffers from packet loss.
   Wiring the host, or a clean 5 GHz link, often helps more than any encoder
   setting.
 
-After that, tune the encoder on the Session page: on NVIDIA, max the preset
-(P7) and two-pass (full res), and raise VBV if fast motion still shows
-artifacts; on AMD and Intel, raise the VAAPI quality profile.
+After that, tune the encoder on the Session page: on NVIDIA max the preset (P7)
+and two-pass (full res), and raise VBV if fast motion still shows artifacts; on
+AMD and Intel raise the VAAPI quality profile.
 
-## CLI
+**Disable shader pre-caching on strong hardware** (sandbox Steam → Settings →
+Downloads). Each sandbox keeps its own shader cache, so turning it off saves
+gigabytes per sandbox and skips the "Processing Vulkan shaders" wait. DXVK and
+VKD3D then compile on the fly, which a strong CPU/GPU handles well; a few
+titles may stutter briefly on first run.
 
-```
-podstage doctor                    # validate the environment
-podstage setup                     # print guided (sudo) setup commands
-podstage runtime build [--backend sunshine|moonshine]   # (re)build a backend image
-podstage runtime start|stop|status # drive the container directly (by HOME dir)
-podstage session list
-podstage session add <name> [--resolution R] [--port N] [--backend B] [--apps ID,…] [--fixed-resolution] [--mount PATH[:rw]]…
-podstage session login <name>        # streamed first login (Big Picture sign-in)
-podstage session setup|start|stop|status <name>   # start: --resolution, --app
-podstage session pair <name> <PIN>    # complete a Moonlight pairing
-podstage session remove <name> [--data] | clear-overlay <name>
-podstage experimental [enable|disable <feature>]
-podstage config mouse-keyboard [on|off]
-podstage desktop [menu|autostart [on|off]]   # menu entry / login autostart for the GUI
-podstage provision <app_id> <session>
-```
+## Security notes
 
-`podstage runtime start --home homes/deck --resolution 1280x800@60` is what
-`containers/runtime/run.sh` wraps.
+**podstage is built for a local, trusted network.** The stream, the pairing
+endpoints and Sunshine's web UI listen on your LAN and belong nowhere else.
+Streaming requires a completed pairing on both backends; moonshine's PIN
+endpoint has no authentication at all, which is upstream's design and nothing
+podstage can tighten.
 
-Everything works headless, including the first Steam login: `session login`
-boots a fresh sandbox into Big Picture's sign-in over the stream (QR code via
-the Steam Mobile App, or on-screen keyboard); Steam bootstraps entirely
-in-container. `session setup` still opens the sandbox Steam visibly on the
-host, for settings Big Picture does not expose.
+Everything runs as your user; after the one-time setup, nothing needs root. The
+container is a compatibility sandbox, not a security boundary: it shares your
+network and the real `/dev/uinput`. Your Steam libraries are read-only overlay
+lowerdirs, so a hostile game cannot modify host game files and its writes stay
+in per-sandbox storage. Otherwise treat games with the same trust you would on
+the desktop.
 
-## Portability
-
-podstage is developed on Fedora/Bazzite, and a few host assumptions reflect
-that:
-
-- The 32-bit NVIDIA GL libraries and the Xwayland GLX module are bind-mounted
-  from the host by absolute path. podstage searches the Fedora/Bazzite/Arch and
-  Debian/Ubuntu locations; a distro that stores them elsewhere would leave
-  Steam's 32-bit client UI without hardware GL. The driver's NGX DLLs
-  (`nvidia/wine`) are mounted the same way, which is what makes DLSS work
-  inside the sandbox.
-- CDI GPU injection expects a spec at `/etc/cdi/nvidia.yaml`
-  (`nvidia-ctk cdi generate`).
-- AMD uses `/dev/dri` and VAAPI instead of CDI/NVENC. The GUI follows suit:
-  the Session page shows VAAPI encoder controls (quality, rate control) instead
-  of NVENC ones, and reads GPU load / VRAM from the amdgpu sysfs
-  (`gpu_busy_percent`, `mem_info_vram_*`) since there is no `nvidia-smi`. This
-  path is validated on one AMD Rembrandt iGPU (streamed to a Steam Deck); it has
-  had less testing than the NVIDIA path.
-- Intel takes the same `/dev/dri` + VAAPI wiring, with ANV Vulkan and the iHD
-  media driver (Broadwell+) baked into the image. A community report confirms
-  it working out of the box on an Arc B580; Intel iGPUs and pre-Broadwell
-  parts are untested so far. GPU load shows up in the GUI when
-  `intel_gpu_top` is installed and the GPU PMU is readable; VRAM stays
-  unavailable (the i915/xe kernel drivers expose no sysfs counters).
-  `PS_GPU_VENDOR=intel` forces the path on hybrid machines.
-
-Patches widening distro and GPU support are very welcome.
-
-## Tips
-
-- **Disable shader pre-caching on strong hardware.** In the sandbox Steam
-  (Settings → Downloads → Shader Pre-Caching): each sandbox keeps its own
-  shader cache, so turning it off saves gigabytes per sandbox and skips the
-  "Processing Vulkan shaders" wait. DXVK/VKD3D then compiles on the fly,
-  which a strong CPU/GPU handles well; a few titles may stutter briefly on
-  first run.
+The images are built locally, from a digest-pinned base, a sha256-verified
+Sunshine package and a pinned moonshine commit.
 
 ## Troubleshooting
 
@@ -398,92 +356,88 @@ Patches widening distro and GPU support are very welcome.
   `sudo udevadm trigger --sysname-match=uinput`.
 - **Custom Proton (GE / CachyOS) hangs at launch** with a "non-Gamescope
   swapchain … hooking has failed" dialog. Nested gamescope fails GE's stricter
-  WSI hook, so the runtime sets `DISABLE_GAMESCOPE_WSI=1` (capture goes through
-  wlr, the bypass isn't needed). `PS_GAMESCOPE_WSI=enabled` opts back in.
+  WSI hook, so the runtime sets `DISABLE_GAMESCOPE_WSI=1`.
+  `PS_GAMESCOPE_WSI=enabled` opts back in.
 - **Moonlight can't auto-discover the host.** Open mDNS in the firewall
   (`firewall-cmd --add-service=mdns`, offered as a Setup fix). Pairing by IP
-  always works.
+  always works. Underscores in a profile name break discovery in some clients.
 - **NVIDIA `vulkan_make_output failed` on start.** The CDI spec doesn't inject
   `/dev/nvidia-modeset`; the runtime adds it explicitly. Regenerating CDI
   (`nvidia-ctk cdi generate`) also fixes it.
-- **No GPU load shown on Intel.** The meter samples `intel_gpu_top`; install
-  it (igt-gpu-tools) and make the GPU PMU readable (CAP_PERFMON or a relaxed
+- **No GPU load shown on Intel.** The meter samples `intel_gpu_top`; install it
+  (igt-gpu-tools) and make the GPU PMU readable (CAP_PERFMON or a relaxed
   `perf_event_paranoid`). VRAM stays unavailable on i915/xe.
 - **The preview stays blank.** On Sunshine the capture only produces a frame
-  while the picture is actually changing; on moonshine there is nothing to
-  capture until a client connects, because the compositor only exists then.
-  Either way the placeholder shows until the session's first frame arrives.
-  After that the last frame stays visible through static scenes (Setup →
-  Streaming turns that off).
+  while the picture is changing; on moonshine there is nothing to capture until
+  a client connects, because the compositor only exists then. The placeholder
+  shows until the first frame arrives.
 - **A game re-downloads the same update in every session.** Sandbox-side
   updates live in per-sandbox overlay storage
   (`~/.local/share/podstage/overlays/`) and are purged once the host updates
   the game past the sandbox. Update games on the host.
 
-Live container logs: `journalctl -f CONTAINER_NAME=podstage-runtime`.
+## Portability
+
+podstage is developed on Fedora/Bazzite, and a few host assumptions reflect
+that:
+
+- The 32-bit NVIDIA GL libraries, the Xwayland GLX module and the driver's NGX
+  DLLs (which is what makes DLSS work in the sandbox) are bind-mounted by
+  absolute path. podstage searches the Fedora/Bazzite/Arch and Debian/Ubuntu
+  locations; a distro that stores them elsewhere leaves Steam's 32-bit client
+  UI without hardware GL.
+- CDI GPU injection expects a spec at `/etc/cdi/nvidia.yaml`
+  (`nvidia-ctk cdi generate`).
+- AMD and Intel take `/dev/dri` and VAAPI instead, with ANV Vulkan and the iHD
+  media driver (Broadwell+) baked into the image. The GUI follows: VAAPI
+  encoder controls instead of NVENC ones, GPU load and VRAM from the amdgpu
+  sysfs, or from `intel_gpu_top` on Intel, where VRAM stays unavailable because
+  i915/xe expose no counters. `PS_GPU_VENDOR=intel` forces the path on hybrid
+  machines.
+- Validation differs per vendor: NVIDIA end to end, AMD on one Rembrandt iGPU
+  streamed to a Steam Deck, Intel by a community report on an Arc B580. Intel
+  iGPUs and pre-Broadwell parts are untested.
+
+Patches widening distro and GPU support are very welcome.
 
 ## Uninstall
 
 `podstage uninstall` (or Setup → *Remove podstage*) detects and removes
-everything setup created: udev rules, firewall ports, the runtime image,
-sandboxes, data, configuration, and the desktop integration (menu entry,
-autostart, icon). Shared pieces (the mDNS firewall service,
-the NVIDIA CDI spec) are kept unless `--all`, since other software uses them too.
+everything setup created: udev rules, firewall ports, the runtime images,
+sandboxes, data, configuration, and the desktop integration. Shared pieces (the
+mDNS firewall service, the NVIDIA CDI spec) are kept unless `--all`, since
+other software uses them too.
 
-## Roadmap
+## Related projects
 
-Landed on the 0.3 branch: labwc replaces the cage kiosk as the session
-compositor, the streamed first login (`session login` / the GUI's "Streamed
-login": Big Picture sign-in over the stream, QR code included), per-profile
-non-Steam mounts, the streamed cursor hides when idle, the doctor
-covers custom-port firewall rules, and moonshine joins Sunshine as a
-per-profile streaming backend. A desktop mode for playing was tried and
-cut; podstage stays focused on orchestrating the sandboxed Big Picture
-session.
+[Games on Whales / Wolf](https://github.com/games-on-whales/wolf) is a
+multi-client streaming platform built on the same isolation idea;
+[Apollo](https://github.com/ClassicOldSong/Apollo) (a Sunshine fork) gives each
+client its own virtual display on Windows. podstage sits above the
+capture/encode layer either way: a complete containerized Steam Big Picture
+session, ready to stream, including the sandboxed Steam login itself (done in
+the stream, controller or QR code, no window on the host), one Linux gaming PC,
+one stream at a time.
 
-Planned for 0.3:
-
-- Verify the optional DualSense emulation end to end (landed as an
-  experimental setting: real gyro in the session instead of the default
-  Xbox pad, for clients that send motion data; needs a motion-capable
-  client with Steam Input disabled).
-- Verify the moonshine backend end to end on real hardware. The spike behind
-  it was Deck-verified, but two things landed after that round: the libdecor
-  workaround for the stuck resize cursor, and the focus watchdog and perf
-  probe now running under that backend too.
-
-After 0.3:
-
-- Let the Sunshine backend announce itself from inside the container, the way
-  moonshine does. Sunshine already carries the publisher (it dlopens
-  `libavahi-client` and holds the `_nvstream._tcp` record) and the runtime
-  image already ships avahi, so this is a matter of running an avahi daemon
-  in the session rather than writing new code. The gain is that the
-  announcement lives and dies with the container instead of with a PID in a
-  state file, and that the host stops needing `avahi-utils`. It is not a fix
-  for the address problem: under `--network host` the container announces on
-  the host's interfaces either way, and that part is already handled host
-  side.
-- Investigate the in-game flicker on moonshine from the receiving end (see
-  *Known limits* in [`containers/moonshine/README.md`](containers/moonshine/README.md)).
-
-Not in 0.3, and worth knowing if you use moonshine: no live quality settings
-(they apply at the next session start) and no way to move the mDNS name off
-the profile name. Its pairing endpoint is unauthenticated, which is upstream's design.
-
+The streaming servers it drives are described under
+[Streaming backends](#streaming-backends).
 
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup, the Qt/Python quirk
 for the GUI, and the test workflow.
 
-## A note on how this was built
-
-podstage was built in collaboration with AI coding assistants, human-in-the-loop
-throughout: every change was directed, reviewed, tested, and verified on real
-hardware by a human maintainer before landing. The AI accelerated the work; the
-engineering decisions, quality assurance, and end-to-end validation are human.
+podstage is written with AI coding assistants. Everything is reviewed and
+verified on real hardware before it lands, and CI runs `ruff` plus the test
+suite on Python 3.11-3.13.
 
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+The software podstage drives keeps its own licenses, and none of it lives in
+this repository: the images fetch and build
+[Sunshine](https://github.com/LizardByte/Sunshine) (GPL-3.0) and
+[moonshine](https://github.com/hgaiser/moonshine) (BSD-2-Clause, © Hans Gaiser)
+on your machine at build time. Both run as separate processes; podstage links
+against neither.
