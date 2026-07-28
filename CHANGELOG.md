@@ -79,6 +79,10 @@ Three things to know:
 - **The backend is switchable on the Session page**, editable while stopped
   and showing the running backend while a session is up. The quality panel
   swaps with it.
+- **The Sandboxes table has a Backend column**, and its widths follow what a
+  column holds: Name and Pairings take the leftover space, the fixed-token
+  columns take what they need. Equal stretching spent the same width on a
+  dash as on a profile name. Cell tooltips carry the full value.
 - **labwc replaces the patched cage kiosk** as the session compositor: popups
   and dialogs render where they belong instead of at 0,0. The generated runner
   became static image scripts, shellcheck'd in CI.
@@ -138,6 +142,9 @@ Three things to know:
 - **The image build is offered whatever backend the profiles use.** An unused
   backend reports its image at INFO, and INFO rows carried no button, so that
   image could not be built from the GUI at all.
+- **The profile dialog accepts the names it can actually save.** Its own regex
+  allowed a leading `-` or `_`, which `config.validate_client_name` then
+  rejected uncaught on save. Both use the same check now.
 - **Clicking empty space leaves the focused field**, which also commits a
   typed value, since fields save on focus loss.
 - **Spin boxes and combo boxes have visible arrows again.** A stylesheet drops
