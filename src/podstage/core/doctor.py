@@ -224,8 +224,7 @@ def check_moonshine_gpu() -> CheckResult:
     if _run(["podman", "image", "exists", runtime.DEFAULT_IMAGE])[0] != 0:
         # Nothing to probe with yet; the runtime image row says so already.
         return CheckResult("moonshine gpu", Status.OK,
-                           "not checked yet, needs the runtime image",
-                           group=name)
+                           "not checked yet, needs the runtime image")
     rc, out = _run(_vulkaninfo_argv(), timeout=120)
     has_queue, codecs = parse_video_encode(out)
     if has_queue and codecs:

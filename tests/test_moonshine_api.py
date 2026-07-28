@@ -7,16 +7,6 @@ import pytest
 
 from podstage.core import moonshine_api
 
-SERVERINFO = (
-    '<?xml version="1.0"?>'
-    '<root status_code="200">'
-    "<hostname>podstage</hostname>"
-    "<PairStatus>1</PairStatus>"
-    "<state>SUNSHINE_SERVER_FREE</state>"
-    "<HttpsPort>47984</HttpsPort>"
-    "</root>"
-)
-
 
 class _Resp(io.BytesIO):
     def __init__(self, body: str, status: int = 200) -> None:
@@ -103,24 +93,3 @@ def test_pair_verified_reports_a_missing_attempt(monkeypatch, tmp_path):
         moonshine_api.pair_verified("1234", tmp_path, port=47989)
 
 
-# -- serverinfo -------------------------------------------------------------
-
-def test_server_info_flattens_the_gamestream_xml(monkeypatch):
-    _stub_urlopen(monkeypatch, body=SERVERINFO)
-    info = moonshine_api.server_info(47989)
-    assert info["PairStatus"] == "1"
-    assert info["HttpsPort"] == "47984"
-    assert info["hostname"] == "podstage"
-
-
-def test_server_info_rejects_a_non_xml_answer(monkeypatch):
-    _stub_urlopen(monkeypatch, body="not xml at all")
-    with pytest.raises(moonshine_api.MoonshineApiError, match="unexpected"):
-        moonshine_api.server_info(47989)
-
-
-def test_is_up_swallows_the_unreachable_case(monkeypatch):
-    _stub_urlopen(monkeypatch, http_error=urllib.error.URLError("down"))
-    assert moonshine_api.is_up(47989) is False
-    _stub_urlopen(monkeypatch, body=SERVERINFO)
-    assert moonshine_api.is_up(47989) is True

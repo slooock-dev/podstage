@@ -27,7 +27,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from . import sandbox
@@ -59,31 +58,6 @@ def _post(path: str, port: int, form: dict[str, str],
         return e.code, e.read().decode(errors="replace")
     except (urllib.error.URLError, OSError, TimeoutError) as e:
         raise MoonshineApiError(f"moonshine unreachable on port {port} ({e})") from e
-
-
-def server_info(port: int, timeout: float = 5.0) -> dict[str, str]:
-    """``GET /serverinfo``: unauthenticated GameStream XML with PairStatus,
-    state, HttpsPort and codec support. Flattened to the root's direct
-    children, which is everything a status widget needs."""
-    try:
-        with urllib.request.urlopen(
-                f"http://localhost:{port}/serverinfo", timeout=timeout) as resp:
-            body = resp.read().decode(errors="replace")
-    except (urllib.error.URLError, OSError, TimeoutError) as e:
-        raise MoonshineApiError(f"moonshine unreachable on port {port} ({e})") from e
-    try:
-        root = ET.fromstring(body)
-    except ET.ParseError as e:
-        raise MoonshineApiError(f"unexpected /serverinfo response: {body[:200]}") from e
-    return {child.tag: (child.text or "") for child in root}
-
-
-def is_up(port: int, timeout: float = 2.0) -> bool:
-    try:
-        server_info(port, timeout=timeout)
-        return True
-    except MoonshineApiError:
-        return False
 
 
 def pair(pin: str, port: int, unique_id: str = MOONLIGHT_CLIENT_ID) -> bool:
