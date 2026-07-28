@@ -6,251 +6,149 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Upgrading from 0.2.4 needs no migration. Profiles, sandboxes, overlay storage
-and existing pairings carry over untouched, and the config file picks up its
-new keys with defaults the first time it is read. Three things are worth
-knowing:
+Upgrading from 0.2.4 needs no migration: profiles, sandboxes, overlay storage
+and pairings carry over, and the config file gains its new keys with defaults.
+Three things to know:
 
 - **Rebuild both images**: `podstage runtime build` and `podstage runtime
-  build --backend moonshine`. The compositor, both entrypoints and the
-  container helpers changed.
-- **Reinstall the udev rules if you want the DualSense feature.** The
-  generated owner rule now grants `/dev/uhid` as well. `podstage doctor` says
-  so, with the fix, as soon as the feature is enabled; nothing else needs it.
-- **The host appears under a different name in Moonlight.** Sunshine announced
-  the fixed string "podstage" for every profile before and now announces
-  `<profile>-sunshine`. Pairings survive the rename, Moonlight matches hosts
-  by their server UUID.
+  build --backend moonshine`.
+- **Reinstall the udev rules for the DualSense feature**: the generated owner
+  rule now grants `/dev/uhid`. `doctor` reports it once the feature is on.
+- **The Sunshine host is listed under a new name**: `<profile>-sunshine`
+  instead of the constant "podstage". Pairings survive, Moonlight matches on
+  the server UUID.
 
 ### Added
 
-- **A second streaming backend: moonshine.** Pick it per profile
-  (`podstage session add <name> --backend moonshine`, or the GUI's profile
-  dialog); Sunshine stays the default.
-  [moonshine](https://github.com/hgaiser/moonshine) is compositor, capture path
-  and GameStream server in one process, so the whole labwc input-plumbing layer
-  (dedicated seat, faked udev hotplug, pointer-capability keeper, host-side
-  mDNS) falls away. gamescope still runs nested, so the focus watchdog, the
-  perf probe and the `touch_click_mode` pin carry over.
-  It is narrower than Sunshine in three ways worth knowing before choosing it:
-  it encodes through Vulkan Video, which rules out every pre-Arc Intel and
-  pre-RDNA2 AMD GPU that streams fine via VAAPI; its pairing endpoint has no
-  authentication; and it has no config API, so quality settings apply at the
-  next session start instead of live. Its own image
-  (`podstage runtime build --backend moonshine`) is built on top of the
-  runtime image and compiles moonshine from source. See
+- **A second streaming backend: moonshine**, per profile (`--backend
+  moonshine`, or the profile dialog). Compositor, capture path and GameStream
+  server in one process, so the labwc input plumbing (dedicated seat, faked
+  udev hotplug, pointer keeper, host mDNS) falls away; gamescope still runs
+  nested. Narrower than Sunshine: Vulkan Video encode only (no pre-Arc Intel,
+  no pre-RDNA2 AMD), an unauthenticated pairing endpoint, and no config API,
+  so quality settings apply at the next session start. Own image, built on
+  the runtime one from source. See
   [`containers/moonshine/README.md`](containers/moonshine/README.md).
-- **The stream preview works on the moonshine backend too.** Its compositor
-  implements no wlr-screencopy, so the Sunshine loop (wf-recorder on the labwc
-  output) has nothing to attach to. The nested gamescope can screenshot its own
-  composited output though, which is the exact picture moonshine encodes, so
-  the preview loop asks it for one every N seconds and drops the frame where
-  the GUI already looks for it. Same setting, same interval, same file; the
-  card is no longer greyed out per backend.
-- **moonshine renders at the connecting client's resolution.** The nested
-  gamescope was pinned to the profile resolution while moonshine sized its own
-  compositor from the client's request, so a client that asked for anything
-  else got the profile canvas scaled into its screen. gamescope now takes the
-  size moonshine hands the application, and the Session card shows it. The
-  per-profile toggle applies to both backends, with the difference that
-  moonshine re-sizes on every reconnect instead of locking the first client's
-  mode until the session restarts.
-- **Two moonshine settings per profile**, both verified against the server
-  rather than guessed (it ignores unknown keys but rejects a wrong type, so a
-  type error is what proves a key is read): forward error correction, its one
-  transport knob, and the streamed session's keyboard layout, which otherwise
-  defaults to `us`. Left untouched, both keep moonshine's own defaults.
-- **The backend-specific parts of the GUI swap with the selected profile.**
-  The Stream quality card shows Sunshine's encoder presets or moonshine's
-  error correction instead of greying one set out, and the profile dialog
-  shows the keyboard fields only for the backend that has them. The Session
-  card's "Backend" row now shows the streaming backend, which is what its
-  label always promised; it used to show the container status string.
-- **`podstage doctor` gates the moonshine backend.** Two checks that only
-  exist when a profile selects it: the image is present and current, and the
-  GPU can actually encode, answered by running moonshine's own health check in
-  a throwaway container and reporting the codecs it finds.
-- **Preflight checks are grouped** by host, streaming and backend, in the
-  order they have to be worked through, and each backend group carries its own
-  image build button on the Setup page. Every backend is checked whether a
-  profile uses it or not, so the answer to "can this machine run moonshine at
-  all" is on screen before the choice is made; the GPU question is answered by
-  `vulkaninfo` in the runtime image, in under a second and with nothing built.
-  What the profiles use decides severity only: a backend nobody uses reports
-  neutrally (a new grey INFO state) and can never turn `podstage doctor` red.
-  The summary above the list counts across every group, so nothing hides
-  behind a heading.
-- **The Setup page follows profile edits.** Changing a sandbox's backend or
-  port on the other page re-runs the checks, instead of showing a stale
-  verdict until the next manual re-check. Only the fields the checks actually
-  read trigger it, so the page's own toggles do not fire a container probe.
-- **Streamed first Steam login.** `podstage session login <name>` and the
-  GUI's *Streamed login* boot a fresh sandbox straight into Big Picture's
-  sign-in over the stream (QR code via the Steam Mobile App, or the on-screen
-  keyboard); Steam bootstraps entirely in-container. The visible host login
-  stays available for settings Big Picture does not expose.
-- **Per-profile extra mounts.** Mount host directories with non-Steam games or
-  launchers into the session (`--mount /path`, `:rw` for launchers that update
-  themselves in place) and start them from Big Picture via non-Steam
-  shortcuts. Container path equals host path, so shortcut paths keep working.
-- **DualSense emulation as an experimental feature (`gamepad_ds5`).** Sunshine
-  emulates a DualSense instead of the Xbox pad: gyro and matching glyphs for a
-  client with a PlayStation controller. Not optional for such a client, since
-  `gamepad = auto` picks that pad anyway and fails without `/dev/uhid`. The
-  runtime binds the host `/dev` while it is on, the udev OWNER rule covers
-  uhid. Steam Deck's own pad also needs Steam Input off for Moonlight (no
-  trackpad-mouse then). Sunshine only; moonshine drives its own gamepads.
-- **Container diagnostics baked into the image** (frame, X11, event-recorder
-  and uinput probes) for debugging a running session.
-- **A folder picker for the extra mounts.** The profile dialog keeps the
-  editable list (that is how an entry is removed or switched), and adds a
-  chooser next to it with a *writable* box that decides whether the picked
-  folder lands as a read-only overlay or as `:rw`. Picking a folder already
-  on the list changes nothing.
+- **Stream preview on moonshine.** Its compositor implements no
+  wlr-screencopy, so the nested gamescope screenshots its own composited
+  output into the same file at the same interval.
+- **moonshine renders at the connecting client's resolution.** gamescope takes
+  the size moonshine hands the application and re-sizes on every reconnect,
+  where Sunshine locks the first client's mode until restart.
+- **Two moonshine settings per profile**: forward error correction and the
+  session keyboard layout (otherwise `us`). Both verified against the server
+  by type error, since it ignores unknown keys but rejects a wrong type.
+  Untouched, both keep moonshine's defaults.
+- **The GUI's backend-specific parts swap with the profile**: encoder presets
+  or error correction in the quality card, keyboard fields only where they
+  exist.
+- **`podstage doctor` gates moonshine**: image present and current, and
+  whether this GPU can Vulkan-encode.
+- **Preflight checks are grouped** by host, streaming and backend, each
+  backend group with its own image build button. Every backend is checked
+  regardless of use, so "can this machine run moonshine" is answered before
+  the choice; use decides severity only, an unused backend reports as grey
+  INFO and never turns `doctor` red. The summary counts across all groups.
+- **The Setup page re-runs its checks after profile edits** the checks read
+  (backend, port), not after its own toggles.
+- **Streamed first Steam login** (`podstage session login`, GUI *Streamed
+  login*): a fresh sandbox boots into Big Picture's sign-in over the stream,
+  QR code included. The visible host login stays for settings Big Picture does
+  not expose.
+- **Per-profile extra mounts** for non-Steam games and launchers (`--mount
+  /path`, `:rw` for launchers that update themselves), started from Big
+  Picture as non-Steam shortcuts. Container path equals host path.
+- **DualSense emulation (`gamepad_ds5`, experimental).** Sunshine emulates a
+  DualSense instead of the Xbox pad: gyro and matching glyphs. Not optional
+  for a PlayStation controller, since `gamepad = auto` picks that pad anyway
+  and fails without `/dev/uhid`; the runtime binds the host `/dev` while it is
+  on. Steam Deck needs Steam Input off for Moonlight, which costs the
+  trackpad-mouse. Sunshine only.
+- **Container diagnostics in the image**: frame, X11, event-recorder and
+  uinput probes.
+- **A folder picker for extra mounts**, with a *writable* box deciding
+  read-only overlay or `:rw`. The editable list stays, that is how an entry is
+  removed.
 
 ### Changed
 
-- `containers/runtime/run.sh` can pick the backend (`PS_BACKEND=moonshine`),
-  which it could not since backends existed, and no longer carries its own
-  copy of the forwarded environment; that list lives in `core/runtime.py`.
-- The two spike harnesses (`containers/spike-moonshine/`, `containers/spike-wm/`)
-  are out of the tree. What they established is in
-  `containers/moonshine/README.md` and in the entries above.
-- **CPU and RAM in the Load card are the whole machine's now**, and with that
-  they work on both backends. They used to be the session cgroup's, located by
-  grepping for the labwc command line, and the moonshine backend does not run
-  labwc, so both meters stayed empty there for the whole session. They come
-  from `/proc/stat` and `/proc/meminfo` instead, which needs nothing from the
-  container. The number also answers the question the card is there for better
-  than the cgroup did: whether this box still has room to encode and stream,
-  and the desktop's own load counts towards that. RAM is `MemTotal` minus
-  `MemAvailable`, so reclaimable cache does not read as used.
-- **The streaming backend is switchable on the Session page.** It was a
-  read-only row there and only editable in the profile dialog on the Sandboxes
-  page, which is a long way round for a switch you flip while comparing the
-  two. The row is a picker now: editable while stopped, and it shows what the
-  container actually runs while a session is up, where switching cannot take
-  effect anyway. The quality panel swaps with it.
-- **labwc replaces the patched cage kiosk as the session compositor.** Popups
-  and dialogs now render where they belong; the previous kiosk drew them at
-  0,0. The generated runner became static image scripts, checked by shellcheck
-  in CI.
-- **Performance metrics graduated from experimental to a stable setting**
-  (game FPS from the compositor, on by default).
-- **Desktop mode is no longer a way to play**, and no longer on any regular
-  path either: the streamed login runs the normal pipeline (Big Picture
-  sign-in) and `podstage setup` opens Steam on the host, so the container's
-  `desktop` mode is now only reachable as a debug path via
-  `podstage runtime start --mode desktop`. podstage orchestrates the sandboxed
-  Big Picture session.
-- `doctor`'s stream-firewall check now covers a profile's custom base port
-  instead of assuming the default block.
+- **The Load card reads the whole machine** (`/proc/stat`, `/proc/meminfo`),
+  which needs nothing from the container and works on both backends; the
+  cgroup was located through labwc, which moonshine does not run. RAM is
+  `MemTotal` minus `MemAvailable`.
+- **The backend is switchable on the Session page**, editable while stopped
+  and showing the running backend while a session is up. The quality panel
+  swaps with it.
+- **labwc replaces the patched cage kiosk** as the session compositor: popups
+  and dialogs render where they belong instead of at 0,0. The generated runner
+  became static image scripts, shellcheck'd in CI.
+- **Performance metrics are a stable setting**, on by default.
+- **Desktop mode is a debug path**, reachable only via `podstage runtime start
+  --mode desktop`: the streamed login runs the pipeline, `podstage setup`
+  opens Steam on the host.
+- `doctor`'s stream-firewall check covers a profile's custom base port.
+- `containers/runtime/run.sh` takes `PS_BACKEND` and no longer keeps its own
+  copy of the forwarded environment.
+- The two spike harnesses are out of the tree.
 
 ### Fixed
 
-- **An underscore in the announced name made the session undiscoverable.** The
-  name a client lists gained a `<backend>` suffix earlier in this cycle, and
-  since it is built from the profile name, every profile with an underscore
-  (`sandbox_steam`) went silent on the desktop clients. The failure gives away
-  nothing at any layer: the service is announced correctly, the client queries,
-  receives PTR, SRV, TXT and A in a single packet within 0.1 s and caches them,
-  and then lists no host, without a line in the client log or the session log.
-  Measured A/B/A against one running server, one UUID, one port and one SRV
-  target, with the client's host list emptied before each run, since an entry
-  that merely comes back online is indistinguishable from a fresh find:
-  `podstagelan` listed after 10 s, `podstage_lan` never, `podstagelan2` after
-  10 s. Reproduced over thirteen runs on three devices. moonlight-android is
-  not affected, it resolves the SRV record explicitly, so a phone that finds
-  the session says nothing about the desktop clients. Names now pass through
-  `backends.safe_name`, which keeps letters, digits and `-` and replaces the
-  rest, so neither the separator nor a profile called "Wohnzimmer (TV)" can
-  bring the failure back. The suffix reads `-sunshine` / `-moonshine` in the
-  client now, lower case for both, and the seed profile is `sandbox-steam`
-  instead of `sandbox_steam`, so a fresh install does not start out with a name
-  that has to be rewritten. An existing profile keeps its name; only what goes
-  on the wire is sanitised.
-- **A Moonlight on the podstage machine itself never found the session.** The
-  host publisher let avahi answer with the machine's own name, and that name
-  carries every address avahi knows for it: the LAN IPv4, but on the `lo`
-  announcement also `127.0.0.1`, plus a scope-less link-local IPv6 that is not
-  reachable at all. A client on that same machine then listed no host, as
-  silently as the underscore did. The service now points at its own
-  `podstage-stream.local`, published with only the routable LAN IPv4, and falls
-  back to the machine name when there is no such address. Measured A/B/A
-  against one running Sunshine session with the host list emptied per run:
-  machine name only, never listed; plus an IPv4-only name, listed after 10 s;
-  machine name only again, never listed. Remote clients were never affected,
-  they only ever see the interface-scoped announcement. moonshine already did
-  this right, its own responder announces `<host>-moonshine.local`.
-- **The preview loop no longer fills the session log with errors.** Every
-  thumbnail capture ran `timeout -k 2 2 wf-recorder`, and wf-recorder acts on
-  no TERM while it waits in its wayland loop, so each iteration ended in a
-  SIGKILL and labwc reported that child at ERROR level: one `terminated with
-  signal 9` every 14 seconds, for the whole length of a session. The timeout
-  sends INT first now, which wf-recorder handles by finalizing the file, so a
-  capture that did get a frame ends on its own. The KILL fallback stays for the
-  static-output case, where wlr-screencopy delivers no frame at all and the
-  loop would otherwise hang on its first iteration.
-- **The error-correction box says what "default" is.** It read "moonshine
-  default" with no number, and the value one step away from it is 0, which
-  switches forward error correction off entirely. The safe setting and the most
-  harmful one sat next to each other and read equally harmless. It now shows
-  "moonshine default (20 %)", the number taken from moonshine's own source, and
-  the tooltip says what 0 does. The profile still stores -1 for "leave
-  moonshine's default alone", so an upstream change carries through.
-- **A profile's two backends are two hosts in the client now.** Sunshine
-  announced the fixed string "podstage" for every profile while moonshine
-  announced the bare profile name, so nothing on the client said which backend
-  a host was, even though the two keep separate pairings and a client paired to
-  one is not paired to the other. Both announce `<profile>-<backend>` now,
-  from one place (`Backend.advertised_name`), and the CLI and the pairing
-  dialog name the host to pick. Existing Sunshine pairings survive the rename,
-  Moonlight matches hosts by their server UUID.
-- **The focus watchdog no longer knocks on the host's X server.** It probes
-  `:0`..`:9` for gamescope's display, and with `--network host` the abstract
-  socket namespace is shared, so `:0` reached the host's X server and was
-  rejected once a second ("Authorization required" in the container log). It
-  now only tries displays whose socket exists in the container's own
-  `/tmp/.X11-unix`. Most visible on the moonshine backend, where that wait
-  lasts until the first client connects.
-- **The client's absolute mouse could go missing on some sessions.** The
-  seat-shim faked every udev monitor, so wlroots' DRM monitor swallowed device
-  hotplugs. It now fakes only the input monitor, never drops a device, and logs
-  every hotplug line. Touchscreen control in Big Picture verified on a Steam
-  Deck.
+- **An underscore in the announced name made the session undiscoverable.**
+  moonlight-qt receives PTR, SRV, TXT and A, caches them and lists no host,
+  silently on every layer; moonlight-android is unaffected, it resolves the
+  SRV explicitly. Names pass through `backends.safe_name` (letters, digits and
+  `-`), the suffix reads `-sunshine` / `-moonshine`, and the seed profile is
+  `sandbox-steam`. Existing profiles keep their name, only the wire form is
+  sanitised.
+- **A Moonlight on the podstage machine itself never found the session.**
+  avahi answered with the machine name, which also carries `127.0.0.1` and a
+  scope-less link-local IPv6. The service points at its own
+  `podstage-stream.local` with the LAN IPv4 only, and falls back to the
+  machine name when there is none. Remote clients were never affected.
+- **The preview loop no longer fills the session log with errors.** `timeout`
+  sends INT before KILL, which wf-recorder handles by finalizing the file,
+  instead of one `terminated with signal 9` from labwc every 14 s. The KILL
+  fallback stays for the static-output case, where wlr-screencopy delivers no
+  frame at all.
+- **The error-correction box names its default** ("moonshine default (20 %)").
+  One step below it sits 0, which switches FEC off entirely. The profile still
+  stores -1 for "leave moonshine's default alone".
+- **A profile's two backends are two hosts in the client.** Sunshine announced
+  the constant "podstage" and moonshine the bare profile name, so nothing said
+  which backend a host was, although their pairings are separate. Both
+  announce `<profile>-<backend>` from `Backend.advertised_name`.
+- **The focus watchdog no longer knocks on the host's X server.** With
+  `--network host` the abstract socket namespace is shared, so probing `:0`
+  reached the host's X server and was rejected once a second. It only tries
+  displays whose socket exists in the container's own `/tmp/.X11-unix`.
+- **The client's absolute mouse could go missing.** The seat-shim faked every
+  udev monitor, so wlroots' DRM monitor swallowed input hotplugs. It fakes
+  only the input monitor now and logs every hotplug.
 - **A logged-out Big Picture hung on "Waiting for network".** Its
-  NetworkManager client cannot even connect when there is no system bus at
-  all, so the sign-in screen never appeared. The entrypoint now starts an empty
-  stub bus at the system socket path and Steam falls back to its own
-  connectivity test.
-- **The streamed cursor stayed on screen forever.** gamescope never clears the
+  NetworkManager client cannot connect without a system bus at all; the
+  entrypoint starts an empty stub bus at the system socket path.
+- **The streamed cursor stayed on screen.** gamescope never clears the
   delegated cursor image, so the shim remembers it, hides it after
-  `PS_CURSOR_IDLE_MS` (3 s by default) and restores it on motion.
-- **A changed runtime image left the moonshine image silently outdated.**
-  The moonshine image is built FROM the runtime one, but its source hash only
-  covered its own directory, so a change under `containers/runtime/` never
-  marked it stale. The base hash is now folded in, and building a derived
-  image brings a missing *or stale* base up first: podman layers on whatever
-  the tag points at today, so building on a stale base would stamp a label
-  the image cannot honour.
-- **Clicking empty space now leaves the focused field.** Qt kept the caret in
-  a line edit or spin box until another focusable widget took over, so a field
-  stayed visibly active after clicking away. Values are saved when a field
-  loses focus, so this also commits a typed value instead of leaving it
-  hanging.
-- **Spin boxes and combo boxes have visible arrows again.** Styling a widget
-  through a stylesheet drops Qt's own rendering of its sub-controls, which
-  left the steppers as bare boxes. A stylesheet cannot draw a triangle either
-  (the CSS border trick renders as a filled rectangle here), so the arrows are
-  painted at startup and cached; a cache dir that cannot be written costs the
-  arrows, not the window.
-- **A crashing check no longer blanks the whole report.** One failing check
-  left the Setup page with no rows at all, hiding every other verdict; it is
-  now reported as a failed row of its own. `nvidia-smi` returning success with
-  no output was one way to trigger that.
+  `PS_CURSOR_IDLE_MS` (3 s) and restores it on motion.
+- **A changed runtime image left the moonshine image silently outdated.** Its
+  source hash covered only its own directory; the base hash is folded in now,
+  and building a derived image brings a missing or stale base up first.
+  Documentation under `containers/` is excluded from the hash, so a README fix
+  no longer forces a rebuild.
+- **The image build is offered whatever backend the profiles use.** An unused
+  backend reports its image at INFO, and INFO rows carried no button, so that
+  image could not be built from the GUI at all.
+- **Clicking empty space leaves the focused field**, which also commits a
+  typed value, since fields save on focus loss.
+- **Spin boxes and combo boxes have visible arrows again.** A stylesheet drops
+  Qt's own sub-control rendering and cannot draw a triangle (the CSS border
+  trick renders as a filled rectangle), so the arrows are painted at startup
+  and cached.
+- **A crashing check no longer blanks the whole report**, it becomes a failed
+  row of its own.
 - **Streamed mouse input stopped warping** when Steam flipped gamescope's
-  `touch_click_mode` to passthrough for touch-advertising clients. The pin is
-  re-asserted every 30 s.
+  `touch_click_mode` for touch-advertising clients; the pin is re-asserted
+  every 30 s.
 
 ## [0.2.4] - 2026-07-26
 
