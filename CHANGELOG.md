@@ -95,6 +95,15 @@ entrypoints and the container helpers changed.
 
 ### Changed
 
+- **CPU and RAM in the Load card are the whole machine's now**, and with that
+  they work on both backends. They used to be the session cgroup's, located by
+  grepping for the labwc command line, and the moonshine backend does not run
+  labwc, so both meters stayed empty there for the whole session. They come
+  from `/proc/stat` and `/proc/meminfo` instead, which needs nothing from the
+  container. The number also answers the question the card is there for better
+  than the cgroup did: whether this box still has room to encode and stream,
+  and the desktop's own load counts towards that. RAM is `MemTotal` minus
+  `MemAvailable`, so reclaimable cache does not read as used.
 - **The streaming backend is switchable on the Session page.** It was a
   read-only row there and only editable in the profile dialog on the Sandboxes
   page, which is a long way round for a switch you flip while comparing the

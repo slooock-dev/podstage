@@ -35,8 +35,7 @@ from ..i18n import tr
 from ..widgets import AspectPixmapLabel, InfoRow, Meter, align_captions, card
 from ..workers import start_action
 
-_NCPU = os.cpu_count() or 1
-try:  # host RAM in MB, the reference for the RAM meter (0 = unknown)
+try:  # fallback reference for the RAM meter when /proc/meminfo is unreadable
     _RAM_TOTAL_MB = (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")) >> 20
 except (ValueError, OSError):
     _RAM_TOTAL_MB = 0
@@ -699,15 +698,17 @@ class SessionPage(QWidget):
             self._fps.set(tr("no new frames"))
 
     def _update_load(self, snap: monitor.Snapshot) -> None:
-        c = snap.container
-        if c and c.cpu_pct is not None:
-            # cpu_pct is "100% per core" — scale the bar to the whole machine.
-            self._cpu.set(c.cpu_pct / _NCPU, f"{c.cpu_pct:.0f} %")
+        # Whole machine, both backends: the session's own cgroup was located
+        # through labwc, which moonshine does not run (monitor.host_stats).
+        h = snap.host
+        if h and h.cpu_pct is not None:
+            self._cpu.set(h.cpu_pct, f"{h.cpu_pct:.0f} %")
         else:
             self._cpu.set(None)
-        if c and c.mem_used_mb and _RAM_TOTAL_MB:
-            self._ram.set(c.mem_used_mb * 100 / _RAM_TOTAL_MB,
-                          f"{c.mem_used_mb} / {_RAM_TOTAL_MB} MB")
+        total_mb = (h.mem_total_mb if h and h.mem_total_mb else _RAM_TOTAL_MB)
+        if h and h.mem_used_mb and total_mb:
+            self._ram.set(h.mem_used_mb * 100 / total_mb,
+                          f"{h.mem_used_mb} / {total_mb} MB")
         else:
             self._ram.set(None)
 

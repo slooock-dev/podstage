@@ -2,9 +2,10 @@
 
 Everything here is readable as the plain user (the container is rootless):
 
-  * CPU/RAM come from the container's cgroup v2 files (``cpu.stat`` /
-    ``memory.current``), located via the world-readable cmdline of the
-    session compositor (labwc) process.
+  * CPU/RAM are the whole machine's (``/proc/stat`` and ``/proc/meminfo``),
+    not the session's cgroup: the panel exists to answer whether this box
+    still has room to encode and stream, and the desktop's own load counts.
+    It is also the only reading that works on both backends.
   * GPU/NVENC come from ``nvidia-smi`` on NVIDIA, the amdgpu sysfs
     (``gpu_busy_percent`` + ``mem_info_vram_*``) on AMD, or one
     ``intel_gpu_top -J`` sample on Intel (needs a readable GPU PMU).
@@ -220,83 +221,73 @@ def _intel_gpu_stats() -> GpuStats | None:
     return _parse_intel_gpu_top(out)
 
 
-# -- container CPU / RAM via cgroup v2 --------------------------------------
+# -- host CPU / RAM ---------------------------------------------------------
+#
+# Whole machine, not the session's cgroup. Two reasons. It is the number that
+# answers the question the panel is there for, namely whether this box still
+# has room to encode and stream, and the desktop's own load counts towards
+# that. And it is backend-independent: the cgroup was located through the
+# labwc command line, which does not exist on the moonshine backend, so both
+# meters simply stayed empty there.
 
-def _compositor_pid() -> int | None:
-    """PID of the session compositor (labwc started with the podstage
-    runner), the one long-lived process in every mode."""
-    rc, out = _run(["pgrep", "-af", "labwc -s /usr/local/bin/podstage-runner"])
-    if rc != 0:
-        return None
-    for line in out.splitlines():
-        pid_str = line.split(maxsplit=1)[0]
-        if pid_str.isdigit():
-            return int(pid_str)
-    return None
-
-
-def _cgroup_dir(pid: int) -> Path | None:
-    """The cgroup v2 directory for a PID (the whole container shares it)."""
+def _proc_stat_cpu() -> tuple[int, int] | None:
+    """``(busy, total)`` jiffies from the aggregate ``cpu`` line."""
     try:
-        for line in Path(f"/proc/{pid}/cgroup").read_text().splitlines():
-            # cgroup v2 line: "0::/machine.slice/libpod-<id>.scope/container"
-            if line.startswith("0::"):
-                rel = line.split("::", 1)[1].lstrip("/")
-                # Resource accounting sits on the parent scope, not the leaf.
-                base = Path("/sys/fs/cgroup") / rel
-                for cand in (base, base.parent):
-                    if (cand / "cpu.stat").exists():
-                        return cand
+        first = Path("/proc/stat").read_text().split("\n", 1)[0].split()
     except OSError:
         return None
-    return None
-
-
-def _read_cpu_usec(cgroup: Path) -> int | None:
-    try:
-        for line in (cgroup / "cpu.stat").read_text().splitlines():
-            if line.startswith("usage_usec"):
-                return int(line.split()[1])
-    except (OSError, ValueError):
+    if not first or first[0] != "cpu":
         return None
-    return None
-
-
-def _read_mem_bytes(cgroup: Path) -> int | None:
     try:
-        return int((cgroup / "memory.current").read_text().strip())
-    except (OSError, ValueError):
+        fields = [int(f) for f in first[1:]]
+    except ValueError:
         return None
+    if len(fields) < 4:
+        return None
+    total = sum(fields)
+    idle = fields[3] + (fields[4] if len(fields) > 4 else 0)  # idle + iowait
+    return total - idle, total
+
+
+def _meminfo_mb() -> tuple[int | None, int | None]:
+    """``(used_mb, total_mb)``. Used is total minus MemAvailable, which is what
+    a user means by "in use": it counts reclaimable cache as free."""
+    want = {"MemTotal:": 0, "MemAvailable:": 0}
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            key = line.split(maxsplit=1)[0]
+            if key in want:
+                want[key] = int(line.split()[1])  # kB
+    except (OSError, ValueError, IndexError):
+        return None, None
+    total_kb, avail_kb = want["MemTotal:"], want["MemAvailable:"]
+    if not total_kb:
+        return None, None
+    return (total_kb - avail_kb) >> 10, total_kb >> 10
 
 
 @dataclass
-class ContainerStats:
-    cpu_pct: float | None = None
+class HostStats:
+    cpu_pct: float | None = None      # 0..100 across all cores
     mem_used_mb: int | None = None
+    mem_total_mb: int | None = None
 
 
-def container_stats(sample_interval: float = 0.4) -> ContainerStats | None:
-    """CPU% (over ``sample_interval``) and RAM of the whole container cgroup.
-    Blocks for ``sample_interval`` to take two CPU samples — call off the UI
-    thread. Returns None if the container isn't running."""
-    pid = _compositor_pid()
-    if pid is None:
-        return None
-    cgroup = _cgroup_dir(pid)
-    if cgroup is None:
-        return None
-    mem = _read_mem_bytes(cgroup)
-    cpu1 = _read_cpu_usec(cgroup)
-    if cpu1 is None:
-        return ContainerStats(None, mem // (1 << 20) if mem else None)
-    t1 = time.monotonic()
+def host_stats(sample_interval: float = 0.4) -> HostStats:
+    """CPU% over ``sample_interval`` and RAM of the whole machine. Blocks for
+    ``sample_interval`` to take two CPU samples, so call it off the UI thread."""
+    used_mb, total_mb = _meminfo_mb()
+    first = _proc_stat_cpu()
+    if first is None:
+        return HostStats(None, used_mb, total_mb)
     time.sleep(sample_interval)
-    cpu2 = _read_cpu_usec(cgroup)
-    dt = time.monotonic() - t1
+    second = _proc_stat_cpu()
     cpu_pct = None
-    if cpu2 is not None and dt > 0:
-        cpu_pct = round((cpu2 - cpu1) / (dt * 1e6) * 100, 1)  # 100% = one core
-    return ContainerStats(cpu_pct, mem // (1 << 20) if mem else None)
+    if second is not None:
+        d_busy, d_total = second[0] - first[0], second[1] - first[1]
+        if d_total > 0:
+            cpu_pct = round(max(0.0, min(100.0, d_busy * 100 / d_total)), 1)
+    return HostStats(cpu_pct, used_mb, total_mb)
 
 
 # -- game FPS from the in-container perf probe ------------------------------
@@ -351,7 +342,7 @@ class Snapshot:
     backend: str = ""  # streaming backend of the running session
     game: ActiveGame | None = None
     gpu: GpuStats | None = None
-    container: ContainerStats | None = None
+    host: HostStats | None = None
     perf: GamePerf | None = None
 
 
@@ -367,6 +358,6 @@ def snapshot() -> Snapshot:
         backend=st.backend,
         game=active_game(),
         gpu=gpu_stats(),
-        container=container_stats(),
+        host=host_stats(),
         perf=game_perf(),
     )

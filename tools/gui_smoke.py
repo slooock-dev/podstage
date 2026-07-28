@@ -18,7 +18,7 @@ from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication, QLabel
 
 from podstage import config
-from podstage.core import backends
+from podstage.core import backends, monitor
 from podstage.ui.app import MainWindow
 from podstage.ui.pages.sandbox_page import COL, SandboxPage
 
@@ -195,6 +195,42 @@ def check_backend_switch(win) -> bool:
     return ok
 
 
+def check_load_card_is_host_wide(win) -> bool:
+    """The Load card reads whole-machine numbers, unscaled.
+
+    The meters used to take the container cgroup's CPU, which counts 100% per
+    core and so had to be divided by the core count, and they came off a
+    snapshot field that no longer exists. Renaming that field would fail here
+    at runtime and nowhere else: pytest cannot import this module, and a
+    rendered frame shows a card that simply reads "—", exactly like a machine
+    that reports nothing. So drive both states.
+    """
+    page = win._session_page
+    snap = monitor.Snapshot(
+        running=True,
+        host=monitor.HostStats(cpu_pct=37.5, mem_used_mb=20639,
+                               mem_total_mb=31672),
+    )
+    page._update_load(snap)
+    ok = True
+    if page._cpu._value.text() != "38 %" or page._cpu._bar.value() != 37:
+        print(f"gui smoke: FAILED (CPU meter is {page._cpu._value.text()!r} at "
+              f"{page._cpu._bar.value()}, expected '38 %' at 37; a value "
+              f"divided by the core count means the card still scales it)")
+        ok = False
+    if page._ram._value.text() != "20639 / 31672 MB":
+        print(f"gui smoke: FAILED (RAM meter is {page._ram._value.text()!r}, "
+              f"expected '20639 / 31672 MB')")
+        ok = False
+
+    page._update_load(monitor.Snapshot(running=True, host=None))
+    if page._cpu._value.text() != "—" or page._ram._value.text() != "—":
+        print("gui smoke: FAILED (no host stats left stale numbers on the "
+              f"card: {page._cpu._value.text()!r} / {page._ram._value.text()!r})")
+        ok = False
+    return ok
+
+
 def check_pair_dialog_names_the_announced_host(win) -> bool:
     """The pairing hint must name the host Moonlight actually lists.
 
@@ -317,6 +353,7 @@ def main() -> int:
     ok = check_session_card_per_backend(win) and ok
     ok = check_extra_mount_picker() and ok
     ok = check_backend_switch(win) and ok
+    ok = check_load_card_is_host_wide(win) and ok
     ok = check_pair_dialog_names_the_announced_host(win) and ok
     if win._poll is not None:
         win._poll.stop()

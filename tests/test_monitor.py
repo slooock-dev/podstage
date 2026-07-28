@@ -96,3 +96,74 @@ def test_game_perf_ignores_nonsense_values(tmp_path):
     perf = monitor.game_perf(tmp_path / "perf.json")
     assert perf is not None
     assert perf.app_id is None and perf.fps is None
+
+
+# -- host CPU / RAM ---------------------------------------------------------
+#
+# Whole machine on purpose: the session's own cgroup used to be located
+# through the labwc command line, which the moonshine backend never runs, so
+# both meters simply stayed empty there.
+
+_STAT = ("cpu  100 20 30 400 50 0 0 0 0 0\n"
+         "cpu0 50 10 15 200 25 0 0 0 0 0\n"
+         "intr 1234\n")
+
+_MEMINFO = ("MemTotal:       32432124 kB\n"
+            "MemFree:         1000000 kB\n"
+            "MemAvailable:   17000000 kB\n"
+            "Buffers:          123456 kB\n")
+
+
+def _patch_proc(monkeypatch, stat: str, meminfo: str):
+    real = monitor.Path
+
+    class _P(type(real("/"))):
+        def read_text(self, *a, **kw):
+            if str(self) == "/proc/stat":
+                return stat
+            if str(self) == "/proc/meminfo":
+                return meminfo
+            return real(str(self)).read_text(*a, **kw)
+
+    monkeypatch.setattr(monitor, "Path", _P)
+
+
+def test_proc_stat_cpu_counts_iowait_as_idle(monkeypatch):
+    """iowait is not the CPU doing work; counting it busy would show a machine
+    waiting on disk as saturated. Only the aggregate ``cpu`` line counts, the
+    per-core lines below it would double everything."""
+    _patch_proc(monkeypatch, _STAT, _MEMINFO)
+    total = 100 + 20 + 30 + 400 + 50
+    assert monitor._proc_stat_cpu() == (100 + 20 + 30, total)
+
+
+def test_proc_stat_cpu_rejects_a_garbage_first_line(monkeypatch):
+    _patch_proc(monkeypatch, "not a cpu line\n", _MEMINFO)
+    assert monitor._proc_stat_cpu() is None
+
+
+def test_meminfo_used_excludes_reclaimable_cache(monkeypatch):
+    """"In use" means MemTotal - MemAvailable: page cache is reclaimable and
+    counting it as used would show every idle machine as nearly full."""
+    _patch_proc(monkeypatch, _STAT, _MEMINFO)
+    used, total = monitor._meminfo_mb()
+    assert total == 32432124 >> 10
+    assert used == (32432124 - 17000000) >> 10
+
+
+def test_host_stats_survives_unreadable_proc(monkeypatch):
+    """A missing reading must blank one meter, not raise into the poll thread."""
+    monkeypatch.setattr(monitor, "_proc_stat_cpu", lambda: None)
+    monkeypatch.setattr(monitor, "_meminfo_mb", lambda: (None, None))
+    stats = monitor.host_stats(sample_interval=0)
+    assert (stats.cpu_pct, stats.mem_used_mb, stats.mem_total_mb) == (None, None, None)
+
+
+def test_host_stats_cpu_percentage_over_the_interval(monkeypatch):
+    """Two samples, busy grew by 50 of 100 total jiffies."""
+    samples = iter([(100, 1000), (150, 1100)])
+    monkeypatch.setattr(monitor, "_proc_stat_cpu", lambda: next(samples))
+    monkeypatch.setattr(monitor, "_meminfo_mb", lambda: (8, 16))
+    stats = monitor.host_stats(sample_interval=0)
+    assert stats.cpu_pct == 50.0
+    assert (stats.mem_used_mb, stats.mem_total_mb) == (8, 16)
