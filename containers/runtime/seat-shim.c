@@ -1,10 +1,10 @@
-/* LD_PRELOAD shim for cage (wlroots): four jobs, all cage-only.
+/* LD_PRELOAD shim for labwc (wlroots): four jobs, all compositor-only.
  *
  * 1. Seat name — report the STREAMING seat instead of seatd's hardcoded
  *    "seat0". wlroots passes libseat_seat_name() to
  *    libinput_udev_assign_seat(), which filters devices by their udev ID_SEAT
  *    property. The host udev rule puts Sunshine's virtual devices on "seat9";
- *    with this shim cage enumerates exactly those and never touches the
+ *    with this shim labwc enumerates exactly those and never touches the
  *    desktop's real keyboard/mouse (input isolation in both directions).
  *
  * 2. Blank cursor — no-op the wlroots cursor-image setters so the dead pointer
@@ -216,11 +216,11 @@ const char *udev_device_get_action(void *dev) {
     return real ? real(dev) : NULL;
 }
 
-/* Also blank cage's cursor: Sunshine creates its virtual pointer devices even
- * with mouse = disabled (only the injection is gated), so cage gains a
+/* Also blank labwc's cursor: Sunshine creates its virtual pointer devices even
+ * with mouse = disabled (only the injection is gated), so labwc gains a
  * pointer capability and renders a cursor that the wlr-screencopy capture
  * overlays into the stream — a permanent dead cursor now that pointer input
- * is cut. No-op every wlroots cursor-image setter (cage's own xcursor and
+ * is cut. No-op every wlroots cursor-image setter (labwc's own xcursor and
  * client-set cursors alike) so the cursor never has an image; position
  * tracking is unaffected. PS_SHOW_CURSOR=1 forwards to the real wlroots
  * symbols instead (for pointer-input experiments with PS_MOUSE_INPUT). */
@@ -351,9 +351,9 @@ void wlr_cursor_set_surface(void *cur, void *surface, int32_t hx, int32_t hy) {
 
 /* ---- flat pointer acceleration ------------------------------------------ */
 
-/* cage attaches every new input device to its wlr_cursor; that is the one
+/* labwc attaches every new input device to its wlr_cursor; that is the one
  * spot where the underlying libinput device is reachable. All symbols come
- * from cage's own wlroots/libinput via RTLD_NEXT; no link-time deps.
+ * from labwc's own wlroots/libinput via RTLD_NEXT; no link-time deps.
  * libinput enum value: LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT = (1 << 0). */
 void wlr_cursor_attach_input_device(void *cur, void *dev) {
     void (*real)(void *, void *) = dlsym(RTLD_NEXT, "wlr_cursor_attach_input_device");
