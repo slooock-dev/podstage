@@ -200,9 +200,11 @@ class Session:
     def setup(self) -> int:
         """Launch the isolated Steam visibly for first-time login (blocks).
 
-        Uses desktop mode (not Big Picture) so the first-time login and setting
-        each game's Proton compatibility tool are easy with keyboard + mouse.
-        Also the way to edit sandbox Steam settings later.
+        Steam's desktop UI (not Big Picture), so the first-time login and
+        setting each game's Proton compatibility tool are easy with keyboard
+        and mouse. Also the way to edit sandbox Steam settings later. This
+        runs on the HOST with an isolated HOME, not in the container: the
+        container's ``desktop`` mode is a debug path and nothing here uses it.
         """
         if runtime.is_running():
             raise RuntimeError(

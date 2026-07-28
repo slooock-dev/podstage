@@ -370,9 +370,10 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
         "PS_APP": opts.app,
         "STEAM_COMPAT_MOUNTS": ":".join(str(p) for p in library_paths),
         # Rootless container: the kernel delivers no udev uevents into this
-        # user namespace, so Steam/SDL falls back to its own inotify gamepad
-        # discovery (SDL dlopens libudev, which a preload shim cannot intercept,
-        # that, but SDL ships this escape hatch).
+        # user namespace, so Steam/SDL has to fall back to its own inotify
+        # gamepad discovery. The seat-shim cannot cover SDL the way it covers
+        # the compositor, because SDL dlopens libudev and a preload shim does
+        # not intercept that; this variable is SDL's own escape hatch.
         "SDL_JOYSTICK_DISABLE_UDEV": "1",
     }
     # GE-/CachyOS-Proton pop a BLOCKING Zenity box ("Creating swapchain for

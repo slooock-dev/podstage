@@ -400,8 +400,10 @@ class SetupPage(QWidget):
             self._headline.setText(tr("All set ✓"))
         # Grouped, but still one list on one page: the headline above counts
         # across every group, so a failure can never hide behind a heading the
-        # way it would behind a tab. Backend groups only appear when a profile
-        # uses that backend (doctor.run_all decides).
+        # way it would behind a tab. Every backend gets a group whether a
+        # profile uses it or not; being unused only lowers the severity to
+        # INFO, so the row states its gap without turning the summary red
+        # (doctor.run_all).
         for group, rows in doctor.by_group(self._results):
             self._checks_box.addWidget(self._group_heading(_group_label(group)))
             for r in rows:

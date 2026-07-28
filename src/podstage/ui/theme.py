@@ -36,13 +36,12 @@ def repolish(w: QWidget) -> None:
 
 # -- stepper arrows ---------------------------------------------------------
 # Styling a widget through a stylesheet drops Qt's own rendering of its
-# sub-controls, which left the spin boxes and combos as bare boxes with no
-# arrows at all. Qt cannot draw a triangle from a stylesheet either: the CSS
-# border trick that works in browsers comes out as a small filled rectangle
-# here (verified). So paint the arrows and point the stylesheet at real
-# files. Written to the cache dir on startup, which keeps the theme
-# self-contained without committing binary assets and lets the colour follow
-# the palette above.
+# sub-controls, so spin boxes and combos need their arrows supplied here. Qt
+# cannot draw a triangle from a stylesheet: the CSS border trick that works in
+# browsers comes out as a small filled rectangle (verified). So the arrows are
+# painted to real files in the cache dir at startup and the stylesheet points
+# at those, which keeps the theme self-contained without committing binary
+# assets and lets the colour follow the palette above.
 _ARROW_W, _ARROW_H = 9, 5
 
 
@@ -164,10 +163,9 @@ QComboBox:hover, QSpinBox:hover, QLineEdit:hover {{ border-color: #3c434c; }}
 QComboBox:focus, QSpinBox:focus, QLineEdit:focus {{ border-color: {ACCENT}; }}
 /* Sub-controls of spin boxes and combos. Styling a widget through a
    stylesheet at all makes Qt drop the NATIVE rendering of its sub-controls,
-   which is why the steppers showed up as bare boxes without arrows. So draw
-   them here: flat buttons, and the arrows as CSS triangles (a zero-sized box
-   with coloured borders), since the stylesheet has to stay self-contained
-   and cannot reference image assets. */
+   so without explicit rules the steppers are bare boxes with no arrows. The
+   buttons are styled here; the arrow images come from qss(), which paints
+   them at startup (see the stepper-arrow section above). */
 QComboBox::drop-down {{ border: none; width: 20px; }}
 QSpinBox::up-button, QSpinBox::down-button {{
     subcontrol-origin: border; background: transparent; border: none;

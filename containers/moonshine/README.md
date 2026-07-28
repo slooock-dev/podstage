@@ -94,7 +94,7 @@ session.
 | MODE | what it does |
 |---|---|
 | `pipeline` | run the moonshine server (**default**) |
-| `healthcheck` | `moonshine healthcheck`: render node, EGL, Vulkan codecs, DMA-BUF, XWayland, uinput, uhid; what `podstage doctor` calls |
+| `healthcheck` | `moonshine healthcheck`: render node, EGL, Vulkan codecs, DMA-BUF, XWayland, uinput, uhid. A manual diagnostic; `podstage doctor` uses vulkaninfo against the runtime image instead |
 | `shell` | drop into bash with the buses and the systemd1 stub already up |
 
 `desktop`, `steam` and `probe` are Sunshine-only and exit with an error here.

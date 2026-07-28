@@ -328,8 +328,10 @@ fi
 # --- run --------------------------------------------------------------------
 case "$PS_MODE" in
   healthcheck)
-    # What `podstage doctor` calls to decide whether this GPU can encode:
-    # render node, EGL, Vulkan codecs, DMA-BUF, XWayland, uinput, uhid.
+    # Manual diagnostic, not on any automated path: render node, EGL, Vulkan
+    # codecs, DMA-BUF, XWayland, uinput, uhid. `podstage doctor` answers the
+    # GPU question with vulkaninfo against the runtime image instead, so it
+    # works before this image is built.
     # Config is a positional argument BEFORE the subcommand
     # (`moonshine [CONFIG] <COMMAND>`); --config does not exist.
     exec moonshine "$CONF" healthcheck

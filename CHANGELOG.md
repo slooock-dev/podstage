@@ -116,9 +116,12 @@ entrypoints and the container helpers changed.
   in CI.
 - **Performance metrics graduated from experimental to a stable setting**
   (game FPS from the compositor, on by default).
-- **Desktop mode is no longer a way to play.** It remains as plumbing for the
-  headless login and setup path only; podstage orchestrates the sandboxed Big
-  Picture session.
+- **Desktop mode is no longer a way to play**, and no longer on any regular
+  path either: the streamed login runs the normal pipeline (Big Picture
+  sign-in) and `podstage setup` opens Steam on the host, so the container's
+  `desktop` mode is now only reachable as a debug path via
+  `podstage runtime start --mode desktop`. podstage orchestrates the sandboxed
+  Big Picture session.
 - `doctor`'s stream-firewall check now covers a profile's custom base port
   instead of assuming the default block.
 

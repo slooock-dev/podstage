@@ -47,9 +47,13 @@ RUN pacman -Syu --noconfirm && \
 #
 # Pinned to a commit, not to the v0.13.5 release: that release's CLI is just
 # `moonshine <config>`, while this commit adds the `healthcheck` subcommand and
-# `--no-health-check`. The health report (render node, EGL, Vulkan codecs,
-# DMA-BUF, XWayland, D-Bus, XDG_RUNTIME_DIR, ports, uinput, uhid, WSI layer) is
-# what `podstage doctor` calls to decide whether this GPU can encode at all.
+# `--no-health-check`. `--no-health-check` is what the pipeline mode needs (the
+# full check aborts on the missing logind); the `healthcheck` subcommand is a
+# manual diagnostic via PS_MODE=healthcheck, reporting render node, EGL, Vulkan
+# codecs, DMA-BUF, XWayland, D-Bus, XDG_RUNTIME_DIR, ports, uinput, uhid and
+# the WSI layer. `podstage doctor` does not use it: it answers the GPU question
+# with vulkaninfo against the runtime image, which needs no moonshine image
+# built yet (core/doctor.py).
 #
 # moonshine-bench drives the compositor and encode pipeline WITHOUT a Moonlight
 # client, the only way to get encode numbers out of a headless machine, and

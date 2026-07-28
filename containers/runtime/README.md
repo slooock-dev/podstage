@@ -35,7 +35,7 @@ label, so `doctor` reports the image as stale.
 | `shell` | drop into bash in the container |
 | `steam` | labwc → gamescope → Steam, **no** Sunshine (render smoke test) |
 | `pipeline` | full pipeline incl. Sunshine capture (**default**) |
-| `desktop` | like `pipeline` but without gamescope: Steam desktop UI (or `PS_DESKTOP_CMD`) as a window under labwc, mouse/keyboard enabled, cursor shown. Plumbing for the headless login/setup path, not a play mode |
+| `desktop` | like `pipeline` but without gamescope: Steam desktop UI (or `PS_DESKTOP_CMD`) as a window under labwc, mouse/keyboard enabled, cursor shown. A debug path, reachable only via `podstage runtime start --mode desktop`: the streamed login runs `pipeline` (Big Picture sign-in) and `podstage setup` opens Steam on the host, so neither goes through here |
 
 Examples:
 
