@@ -150,7 +150,7 @@ flowchart TB
 | mouse & keyboard | per-install toggle | always streamed, no switch |
 | render size | first client's mode, locked until restart | the connecting client's mode, per connect |
 | stream preview in the GUI | wf-recorder on the labwc output | screenshot of the nested gamescope |
-| image | `podstage-runtime` (about 3 GB) | `podstage-moonshine`, built on top of it |
+| image | `podstage-runtime` (about 3 GB) | `podstage-moonshine` (about 4 GB), built on top of it |
 
 **Sunshine** was the initial approach: labwc composites the session, Sunshine
 captures that output through wlr-screencopy and encodes it with NVENC or VAAPI,
