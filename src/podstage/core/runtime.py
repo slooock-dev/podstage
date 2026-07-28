@@ -568,9 +568,19 @@ def runtime_src_dir(backend: str = backends.DEFAULT) -> Path:
     return udev.REPO_ROOT / backends.get(backend).src_subdir
 
 
+# Documentation under containers/ is not part of an image. Hashing it made a
+# typo fix in a README report both images as stale, and rebuilding moonshine
+# means compiling it from source, so the cheap change had the expensive
+# consequence. Everything the build actually reads (Containerfiles, scripts,
+# seat-shim.c, configs) still counts, and the rule is deliberately crude: a
+# suffix, not a guess at which lines of a file matter.
+_SRC_HASH_SKIP_SUFFIXES = (".md",)
+
+
 def runtime_src_hash(backend: str = backends.DEFAULT) -> str | None:
     """sha256 over the backend's image sources (relative names + contents),
     the identity of those sources. None without a source checkout.
+    Documentation is excluded, see ``_SRC_HASH_SKIP_SUFFIXES``.
 
     A derived image is only as current as the image it is built FROM, so the
     base's hash is folded in: a change under containers/runtime/ marks the
@@ -589,7 +599,7 @@ def runtime_src_hash(backend: str = backends.DEFAULT) -> str | None:
             return None
         h.update(base_hash.encode() + b"\0")
     for p in sorted(src.rglob("*")):
-        if p.is_file():
+        if p.is_file() and p.suffix not in _SRC_HASH_SKIP_SUFFIXES:
             h.update(str(p.relative_to(src)).encode() + b"\0" + p.read_bytes())
     return h.hexdigest()
 

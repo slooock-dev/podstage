@@ -268,6 +268,21 @@ def test_runtime_src_hash_tracks_content(tmp_path, monkeypatch):
     assert h1 and h2 and h3 and len({h1, h2, h3}) == 3
 
 
+def test_runtime_src_hash_ignores_documentation(tmp_path, monkeypatch):
+    """A README under containers/ is not part of any image. Hashing it made a
+    typo fix report both images stale, and the moonshine image is compiled
+    from source, so that is an expensive answer to a cheap change."""
+    src = _fake_src(tmp_path, monkeypatch)
+    before = runtime.runtime_src_hash()
+    (src / "README.md").write_text("# how this image works\n")
+    assert runtime.runtime_src_hash() == before
+    (src / "README.md").write_text("# how this image works, corrected\n")
+    assert runtime.runtime_src_hash() == before
+    # Anything the build reads still counts, including a comment in it.
+    (src / "Containerfile").write_text("FROM x\n# a comment\n")
+    assert runtime.runtime_src_hash() != before
+
+
 def test_runtime_src_hash_none_without_checkout(tmp_path, monkeypatch):
     monkeypatch.setattr(udev, "REPO_ROOT", tmp_path / "not-a-checkout")
     assert runtime.runtime_src_hash() is None
