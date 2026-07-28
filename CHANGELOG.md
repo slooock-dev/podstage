@@ -149,6 +149,15 @@ entrypoints and the container helpers changed.
   machine name only again, never listed. Remote clients were never affected,
   they only ever see the interface-scoped announcement. moonshine already did
   this right, its own responder announces `<host>-moonshine.local`.
+- **The preview loop no longer fills the session log with errors.** Every
+  thumbnail capture ran `timeout -k 2 2 wf-recorder`, and wf-recorder acts on
+  no TERM while it waits in its wayland loop, so each iteration ended in a
+  SIGKILL and labwc reported that child at ERROR level: one `terminated with
+  signal 9` every 14 seconds, for the whole length of a session. The timeout
+  sends INT first now, which wf-recorder handles by finalizing the file, so a
+  capture that did get a frame ends on its own. The KILL fallback stays for the
+  static-output case, where wlr-screencopy delivers no frame at all and the
+  loop would otherwise hang on its first iteration.
 - **The error-correction box says what "default" is.** It read "moonshine
   default" with no number, and the value one step away from it is 0, which
   switches forward error correction off entirely. The safe setting and the most
