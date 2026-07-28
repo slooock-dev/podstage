@@ -452,6 +452,21 @@ Planned for 0.3:
   workaround for the stuck resize cursor, and the focus watchdog and perf
   probe now running under that backend too.
 
+After 0.3:
+
+- Let the Sunshine backend announce itself from inside the container, the way
+  moonshine does. Sunshine already carries the publisher (it dlopens
+  `libavahi-client` and holds the `_nvstream._tcp` record) and the runtime
+  image already ships avahi, so this is a matter of running an avahi daemon
+  in the session rather than writing new code. The gain is that the
+  announcement lives and dies with the container instead of with a PID in a
+  state file, and that the host stops needing `avahi-utils`. It is not a fix
+  for the address problem: under `--network host` the container announces on
+  the host's interfaces either way, and that part is already handled host
+  side.
+- Investigate the in-game flicker on moonshine from the receiving end (see
+  *Known limits* in [`containers/moonshine/README.md`](containers/moonshine/README.md)).
+
 Not in 0.3, and worth knowing if you use moonshine: no live quality settings
 (they apply at the next session start) and no way to move the mDNS name off
 the profile name. Its pairing endpoint is unauthenticated, which is upstream's design.
