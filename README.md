@@ -98,7 +98,7 @@ how input hotplug works inside the container is in
 ## Built on
 
 podstage bundles and drives upstream projects; none of them is forked or
-patched. Two small helpers are its own code.
+patched. A few small helpers are its own code.
 
 | | Component | Role |
 |---|---|---|
@@ -111,7 +111,7 @@ patched. Two small helpers are its own code.
 | | [Sunshine](https://github.com/LizardByte/Sunshine) | default backend: capture, hardware encode (NVENC/VAAPI), GameStream server |
 | | [labwc](https://labwc.github.io) · [PipeWire](https://pipewire.org) | the Wayland output Sunshine captures, and a private audio graph, host audio untouched |
 | | [moonshine](https://github.com/hgaiser/moonshine) | alternative backend: compositor, capture, Vulkan Video encode, mDNS and server in one Rust process, with its own PulseAudio |
-| | `seat-shim.c` · `keeper.c` | podstage's own: pins labwc to the streaming seat and fakes udev hotplug in the rootless namespace, and keeps the pointer capability alive across Sunshine's device churn |
+| | `seat-shim.c` · `keeper.c` · `focus-nudge.c` · `perf-probe.c` | podstage's own helpers: the small pieces of glue that keep the stack above working together inside the rootless namespace |
 
 ## Streaming backends
 
@@ -219,11 +219,15 @@ podstage runtime build
 `./ui.sh`, then work three pages top to bottom:
 
 1. **Setup**: every red or amber check has a fix button, root-gated ones open a
-   pkexec prompt. Build the image, install the two udev rules, open the mDNS
-   firewall port. Everything after this runs without a password.
+   pkexec prompt. Build the image, install the two udev rules, open the
+   firewall: mDNS for auto-discovery, the profile's Moonlight port block for
+   the stream itself. Everything after this runs without a password.
 2. **Sandboxes**: create a profile (name, resolution, port, backend), then
-   *Start Steam login*. An isolated Steam opens on the desktop, you log in,
-   close it, and the library is provisioned automatically.
+   *Streamed login*: the sandbox boots into Big Picture's sign-in, so you pair
+   Moonlight (step 3) and log in over the stream, without a window on the
+   host. *Start Steam login* opens the isolated Steam on the desktop instead,
+   for the settings Big Picture does not expose. Either way the library is
+   provisioned automatically.
 3. **Session**: pick the sandbox, *Start*, then *Pair* with the PIN Moonlight
    shows.
 
@@ -252,8 +256,8 @@ settings Big Picture does not expose.
 | Page | What it does |
 |------|--------------|
 | **Session** | Start and stop the stream, the running game, the Performance card (game FPS, plus GPU/VRAM/encoder and the whole machine's CPU and RAM), a live preview, pairing, and the backend's quality settings: NVENC or VAAPI presets on Sunshine, error correction on moonshine. |
-| **Sandboxes** | Profiles including the streaming backend, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), and the Steam-login bootstrap. |
-| **Setup** | Doctor checks grouped by host, streaming and backend, each with a one-click fix; the one-time udev rules install, desktop integration, streaming toggles (mouse and keyboard, preview, performance metrics), experimental features, an update check, UI language. |
+| **Sandboxes** | Profiles including the streaming backend, per-sandbox status (login, paired clients, disk and overlay usage with cleanup), and both Steam-login paths (over the stream or on the desktop). |
+| **Setup** | Doctor checks grouped by host, streaming and backend, each with a one-click fix; the one-time udev rules install, the sandbox location, desktop integration, streaming toggles (close the desktop Steam, mouse and keyboard, preview, performance metrics), experimental features, an update check, UI language, and the uninstaller. |
 | **Logs** | Live journald tail of the runtime container. |
 
 <p align="center">
@@ -271,6 +275,7 @@ so child processes keep a clean environment.
 ```
 podstage doctor                    # validate the environment
 podstage setup                     # print guided (sudo) setup commands
+podstage uninstall [--keep-sandboxes] [--all] [--dry-run]
 podstage runtime build [--backend sunshine|moonshine]
 podstage runtime start|stop|status # drive the container directly (by HOME dir)
 podstage session list
@@ -280,7 +285,7 @@ podstage session setup|start|stop|status <name>   # start: --resolution, --app
 podstage session pair <name> <PIN>
 podstage session remove <name> [--data] | clear-overlay <name>
 podstage experimental [enable|disable <feature>]
-podstage config mouse-keyboard [on|off]
+podstage config mouse-keyboard|perf-metrics [on|off]
 podstage desktop [menu|autostart [on|off]]
 podstage provision <app_id> <session>
 ```
@@ -289,7 +294,9 @@ podstage provision <app_id> <session>
 `containers/runtime/run.sh` wraps. Live container logs:
 `journalctl -f CONTAINER_NAME=podstage-runtime`.
 
-## Tuning the picture
+## Optimization
+
+### Image quality
 
 The encoder controls on the Session page (NVENC preset, two-pass and VBV on
 NVIDIA, the VAAPI quality profile and rate control otherwise) only decide how
@@ -315,11 +322,16 @@ After that, tune the encoder on the Session page: on NVIDIA max the preset (P7)
 and two-pass (full res), and raise VBV if fast motion still shows artifacts; on
 AMD and Intel raise the VAAPI quality profile.
 
-**Disable shader pre-caching on strong hardware** (sandbox Steam → Settings →
-Downloads). Each sandbox keeps its own shader cache, so turning it off saves
-gigabytes per sandbox and skips the "Processing Vulkan shaders" wait. DXVK and
-VKD3D then compile on the fly, which a strong CPU/GPU handles well; a few
-titles may stutter briefly on first run.
+### Shader caching
+
+Each sandbox keeps its own shader cache, so Steam's shader pre-caching costs
+disk per sandbox instead of once per machine, and every sandbox waits through
+its own "Processing Vulkan shaders" before a game starts.
+
+On strong hardware, turn it off (sandbox Steam → Settings → Downloads). That
+saves gigabytes per sandbox and skips the wait; DXVK and VKD3D compile on the
+fly instead, which a capable CPU and GPU handle well, at the price of a brief
+stutter on first run in a few titles.
 
 ## Security notes
 
@@ -360,7 +372,8 @@ Sunshine package and a pinned moonshine commit.
   `PS_GAMESCOPE_WSI=enabled` opts back in.
 - **Moonlight can't auto-discover the host.** Open mDNS in the firewall
   (`firewall-cmd --add-service=mdns`, offered as a Setup fix). Pairing by IP
-  always works. Underscores in a profile name break discovery in some clients.
+  always works, as long as the profile's Moonlight port block is open too,
+  which Setup checks separately.
 - **NVIDIA `vulkan_make_output failed` on start.** The CDI spec doesn't inject
   `/dev/nvidia-modeset`; the runtime adds it explicitly. Regenerating CDI
   (`nvidia-ctk cdi generate`) also fixes it.
@@ -434,10 +447,3 @@ suite on Python 3.11-3.13.
 ## License
 
 MIT, see [LICENSE](LICENSE).
-
-The software podstage drives keeps its own licenses, and none of it lives in
-this repository: the images fetch and build
-[Sunshine](https://github.com/LizardByte/Sunshine) (GPL-3.0) and
-[moonshine](https://github.com/hgaiser/moonshine) (BSD-2-Clause, © Hans Gaiser)
-on your machine at build time. Both run as separate processes; podstage links
-against neither.
