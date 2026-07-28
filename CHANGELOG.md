@@ -6,9 +6,21 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Needs an image rebuild for both backends (`podstage runtime build` and
-`podstage runtime build --backend moonshine`): the compositor, both
-entrypoints and the container helpers changed.
+Upgrading from 0.2.4 needs no migration. Profiles, sandboxes, overlay storage
+and existing pairings carry over untouched, and the config file picks up its
+new keys with defaults the first time it is read. Three things are worth
+knowing:
+
+- **Rebuild both images**: `podstage runtime build` and `podstage runtime
+  build --backend moonshine`. The compositor, both entrypoints and the
+  container helpers changed.
+- **Reinstall the udev rules if you want the DualSense feature.** The
+  generated owner rule now grants `/dev/uhid` as well. `podstage doctor` says
+  so, with the fix, as soon as the feature is enabled; nothing else needs it.
+- **The host appears under a different name in Moonlight.** Sunshine announced
+  the fixed string "podstage" for every profile before and now announces
+  `<profile>-sunshine`. Pairings survive the rename, Moonlight matches hosts
+  by their server UUID.
 
 ### Added
 
