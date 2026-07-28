@@ -454,17 +454,21 @@ class SetupPage(QWidget):
         return row
 
     def _fix_button(self, r: doctor.CheckResult) -> QPushButton | None:
-        # INFO rows describe a path this install does not take, so there is
-        # nothing to fix; picking that backend is what makes them actionable.
-        if r.status in (doctor.Status.OK, doctor.Status.INFO):
+        if r.status is doctor.Status.OK:
             return None
         if r.name in ("image", "moonshine image"):
+            # Also at INFO (an unused backend's image): building is
+            # preparation, not repair, and that image is the one you build
+            # before switching a profile to it. doctor omits the fix string
+            # there so `podstage setup` stays quiet about it.
             backend = (backends.MOONSHINE.name if r.name.startswith("moonshine")
                        else backends.SUNSHINE.name)
             btn = QPushButton(tr("Build image"))
             btn.clicked.connect(
                 lambda: self._start("Image-Build",
                                     lambda: _build_image(backend)))
+        elif r.status is doctor.Status.INFO:
+            return None  # a path this install does not take, nothing to press
         elif r.name == "udev rules":
             # The generated per-user OWNER rule must be staged first — the
             # generic fix runner can't do that, so this button wraps

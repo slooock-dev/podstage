@@ -116,6 +116,35 @@ def check_click_away_drops_focus(win) -> bool:
     return True
 
 
+def check_build_button_ignores_backend_choice(win) -> bool:
+    """An image row offers its build button whatever backend the profiles use.
+
+    An unused backend reports its image at INFO. If INFO drops the button, the
+    image can only be built by first switching a profile to that backend. The
+    rendered row looks identical either way.
+    """
+    from podstage.core import doctor as doc
+
+    page = win._setup_page
+    ok = True
+    for name in ("image", "moonshine image"):
+        for status in (doc.Status.INFO, doc.Status.WARN, doc.Status.FAIL):
+            r = doc.CheckResult(name, status, "image is stale", fix="")
+            if page._fix_button(r) is None:
+                print(f"gui smoke: FAILED ({name} at {status.name}: no build "
+                      f"button, so the image cannot be built from the GUI)")
+                ok = False
+        if page._fix_button(doc.CheckResult(name, doc.Status.OK, "present")):
+            print(f"gui smoke: FAILED ({name} is OK but still offers a button)")
+            ok = False
+    # Non-image INFO rows stay button-less.
+    if page._fix_button(doc.CheckResult("moonshine gpu", doc.Status.INFO,
+                                        "no Vulkan video encode")) is not None:
+        print("gui smoke: FAILED (a non-image INFO row grew a button)")
+        ok = False
+    return ok
+
+
 def check_stepper_arrows(win) -> bool:
     """Styling a widget through a stylesheet drops Qt's native rendering of
     its sub-controls, which once left the spin boxes as bare boxes with no
@@ -361,6 +390,7 @@ def main() -> int:
         print("gui smoke: FAILED (empty grab)")
     ok = check_click_away_drops_focus(win) and ok
     ok = check_stepper_arrows(win) and ok
+    ok = check_build_button_ignores_backend_choice(win) and ok
     ok = check_session_card_per_backend(win) and ok
     ok = check_extra_mount_picker() and ok
     ok = check_backend_switch(win) and ok
