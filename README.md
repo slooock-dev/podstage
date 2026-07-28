@@ -430,9 +430,10 @@ The streaming servers it drives are described under
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup, the Qt/Python quirk
 for the GUI, and the test workflow.
 
-podstage is written with AI coding assistants. Everything is reviewed and
-verified on real hardware before it lands, and CI runs `ruff` plus the test
-suite on Python 3.11-3.13.
+podstage is written with AI coding assistants, with the design, the
+architecture and the concepts behind them coming from a person. Everything is
+reviewed and verified on real hardware before it lands, and CI runs `ruff` plus
+the test suite on Python 3.11-3.13.
 
 ## License
 
