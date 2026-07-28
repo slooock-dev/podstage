@@ -42,16 +42,13 @@ from ..workers import start_action
 
 # Columns of the sandbox table, declared in one place: key, label, whether the
 # column takes the leftover width, and whether its value is right-aligned.
-# Only Name and Pairings vary in length; everything else is a short fixed
-# token, so stretching all of them equally (the old behaviour) spent the same
-# width on a "—" as on a profile name and truncated the two columns that
-# actually carry information. Labels are callables so tr() still sees literals
-# (the i18n catalog test scans for them) while resolving after the language is
-# set.
+# Only Name and Pairings vary in length, everything else is a short fixed
+# token, so those two take the leftover width and the rest is sized to fit.
+# Labels are callables so tr() still sees literals (the i18n catalog test
+# scans for them) while resolving after the language is set.
 #
-# EVERY access to a cell goes through COL[key]. Inserting a column here used
-# to mean hunting down each hard-coded index, and a missed one wrote the
-# sandbox size over the pairings once the background du finished.
+# EVERY access to a cell goes through COL[key], never a literal index, so a
+# column can be inserted here without touching any other code.
 _STRETCH, _FIT = True, False
 _COLUMNS: tuple[tuple, ...] = (
     ("name", lambda: tr("Name"), _STRETCH, False),
@@ -578,21 +575,29 @@ class SandboxPage(QWidget):
             login = tr("✓ logged in") if info.logged_in else (
                 tr("— empty") if not info.exists else tr("✗ no login"))
             paired = ", ".join(info.paired) if info.paired else "—"
-            values = [sc.name, resolution,
-                      backends.get_or_default(sc.backend).label,
-                      str(sc.sunshine_port_base), login,
-                      paired, _fmt_size(self._sizes.get(sc.name)),
-                      _fmt_size(self._overlay_sizes.get(sc.name))]
-            assert len(values) == len(_COLUMNS)  # one value per declared column
-            for col, value in enumerate(values):
+            # Keyed, not positional: a column declared without a value raises
+            # KeyError here instead of shifting every later cell one to the
+            # left. An assert would not, it disappears under python -O.
+            values = {
+                "name": sc.name,
+                "resolution": resolution,
+                "backend": backends.get_or_default(sc.backend).label,
+                "port": str(sc.sunshine_port_base),
+                "login": login,
+                "pairings": paired,
+                "size": _fmt_size(self._sizes.get(sc.name)),
+                "overlay": _fmt_size(self._overlay_sizes.get(sc.name)),
+            }
+            for key, _label, _stretch, right in _COLUMNS:
+                value = values[key]
                 item = QTableWidgetItem(value)
-                if _COLUMNS[col][3]:   # right-aligned per the column table
+                if right:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight
                                           | Qt.AlignmentFlag.AlignVCenter)
                 # A long name or client list still elides at the minimum
                 # window width; the tooltip keeps it readable.
                 item.setToolTip(value)
-                self._table.setItem(row, col, item)
+                self._table.setItem(row, COL[key], item)
         if 0 <= selected < len(sessions):
             self._table.selectRow(selected)
         self._update_login_btn()

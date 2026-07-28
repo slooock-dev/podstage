@@ -59,13 +59,15 @@ RUN pacman -Syu --noconfirm && \
 # client, the only way to get encode numbers out of a headless machine, and
 # the instrument behind the throughput table in the README.
 ARG MOONSHINE_VERSION=3f8e17c43b599545992915c56a133108333c2b89
-ENV CARGO_HOME=/tmp/cargo
+# CARGO_HOME stays inside the RUN rather than an ENV: an ENV would survive into
+# the final image, and there is no way to unset one afterwards (setting it
+# empty leaves an empty value behind, which is worse than not having it).
 RUN git init /tmp/moonshine && \
     cd /tmp/moonshine && \
     git remote add origin https://github.com/hgaiser/moonshine.git && \
     git fetch --depth 1 origin "$MOONSHINE_VERSION" && \
     git checkout FETCH_HEAD && \
-    cargo build --release --locked --workspace && \
+    CARGO_HOME=/tmp/cargo cargo build --release --locked --workspace && \
     install -Dm755 target/release/moonshine /usr/local/bin/moonshine && \
     install -Dm755 target/release/moonshine-bench /usr/local/bin/moonshine-bench && \
     install -Dm755 target/release/libmoonshine_wsi.so \
@@ -75,7 +77,6 @@ RUN git init /tmp/moonshine && \
     install -Dm644 dist/60-moonshine.rules /opt/moonshine/60-moonshine.rules && \
     printf '%s\n' "$MOONSHINE_VERSION" > /opt/moonshine/version && \
     cd / && rm -rf /tmp/moonshine /tmp/cargo
-ENV CARGO_HOME=
 
 # The stub systemd1 service, plus the entrypoint that replaces the runtime
 # image's one (no labwc, no seatd, no Sunshine: moonshine is all of them).

@@ -431,16 +431,18 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
         library_paths = shared_library_paths(opts.home_dir, provision=False, app_ids=opts.app_ids)
 
     vendor = gpu_vendor()
+    env = container_env(opts, library_paths, vendor=vendor)
     args = ["run", "--rm", "--name", CONTAINER_NAME]
     args += ["-it"] if opts.attach else ["-d"]
     # The whole host /dev: on Sunshine only for the ds5 experimental feature,
     # on moonshine always (inputtino creates its gamepads through /dev/uhid).
-    full_dev = (opts.spec.full_dev
-                or _forwarded_env(opts).get("PS_GAMEPAD_DS5") == "enabled")
+    # Read off the env that is actually handed to the container, so the flag
+    # and the variable can never disagree.
+    full_dev = opts.spec.full_dev or env.get("PS_GAMEPAD_DS5") == "enabled"
     args += container_flags(library_paths, opts.home_dir, vendor=vendor,
                             extra_mounts=opts.extra_mounts, full_dev=full_dev)
     args += ["-v", f"{opts.home_dir}:/home/player"]
-    for key, val in container_env(opts, library_paths, vendor=vendor).items():
+    for key, val in env.items():
         args += ["-e", f"{key}={val}"]
     args += [opts.image_name]
     return args
@@ -725,7 +727,20 @@ def _kill_pid(pid: int | None, expect: str = "avahi-publish-service") -> None:
     try:
         os.kill(pid, 15)
     except (ProcessLookupError, PermissionError):
-        pass
+        return
+    # Reap it: in the long-lived GUI the publishers are children of this
+    # process, and a killed child stays a zombie until someone waits for it.
+    # WNOHANG with a short budget rather than a blocking wait, so a process
+    # that ignores the signal cannot freeze the caller. ChildProcessError
+    # means it is not ours (a pid from a state file an earlier run wrote),
+    # which is fine, there is nothing to reap then.
+    for _ in range(20):
+        try:
+            if os.waitpid(pid, os.WNOHANG)[0]:
+                return
+        except (ChildProcessError, OSError):
+            return
+        time.sleep(0.05)
 
 
 # -- state + status ---------------------------------------------------------

@@ -554,6 +554,41 @@ def test_publisher_falls_back_without_a_lan_address(monkeypatch):
                       "_nvstream._tcp", "47989"]]
 
 
+def test_killing_a_publisher_leaves_no_zombie():
+    """The GUI outlives many sessions, and a killed child stays a zombie until
+    someone waits for it. Uses a real child, because the whole point is the
+    process table: mocking the kill would test nothing.
+
+    Deliberately does NOT touch ``proc`` after the kill, since any poll() or
+    wait() would reap it and hide exactly the defect under test.
+    """
+    import subprocess
+    import time as _time
+
+    import pytest
+
+    proc = subprocess.Popen(["sleep", "60"], start_new_session=True)
+
+    def state() -> str:
+        with open(f"/proc/{proc.pid}/stat") as fh:
+            return fh.read().split(") ", 1)[1][0]
+
+    assert state() in "RS", "child should be alive before the kill"
+    # expect="" skips the cmdline guard, which would not match "sleep".
+    runtime._kill_pid(proc.pid, expect="")
+
+    deadline = _time.monotonic() + 2
+    while _time.monotonic() < deadline:
+        try:
+            st = state()
+        except FileNotFoundError:
+            return               # reaped and gone from the table: the goal
+        if st == "Z":
+            pytest.fail("publisher was killed but left as a zombie")
+        _time.sleep(0.02)
+    pytest.fail("child never terminated")
+
+
 def test_start_refuses_an_unbuilt_backend_image(tmp_path, monkeypatch):
     import pytest
 
