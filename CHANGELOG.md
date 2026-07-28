@@ -115,6 +115,27 @@ entrypoints and the container helpers changed.
 
 ### Fixed
 
+- **An underscore in the announced name made the session undiscoverable.** The
+  name a client lists gained a `<backend>` suffix earlier in this cycle, and
+  since it is built from the profile name, every profile with an underscore
+  (`sandbox_steam`) went silent on the desktop clients. The failure gives away
+  nothing at any layer: the service is announced correctly, the client queries,
+  receives PTR, SRV, TXT and A in a single packet within 0.1 s and caches them,
+  and then lists no host, without a line in the client log or the session log.
+  Measured A/B/A against one running server, one UUID, one port and one SRV
+  target, with the client's host list emptied before each run, since an entry
+  that merely comes back online is indistinguishable from a fresh find:
+  `podstagelan` listed after 10 s, `podstage_lan` never, `podstagelan2` after
+  10 s. Reproduced over thirteen runs on three devices. moonlight-android is
+  not affected, it resolves the SRV record explicitly, so a phone that finds
+  the session says nothing about the desktop clients. Names now pass through
+  `backends.safe_name`, which keeps letters, digits and `-` and replaces the
+  rest, so neither the separator nor a profile called "Wohnzimmer (TV)" can
+  bring the failure back. The suffix reads `-sunshine` / `-moonshine` in the
+  client now, lower case for both, and the seed profile is `sandbox-steam`
+  instead of `sandbox_steam`, so a fresh install does not start out with a name
+  that has to be rewritten. An existing profile keeps its name; only what goes
+  on the wire is sanitised.
 - **The error-correction box says what "default" is.** It read "moonshine
   default" with no number, and the value one step away from it is 0, which
   switches forward error correction off entirely. The safe setting and the most
@@ -126,7 +147,7 @@ entrypoints and the container helpers changed.
   announced the fixed string "podstage" for every profile while moonshine
   announced the bare profile name, so nothing on the client said which backend
   a host was, even though the two keep separate pairings and a client paired to
-  one is not paired to the other. Both announce `<profile> (<backend>)` now,
+  one is not paired to the other. Both announce `<profile>-<backend>` now,
   from one place (`Backend.advertised_name`), and the CLI and the pairing
   dialog name the host to pick. Existing Sunshine pairings survive the rename,
   Moonlight matches hosts by their server UUID.

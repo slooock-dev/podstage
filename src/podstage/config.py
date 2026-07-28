@@ -351,7 +351,11 @@ class AppConfig:
         cfg = cls.load(path)
         if not cfg.sessions:
             cfg = cls(sessions=[
-                SessionConfig(name="sandbox_steam", resolution="1080p60",
+                # No underscore: the name reaches the announced mDNS service
+                # name, and one there makes moonlight-qt drop the session
+                # without a word (see backends.safe_name). safe_name catches it
+                # anyway, but a seed that needs rewriting is a poor default.
+                SessionConfig(name="sandbox-steam", resolution="1080p60",
                               sunshine_port_base=47989),
             ])
             cfg.save(path)

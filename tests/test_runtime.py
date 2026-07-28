@@ -442,12 +442,34 @@ def test_the_advertised_name_carries_the_backend():
     must be able to tell a profile's two sessions apart. Before this, Sunshine
     announced the constant "podstage" for every profile while moonshine
     announced the bare profile name."""
-    assert backends.SUNSHINE.advertised_name("deck") == "deck (Sunshine)"
-    assert backends.MOONSHINE.advertised_name("deck") == "deck (moonshine)"
-    assert backends.SUNSHINE.advertised_name() == "podstage (Sunshine)"
-    for opts, key, want in ((_opts(client="deck"), "PS_SUNSHINE_NAME", "deck (Sunshine)"),
-                            (_ms(client="deck"), "PS_MOONSHINE_NAME", "deck (moonshine)")):
+    assert backends.SUNSHINE.advertised_name("deck") == "deck-sunshine"
+    assert backends.MOONSHINE.advertised_name("deck") == "deck-moonshine"
+    assert backends.SUNSHINE.advertised_name() == "podstage-sunshine"
+    for opts, key, want in ((_opts(client="deck"), "PS_SUNSHINE_NAME", "deck-sunshine"),
+                            (_ms(client="deck"), "PS_MOONSHINE_NAME", "deck-moonshine")):
         assert runtime.container_env(opts, LIBS, vendor="nvidia")[key] == want
+
+
+def test_the_advertised_name_never_carries_an_underscore():
+    """An underscore in the announced name makes moonlight-qt list no host at
+    all. It receives PTR, SRV, TXT and A in one packet within 0.1 s, caches
+    them, and then drops the service without a word in any log. Measured A/B/A
+    against one running server with the host list emptied per run:
+    "podstagelan" listed after 10 s, "podstage_lan" never, "podstagelan2"
+    after 10 s. A profile name plausibly carries one ("sandbox_steam"), so the
+    separator alone cannot save us."""
+    for name in ("deck", "sandbox_steam", "a_b", "Wohnzimmer (TV)"):
+        for spec in (backends.SUNSHINE, backends.MOONSHINE):
+            announced = spec.advertised_name(name)
+            assert "_" not in announced, announced
+            assert "(" not in announced and ")" not in announced, announced
+            assert " " not in announced, announced
+    assert backends.SUNSHINE.advertised_name("sandbox_steam") == "sandbox-steam-sunshine"
+    assert backends.MOONSHINE.advertised_name("Wohnzimmer (TV)") == "Wohnzimmer-TV-moonshine"
+    # Non-ASCII letters are not punctuation and must survive.
+    assert backends.MOONSHINE.advertised_name("Süd") == "Süd-moonshine"
+    # A name that is nothing but replaced characters still has to yield one.
+    assert backends.safe_name("_ ()") == "podstage"
 
 
 def test_the_advertised_name_can_still_be_pinned(monkeypatch):
@@ -483,7 +505,7 @@ def test_start_skips_the_host_publisher_for_moonshine(tmp_path, monkeypatch):
                         client="deck"))
     # The name a client lists it as carries the backend, so a profile's two
     # backends never show up as the same host (with different pairings).
-    assert started == [(("deck (Sunshine)",),
+    assert started == [(("deck-sunshine",),
                         {"port": runtime.DEFAULT_STREAM_PORT})]
 
 

@@ -47,6 +47,37 @@ def ports(base: int) -> dict[str, int]:
     return {name: base + off for name, off in PORT_OFFSETS.items()}
 
 
+# An underscore in the announced name makes moonlight-qt drop the session.
+# Everything below is measured, not assumed, because the failure is completely
+# silent: the service is announced correctly, the client queries, receives PTR,
+# SRV, TXT and A in one packet within 0.1 s, caches it, and then lists no host.
+# Neither side logs anything, so the session just looks absent.
+#
+# A/B/A against one running server, one UUID, one port, one SRV target, with
+# the client's host list emptied before each run (an entry that merely comes
+# back online is indistinguishable from a fresh find, which cost us hours):
+#   "podstagelan"    listed after 10 s
+#   "podstage_lan"   never listed
+#   "podstagelan2"   listed after 10 s
+# Reproduced across three devices and thirteen runs. moonlight-android is NOT
+# affected (it resolves the SRV explicitly), so a phone finding the session
+# says nothing about the desktop clients.
+#
+# Underscores are what a profile name plausibly carries ("sandbox_steam"), so
+# this cannot be left to the separator alone. The kept set is deliberately
+# narrow: the failure mode is silent and a plainer label costs nothing.
+# `isalnum` keeps non-ASCII letters, so "Wohnzimmer-Süd" survives.
+_NAME_KEEP = "-"
+
+
+def safe_name(name: str) -> str:
+    """A session name Moonlight will list. See above for why this is narrow."""
+    kept = "".join(c if (c.isalnum() or c in _NAME_KEEP) else "-" for c in name)
+    while "--" in kept:
+        kept = kept.replace("--", "-")
+    return kept.strip("-") or "podstage"
+
+
 @dataclass(frozen=True)
 class Backend:
     """One streaming backend and the handful of host-side decisions it drives.
@@ -103,8 +134,15 @@ class Backend:
         to a profile's Sunshine session is NOT paired to its moonshine one.
         Two entries called the same thing would be indistinguishable in the
         client, and the wrong one silently fails to connect.
+
+        Runs through `safe_name`, which is not cosmetic: a name Moonlight
+        rejects makes the whole session undiscoverable. See there.
+
+        The suffix is lower-cased so both backends read the same way in the
+        client list ("-sunshine", "-moonshine"); `label` keeps its proper
+        spelling for the GUI.
         """
-        return f"{profile or 'podstage'} ({self.label})"
+        return safe_name(f"{profile or 'podstage'}-{self.label.lower()}")
 
 
 SUNSHINE = Backend(

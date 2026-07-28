@@ -15,9 +15,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import QEvent, QObject, QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import QMouseEvent
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QLabel
 
 from podstage import config
+from podstage.core import backends
 from podstage.ui.app import MainWindow
 from podstage.ui.pages.sandbox_page import COL, SandboxPage
 
@@ -194,6 +195,71 @@ def check_backend_switch(win) -> bool:
     return ok
 
 
+def check_pair_dialog_names_the_announced_host(win) -> bool:
+    """The pairing hint must name the host Moonlight actually lists.
+
+    The name is sanitised on its way to mDNS (backends.safe_name), so the
+    dialog cannot repeat the raw profile name: a user told to look for
+    "sandbox_steam" would look for a host no client ever lists. Driven through
+    _on_pair rather than the dialog alone, so that dropping the announced name
+    at the call site is caught too. Cancelling out of the stub stops before
+    any pairing is attempted.
+    """
+    from podstage.ui.pages import session_page as sp
+
+    page = win._session_page
+    original_profile, original_dialog = page._profile, sp.PairDialog
+    built = []
+
+    class _StubDialog(sp.PairDialog):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            built.append(self)
+
+        def exec(self):        # cancel: nothing is submitted anywhere
+            return 0
+
+    ok = True
+    try:
+        sp.PairDialog = _StubDialog
+        for name, backend in (("sandbox_steam", "moonshine"),
+                              ("Wohnzimmer (TV)", "sunshine")):
+            sc = config.SessionConfig(name=name, backend=backend)
+            page._profile = lambda sc=sc: sc
+            built.clear()
+            page._on_pair()
+            if not built:
+                print("gui smoke: FAILED (pair button built no dialog)")
+                return False
+            dlg = built[-1]
+            announced = backends.get(backend).advertised_name(name)
+            hint = next((w.text() for w in dlg.findChildren(QLabel)
+                         if "Moonlight" in w.text()), "")
+            if announced not in hint:
+                print(f"gui smoke: FAILED (pairing hint {hint!r} does not name "
+                      f"the announced host {announced!r})")
+                ok = False
+            if name in hint:
+                print(f"gui smoke: FAILED (pairing hint sends the user looking "
+                      f"for the raw profile name {name!r}: {hint!r})")
+                ok = False
+            # The device name is a label Sunshine stores; moonshine records
+            # none, so the field is off there rather than asking for one.
+            if dlg.name.text() != name:
+                print(f"gui smoke: FAILED (device name defaulted to "
+                      f"{dlg.name.text()!r}, expected {name!r})")
+                ok = False
+            if dlg.name.isEnabled() != (backend == "sunshine"):
+                print(f"gui smoke: FAILED ({backend}: device name field "
+                      f"enabled={dlg.name.isEnabled()})")
+                ok = False
+            dlg.deleteLater()
+    finally:
+        sp.PairDialog = original_dialog
+        page._profile = original_profile
+    return ok
+
+
 def check_extra_mount_picker() -> bool:
     """The folder picker appends to the extra-mount list.
 
@@ -251,6 +317,7 @@ def main() -> int:
     ok = check_session_card_per_backend(win) and ok
     ok = check_extra_mount_picker() and ok
     ok = check_backend_switch(win) and ok
+    ok = check_pair_dialog_names_the_announced_host(win) and ok
     if win._poll is not None:
         win._poll.stop()
         win._poll.wait(5000)

@@ -239,7 +239,9 @@ def test_set_sessions_home_root_moves(tmp_path: Path, monkeypatch):
 def test_load_or_seed_creates_default(tmp_path: Path):
     path = tmp_path / "config.toml"
     cfg = AppConfig.load_or_seed(path)
-    assert [s.name for s in cfg.sessions] == ["sandbox_steam"]
+    # No underscore: the seed name reaches the announced mDNS service name,
+    # and one there makes moonlight-qt drop the session silently.
+    assert [s.name for s in cfg.sessions] == ["sandbox-steam"]
     assert path.exists()
     # second load returns the saved config, not a fresh seed
     cfg.sessions[0].resolution = "1440p60"
