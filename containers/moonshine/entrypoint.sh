@@ -31,7 +31,8 @@
 #   PS_MOONSHINE_NAME  name advertised over mDNS and reported in serverinfo
 #   PS_APP             Steam AppID → boot straight into that game
 #   PS_STEAM_FLAGS     Steam flags (default -gamepadui)
-#   PS_HDR             enabled → moonshine's compositor in HDR
+#   PS_HDR             enabled → compositor.hdr in config.toml (unverified
+#                      that the server reads it) + gamescope --hdr-enabled
 #   PS_FOCUS_NUDGE(_DELAYS)  Big Picture focus watchdog (default on)
 #   PS_PERF_METRICS    enabled → per-app frametimes for the host GUI
 #   PS_TOUCH_CLICK_MODE      gamescope touch_click_mode pin (default 1)

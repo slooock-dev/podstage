@@ -54,15 +54,22 @@ _EXPERIMENTAL_LABELS = {
     "hdr": lambda: tr("HDR stream"),
     "gamepad_ds5": lambda: tr("DualSense pad (gyro)"),
 }
+# Optional visible line under a checkbox, for what the tooltip should not be
+# the only place for. Unlike the two dicts above, a missing key is fine: no
+# entry means the feature needs no qualifier beyond its label.
+_EXPERIMENTAL_HINTS = {
+    "gamepad_ds5": lambda: tr("Sunshine only. For PlayStation controllers."),
+}
 _EXPERIMENTAL_DETAILS = {
     "hdr": lambda: tr(
-        "gamescope advertises an HDR output and games see DXVK_HDR. "
-        "Unverified end to end."),
+        "gamescope --hdr-enabled + DXVK_HDR, on moonshine also its own "
+        "compositor. Whether the stream carries HDR is unverified."),
     "gamepad_ds5": lambda: tr(
-        "The session pad becomes a DualSense with real gyro for clients "
-        "that send motion data. On a Steam Deck, disable Steam Input for "
-        "Moonlight (trade-off: trackpad-as-mouse). Mounts the host /dev "
-        "into the session container."),
+        "Sunshine emulates a DualSense instead of the Xbox pad: gyro and "
+        "matching glyphs. Needed for such a client, since Sunshine picks "
+        "that pad by itself and fails without /dev/uhid. Steam Deck: needs "
+        "Steam Input off for Moonlight (no trackpad-mouse then). Mounts "
+        "the host /dev."),
 }
 
 
@@ -281,6 +288,12 @@ class SetupPage(QWidget):
             box.toggled.connect(
                 lambda on, k=key: self._on_experimental_toggled(k, on))
             elay.addWidget(box)
+            if key in _EXPERIMENTAL_HINTS:
+                hint = QLabel(_EXPERIMENTAL_HINTS[key]())
+                hint.setProperty("muted", True)
+                hint.setWordWrap(True)
+                hint.setContentsMargins(22, 0, 0, 6)  # under the box label
+                elay.addWidget(hint)
         root.addWidget(eframe)
 
         lframe, llay = card(tr("Language"))

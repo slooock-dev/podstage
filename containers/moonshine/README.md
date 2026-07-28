@@ -32,6 +32,11 @@ delegation) disappears structurally: moonshine's compositor never opens an
 evdev device. gamescope still runs nested, so the focus watchdog, the perf
 probe and the `touch_click_mode` pin carry over unchanged.
 
+`gamepad_ds5` is a Sunshine switch (`gamepad = ds5` in `sunshine.conf`), so
+`core/session.py` drops `PS_GAMEPAD_DS5` here instead of shipping dead env.
+Which pad this inputtino builds is unmeasured. No `/dev` switch needed either:
+`full_dev=True` is fixed for this backend, every gamepad goes through uhid.
+
 ## Build
 
 ```bash
@@ -52,7 +57,7 @@ way and wired to the profile: `stream.video.fec_percentage`,
 `compositor.keyboard.layout` and `.variant`. Also verified present but not
 wired: `stream.video.encrypt`, `stream.timeout`. Verified absent despite the
 obvious guess: `stream.control.encrypt` (the control stream config only holds
-`gamepad`).
+`gamepad`). Written but never type-checked: `compositor.hdr` (from `PS_HDR`).
 
 ## Three pieces that need explaining
 

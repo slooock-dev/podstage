@@ -135,9 +135,11 @@ def sunshine_web_credentials() -> tuple[str, str]:
 # labels live in ui/pages/setup_page.py. Add/remove features HERE.
 EXPERIMENTAL_FEATURES: dict[str, str] = {
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
-    # Sunshine emulates a DualSense instead of the default Xbox pad: real
-    # gyro/touchpad in the session for clients that send motion data. Needs
-    # /dev/uhid access and mounts the host /dev into the session container.
+    # SUNSHINE ONLY (session.py drops it for moonshine, which drives its own
+    # gamepads): Sunshine emulates a DualSense instead of the default Xbox
+    # pad. Wanted whenever the client streams with a PlayStation controller,
+    # because Sunshine's `gamepad = auto` picks a DualSense for such a client
+    # anyway and fails without /dev/uhid. Mounts the host /dev.
     "gamepad_ds5": "PS_GAMEPAD_DS5",
 }
 

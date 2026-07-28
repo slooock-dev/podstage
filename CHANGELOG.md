@@ -94,9 +94,12 @@ knowing:
   themselves in place) and start them from Big Picture via non-Steam
   shortcuts. Container path equals host path, so shortcut paths keep working.
 - **DualSense emulation as an experimental feature (`gamepad_ds5`).** Sunshine
-  emulates a DualSense instead of the default Xbox pad, giving clients that
-  send motion data real gyro in the session. Needs `/dev/uhid`, so the runtime
-  binds the host `/dev` while it is on, and the udev OWNER rule covers uhid.
+  emulates a DualSense instead of the Xbox pad: gyro and matching glyphs for a
+  client with a PlayStation controller. Not optional for such a client, since
+  `gamepad = auto` picks that pad anyway and fails without `/dev/uhid`. The
+  runtime binds the host `/dev` while it is on, the udev OWNER rule covers
+  uhid. Steam Deck's own pad also needs Steam Input off for Moonlight (no
+  trackpad-mouse then). Sunshine only; moonshine drives its own gamepads.
 - **Container diagnostics baked into the image** (frame, X11, event-recorder
   and uinput probes) for debugging a running session.
 - **A folder picker for the extra mounts.** The profile dialog keeps the

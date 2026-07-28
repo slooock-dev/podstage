@@ -4,14 +4,25 @@ see. Covers what pytest cannot, since the suite runs without PyQt6 and errors
 in ui/ stay green there.
 
     QT_QPA_PLATFORM=offscreen python tools/gui_smoke.py
+
+Runs against a throwaway XDG_CONFIG_HOME in English, so the result does not
+depend on the machine's config.toml.
 """
 
+import atexit
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Before the podstage imports: CONFIG_DIR derives from XDG_CONFIG_HOME at
+# import time, and the label checks below expect the English source strings.
+_CFG_HOME = tempfile.mkdtemp(prefix="podstage-gui-smoke-")
+atexit.register(shutil.rmtree, _CFG_HOME, True)
+os.environ["XDG_CONFIG_HOME"] = _CFG_HOME
+os.environ["PS_LANG"] = "en"
 
 from PyQt6.QtCore import QEvent, QObject, QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import QMouseEvent

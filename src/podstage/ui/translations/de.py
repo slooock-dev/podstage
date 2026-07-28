@@ -424,18 +424,22 @@ TEXTS: dict[str, str] = {
         "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
     "HDR stream": "HDR-Stream",
     "DualSense pad (gyro)": "DualSense-Pad (Gyro)",
-    "The session pad becomes a DualSense with real gyro for clients "
-    "that send motion data. On a Steam Deck, disable Steam Input for "
-    "Moonlight (trade-off: trackpad-as-mouse). Mounts the host /dev "
-    "into the session container.":
-        "Das Session-Pad wird ein DualSense mit echtem Gyro für Clients, "
-        "die Bewegungsdaten senden. Am Steam Deck dafür Steam Input für "
-        "Moonlight deaktivieren (Trade-off: Trackpad-als-Maus). Mountet "
-        "das Host-/dev in den Session-Container.",
-    "gamescope advertises an HDR output and games see DXVK_HDR. Unverified "
-    "end to end.":
-        "gamescope meldet einen HDR-Output und Spiele sehen DXVK_HDR. "
-        "Ende-zu-Ende unverifiziert.",
+    "Sunshine only. For PlayStation controllers.":
+        "Nur Sunshine. Für PlayStation-Controller.",
+    "Sunshine emulates a DualSense instead of the Xbox pad: gyro and "
+    "matching glyphs. Needed for such a client, since Sunshine picks "
+    "that pad by itself and fails without /dev/uhid. Steam Deck: needs "
+    "Steam Input off for Moonlight (no trackpad-mouse then). Mounts "
+    "the host /dev.":
+        "Sunshine emuliert ein DualSense statt des Xbox-Pads: Gyro und "
+        "passende Tastensymbole. Für so einen Client nötig, weil Sunshine "
+        "dieses Pad selbst wählt und ohne /dev/uhid scheitert. Steam Deck: "
+        "braucht Steam Input für Moonlight aus (dann keine Trackpad-Maus). "
+        "Mountet das Host-/dev.",
+    "gamescope --hdr-enabled + DXVK_HDR, on moonshine also its own "
+    "compositor. Whether the stream carries HDR is unverified.":
+        "gamescope --hdr-enabled + DXVK_HDR, bei moonshine zusätzlich "
+        "dessen Compositor. Ob der Stream HDR trägt, ist unverifiziert.",
     "Performance metrics (FPS)": "Performance-Metriken (FPS)",
     "A probe in the container asks gamescope for the presented frametime of "
     "the running game and shows FPS on the Session page. Works on any GPU "

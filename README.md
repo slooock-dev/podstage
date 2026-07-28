@@ -115,7 +115,7 @@ patched. A few small helpers are its own code.
 
 ## Streaming backends
 
-How the picture is composited, captured and encoded is a per-profile choice.
+How the picture is composited, captured and encoded can be chosen per profile.
 Everything else stays the same, gamescope included: it renders the session on
 both backends, and the game never sees a difference. What differs is everything
 around it.
@@ -148,6 +148,7 @@ flowchart TB
 | quality settings | encoder presets in the GUI, applied live | error correction, applied at the next start |
 | keyboard layout | host default | per profile (XKB layout/variant) |
 | mouse & keyboard | per-install toggle | always streamed, no switch |
+| gamepad in the session | Xbox pad; DualSense via the `gamepad_ds5` switch | its own inputtino pad, no switch |
 | render size | first client's mode, locked until restart | the connecting client's mode, per connect |
 | stream preview in the GUI | wf-recorder on the labwc output | screenshot of the nested gamescope |
 | image | `podstage-runtime` (about 3 GB) | `podstage-moonshine` (about 4 GB), built on top of it |
@@ -196,7 +197,8 @@ group on the Setup page.
 - Python ≥ 3.11 for the CLI and core. PyQt6 ≥ 6.6 only for the GUI, which is
   optional.
 - A Moonlight client with a gamepad (Steam Deck, laptop, phone with
-  controller); mouse and keyboard are a toggle.
+  controller); mouse and keyboard are a toggle. A PlayStation controller needs
+  the `gamepad_ds5` experimental switch on the Sunshine backend.
 
 > **Tested configuration.** Verified end to end on Bazzite-DX 43 (KDE Plasma,
 > Wayland) with an NVIDIA RTX 4080 SUPER, streaming to a Steam Deck. AMD is

@@ -56,7 +56,12 @@ client's mouse + keyboard (Setup-page toggle, off by default); pointer focus
 and cursor stay inert until deliberate mouse use, and the cursor hides 3 s
 after the last use (see below). Experimental:
 `PS_HDR=enabled` adds gamescope `--hdr-enabled` plus `DXVK_HDR=1`
-(unverified end to end).
+(gamescope and DXVK only, labwc and the capture path stay untouched, so the
+stream carrying HDR is unverified). `PS_GAMEPAD_DS5=enabled` appends
+`gamepad = ds5` to `sunshine.conf`: inputtino builds a DualSense over
+`/dev/uhid` instead of the X360 pad over uinput, which is why the host binds
+the whole `/dev` for it (the `/dev/hidraw*` node Steam Input needs appears
+only with that pad).
 
 `DISABLE_GAMESCOPE_WSI=1` is set for every session: the nested gamescope fails
 the stricter WSI hook that GE and CachyOS Proton check for, and those builds
