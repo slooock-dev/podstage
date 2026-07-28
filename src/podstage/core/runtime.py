@@ -661,25 +661,52 @@ def build_image(image: str = "", backend: str = backends.DEFAULT, *,
 
 # -- mDNS discovery ---------------------------------------------------------
 
-def start_publisher(name: str = "podstage", port: int = DEFAULT_STREAM_PORT) -> int | None:
+# Host name the announced service points at, instead of the machine's own.
+# avahi publishes the machine name on every interface it has, so on the box
+# running podstage it also carries 127.0.0.1 (the `lo` announcement) and a
+# scope-less link-local IPv6. A Moonlight client on that same machine then
+# lists no host at all, silently. Measured A/B/A against one running Sunshine
+# session with the client's host list emptied per run: machine name only, not
+# listed; plus a name carrying only the LAN IPv4, listed after 10 s; machine
+# name only again, not listed. Remote clients are unaffected either way, they
+# only ever see the interface-scoped announcement.
+STREAM_HOSTNAME = "podstage-stream.local"
+
+
+def start_publisher(name: str = "podstage",
+                    port: int = DEFAULT_STREAM_PORT) -> tuple[int | None, int | None]:
     """Announce the Sunshine instance via the HOST's avahi (the container has
     no avahi daemon; ports are reachable anyway via --network host). Manual
     add-by-IP in Moonlight works without this. Requires mDNS allowed in the
     host firewall (firewalld: ``firewall-cmd --add-service=mdns``).
 
     Only the Sunshine backend needs this (``Backend.host_mdns``); moonshine
-    answers mDNS itself from inside the container.
+    answers mDNS itself from inside the container, under its own host name.
 
-    Returns the publisher PID (caller must kill it on stop), or None.
+    Returns ``(service_pid, host_pid)``; the caller kills both on stop. The
+    host publisher is None when there is no LAN address to announce, in which
+    case the service falls back to the machine's own name (see
+    ``STREAM_HOSTNAME`` for what that costs a same-machine client).
     """
     if shutil.which("avahi-publish-service") is None:
-        return None
+        return None, None
+    host_pid, host_args = None, []
+    ips = lan_ips()
+    if ips and shutil.which("avahi-publish-address"):
+        # -R: no reverse record. The machine's own name already owns the PTR
+        # for this address, and a second one is refused as a name collision.
+        host_pid = subprocess.Popen(
+            ["avahi-publish-address", "-R", STREAM_HOSTNAME, ips[0]],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        ).pid
+        host_args = ["-H", STREAM_HOSTNAME]
     proc = subprocess.Popen(
-        ["avahi-publish-service", name, "_nvstream._tcp", str(port)],
+        ["avahi-publish-service", *host_args, name, "_nvstream._tcp", str(port)],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
-    return proc.pid
+    return proc.pid, host_pid
 
 
 def _kill_pid(pid: int | None, expect: str = "avahi-publish-service") -> None:
@@ -711,7 +738,8 @@ def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str]:
         return 127, str(e)
 
 
-def save_state(opts: RuntimeOptions, publisher_pid: int | None) -> None:
+def save_state(opts: RuntimeOptions, publisher_pid: int | None,
+               host_pid: int | None = None) -> None:
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(json.dumps({
         "client": opts.client,
@@ -720,6 +748,7 @@ def save_state(opts: RuntimeOptions, publisher_pid: int | None) -> None:
         "backend": opts.backend,
         "stream_port": opts.stream_port,
         "publisher_pid": publisher_pid,
+        "publisher_host_pid": host_pid,
         "started": int(time.time()),
     }))
 
@@ -735,6 +764,8 @@ def clear_state() -> None:
     state = load_state()
     if state:
         _kill_pid(state.get("publisher_pid"))
+        # Missing in state files written before the host publisher existed.
+        _kill_pid(state.get("publisher_host_pid"), expect="avahi-publish-address")
     STATE_FILE.unlink(missing_ok=True)
 
 
@@ -795,11 +826,11 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     # Bind source must exist, or podman creates it root-owned in the tmpfs.
     config.RUNTIME_SHARE_DIR.mkdir(parents=True, exist_ok=True)
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)
-    publisher_pid = None
+    publisher_pid = host_pid = None
     if spec.host_mdns and opts.mode in ("pipeline", "desktop"):
-        publisher_pid = start_publisher(spec.advertised_name(opts.client),
-                                        port=opts.stream_port)
-    save_state(opts, publisher_pid)
+        publisher_pid, host_pid = start_publisher(spec.advertised_name(opts.client),
+                                                  port=opts.stream_port)
+    save_state(opts, publisher_pid, host_pid)
     try:
         if opts.attach:
             rc = subprocess.call(argv)

@@ -494,7 +494,7 @@ def test_start_skips_the_host_publisher_for_moonshine(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime, "shared_library_paths",
                         lambda home, provision=True, app_ids=None: [])
     monkeypatch.setattr(runtime, "start_publisher",
-                        lambda *a, **kw: started.append((a, kw)) or 4242)
+                        lambda *a, **kw: started.append((a, kw)) or (4242, 4243))
     monkeypatch.setattr(runtime, "save_state", lambda *a: None)
     monkeypatch.setattr(runtime, "_run", lambda argv, timeout=15: (0, ""))
     monkeypatch.setattr(config, "RUNTIME_SHARE_DIR", tmp_path / "share")
@@ -507,6 +507,51 @@ def test_start_skips_the_host_publisher_for_moonshine(tmp_path, monkeypatch):
     # backends never show up as the same host (with different pairings).
     assert started == [(("deck-sunshine",),
                         {"port": runtime.DEFAULT_STREAM_PORT})]
+
+
+def test_publisher_points_the_service_at_its_own_host_name(monkeypatch):
+    """avahi would otherwise answer with the machine's own name, which on the
+    box running podstage also carries 127.0.0.1 and a scope-less link-local
+    IPv6. A Moonlight client on that same machine then lists no host at all,
+    silently. Measured A/B/A with one running session: machine name only, not
+    listed; plus a name carrying only the LAN IPv4, listed after 10 s; machine
+    name only again, not listed."""
+    calls: list[list[str]] = []
+
+    class _P:
+        def __init__(self, argv, **kw):
+            calls.append(argv)
+            self.pid = 100 + len(calls)
+
+    monkeypatch.setattr(runtime.shutil, "which", lambda exe: f"/usr/bin/{exe}")
+    monkeypatch.setattr(runtime.subprocess, "Popen", _P)
+    monkeypatch.setattr(runtime, "lan_ips", lambda: ["192.168.1.5", "10.0.0.9"])
+
+    service_pid, host_pid = runtime.start_publisher("deck-sunshine", port=47989)
+    assert (service_pid, host_pid) == (102, 101)
+    assert calls[0] == ["avahi-publish-address", "-R",
+                        runtime.STREAM_HOSTNAME, "192.168.1.5"]
+    assert calls[1] == ["avahi-publish-service", "-H", runtime.STREAM_HOSTNAME,
+                        "deck-sunshine", "_nvstream._tcp", "47989"]
+
+
+def test_publisher_falls_back_without_a_lan_address(monkeypatch):
+    """No routable address to announce: publish under the machine's own name
+    rather than not at all. Remote clients are unaffected by the difference."""
+    calls: list[list[str]] = []
+
+    class _P:
+        def __init__(self, argv, **kw):
+            calls.append(argv)
+            self.pid = 7
+
+    monkeypatch.setattr(runtime.shutil, "which", lambda exe: f"/usr/bin/{exe}")
+    monkeypatch.setattr(runtime.subprocess, "Popen", _P)
+    monkeypatch.setattr(runtime, "lan_ips", list)
+
+    assert runtime.start_publisher("deck-sunshine", port=47989) == (7, None)
+    assert calls == [["avahi-publish-service", "deck-sunshine",
+                      "_nvstream._tcp", "47989"]]
 
 
 def test_start_refuses_an_unbuilt_backend_image(tmp_path, monkeypatch):

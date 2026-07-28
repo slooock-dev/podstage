@@ -136,6 +136,19 @@ entrypoints and the container helpers changed.
   instead of `sandbox_steam`, so a fresh install does not start out with a name
   that has to be rewritten. An existing profile keeps its name; only what goes
   on the wire is sanitised.
+- **A Moonlight on the podstage machine itself never found the session.** The
+  host publisher let avahi answer with the machine's own name, and that name
+  carries every address avahi knows for it: the LAN IPv4, but on the `lo`
+  announcement also `127.0.0.1`, plus a scope-less link-local IPv6 that is not
+  reachable at all. A client on that same machine then listed no host, as
+  silently as the underscore did. The service now points at its own
+  `podstage-stream.local`, published with only the routable LAN IPv4, and falls
+  back to the machine name when there is no such address. Measured A/B/A
+  against one running Sunshine session with the host list emptied per run:
+  machine name only, never listed; plus an IPv4-only name, listed after 10 s;
+  machine name only again, never listed. Remote clients were never affected,
+  they only ever see the interface-scoped announcement. moonshine already did
+  this right, its own responder announces `<host>-moonshine.local`.
 - **The error-correction box says what "default" is.** It read "moonshine
   default" with no number, and the value one step away from it is 0, which
   switches forward error correction off entirely. The safe setting and the most
