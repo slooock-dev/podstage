@@ -95,6 +95,12 @@ entrypoints and the container helpers changed.
 
 ### Changed
 
+- `containers/runtime/run.sh` can pick the backend (`PS_BACKEND=moonshine`),
+  which it could not since backends existed, and no longer carries its own
+  copy of the forwarded environment; that list lives in `core/runtime.py`.
+- The two spike harnesses (`containers/spike-moonshine/`, `containers/spike-wm/`)
+  are out of the tree. What they established is in
+  `containers/moonshine/README.md` and in the entries above.
 - **CPU and RAM in the Load card are the whole machine's now**, and with that
   they work on both backends. They used to be the session cgroup's, located by
   grepping for the labwc command line, and the moonshine backend does not run
