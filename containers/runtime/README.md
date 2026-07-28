@@ -58,6 +58,12 @@ after the last use (see below). Experimental:
 `PS_HDR=enabled` adds gamescope `--hdr-enabled` plus `DXVK_HDR=1`
 (unverified end to end).
 
+`DISABLE_GAMESCOPE_WSI=1` is set for every session: the nested gamescope fails
+the stricter WSI hook that GE and CachyOS Proton check for, and those builds
+answer with a blocking "non-Gamescope swapchain, hooking has failed" dialog
+that nobody can click away in a headless session. Neither backend uses the
+bypass. `PS_GAMESCOPE_WSI=enabled` opts back in.
+
 ## Required run flags (why)
 
 The container is rootless (`--userns=keep-id`): no sudo, no extra capabilities.
@@ -81,6 +87,9 @@ The container is rootless (`--userns=keep-id`): no sudo, no extra capabilities.
   which is readable rootless. Hotplug uevents do NOT reach the user namespace;
   the seat shim fakes the monitor via inotify (`PS_FAKE_UDEV=1`), and
   `SDL_JOYSTICK_DISABLE_UDEV=1` switches Steam/SDL to its inotify fallback.
+- `--shm-size=1g`: Steam's CEF renderer needs around 450 MB of shared memory,
+  and podman's default `/dev/shm` is 64 MB, which crash-loops it into a black
+  or flashing Big Picture.
 - `--security-opt label=disable`: host SELinux is enforcing.
 - `--network host`: Moonlight ports. (Collides with host X on the abstract
   `@/tmp/.X11-unix/X0`; gamescope harmlessly falls back to Xwayland `:2`.)

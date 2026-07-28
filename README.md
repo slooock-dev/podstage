@@ -353,9 +353,6 @@ Sunshine package and a pinned moonshine commit.
 
 ## Troubleshooting
 
-- **Big Picture is a black or flashing screen.** Steam's CEF needs ~450 MB of
-  shared memory; podman's default `/dev/shm` is 64 MB, which crash-loops the
-  renderer. The runtime sets `--shm-size=1g`. Keep it.
 - **Big Picture takes controller input but focuses nothing.** Steam's UI lost
   its navigation focus, usually right after a game exits. A watchdog in the
   container re-focuses Steam's window and normally heals it; otherwise press B
@@ -366,17 +363,10 @@ Sunshine package and a pinned moonshine commit.
   accessible to the container. Install both from the Setup page. If
   `/dev/uinput` stays unwritable afterwards, run
   `sudo udevadm trigger --sysname-match=uinput`.
-- **Custom Proton (GE / CachyOS) hangs at launch** with a "non-Gamescope
-  swapchain … hooking has failed" dialog. Nested gamescope fails GE's stricter
-  WSI hook, so the runtime sets `DISABLE_GAMESCOPE_WSI=1`.
-  `PS_GAMESCOPE_WSI=enabled` opts back in.
 - **Moonlight can't auto-discover the host.** Open mDNS in the firewall
   (`firewall-cmd --add-service=mdns`, offered as a Setup fix). Pairing by IP
   always works, as long as the profile's Moonlight port block is open too,
   which Setup checks separately.
-- **NVIDIA `vulkan_make_output failed` on start.** The CDI spec doesn't inject
-  `/dev/nvidia-modeset`; the runtime adds it explicitly. Regenerating CDI
-  (`nvidia-ctk cdi generate`) also fixes it.
 - **No GPU load shown on Intel.** The meter samples `intel_gpu_top`; install it
   (igt-gpu-tools) and make the GPU PMU readable (CAP_PERFMON or a relaxed
   `perf_event_paranoid`). VRAM stays unavailable on i915/xe.
