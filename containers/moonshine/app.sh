@@ -59,8 +59,8 @@ echo "[podstage-app] WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset}" \
 # Two flags here are NOT in the Sunshine runner, both because moonshine
 # implements no zxdg_decoration_manager_v1 (verified: gamescope never even
 # asks for it in a WAYLAND_DEBUG trace) while gamescope is linked against
-# libdecor and therefore decorates itself. cage is a kiosk and labwc does
-# server-side decorations, so neither backend ever showed this.
+# libdecor and therefore decorates itself. labwc does server-side
+# decorations, so the Sunshine backend never showed this.
 #
 #   -f -b                gamescope's own nested fullscreen/borderless. Without
 #                        it Big Picture carries a titlebar whose close button
