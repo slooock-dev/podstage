@@ -219,6 +219,14 @@ out every pre-Arc Intel and pre-RDNA2 AMD GPU that streams fine through VAAPI,
 its pairing endpoint has no authentication, and it has no config API, so
 quality changes mean editing the profile and restarting the session.
 
+It also flickers in-game at a high bitrate, briefly and only inside a game.
+Around 10 to 17 Mbit/s streams cleanly on the setup this was measured on, while
+50 flickers on a link that carries Sunshine at 50. The source picture, the
+error correction and a different reading of the requested number are all ruled
+out by measurement; the receiving side has not been read yet. Details and the
+next step are under *Known limits* in
+[`containers/moonshine/README.md`](containers/moonshine/README.md).
+
 ```bash
 podstage session add tv --backend moonshine
 podstage runtime build --backend moonshine     # once, builds from source

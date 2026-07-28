@@ -116,3 +116,28 @@ RTX 4080 SUPER), a whole frame budget below 60 Hz.
 Not yet confirmed on real hardware: the `LIBDECOR_PLUGIN_DIR` fix for the stuck
 resize cursor (confirmed in-container only), and image quality under a real
 client.
+
+## Known limits
+
+Two things are understood well enough to describe but not fixed in 0.3.0.
+
+**The picture flickers in-game at a high bitrate.** Only inside a game, never
+in Big Picture, and under a second at a time. Ruled out by measurement, not by
+argument: the picture gamescope hands over (14 captures, brightness spread
+0.12), forward error correction (just as bad at 20 %), and the idea that the
+two backends read the requested number differently (Sunshine asked for 50 sends
+44.6 Mbit/s on average, peak 53.9, measured over 90 s of `tx_bytes`; moonshine
+asked for 12 sends 12; so both take it the same way). Lowering the bitrate is
+what helps: around 10 to 17 Mbit/s streams cleanly on the test setup, 50
+flickers while Sunshine runs at 50 over the same link. That is where it is left
+for 0.3.0. Everything measured so far watches the sending side; the next step
+is the receiving one, which is Moonlight's performance overlay (received
+bitrate, packet loss, dropped frames) plus `log_frame_spikes` and video-pipeline
+debug logging on the host.
+
+**The preview loop costs a colour-converter rebuild.** Asking the nested
+gamescope for a screenshot takes it out of direct scanout, and moonshine
+rebuilds its colour converter when the format changes under it: 3 rebuilds in
+3 minutes with the loop running, 0 with it stopped. The preview stays on by
+default; set a profile's `preview_interval_s` to 0 to turn it off for sessions
+that must not be disturbed.
