@@ -171,7 +171,7 @@ def test_moonshine_pairings_come_from_its_own_state_file(tmp_path):
     # moonshine records no client NAMES, so the list reads as ids.
     assert sandbox.paired_clients(tmp_path, "moonshine") == ["0123456789ABCDEF"]
     assert sandbox.paired_device_ids(tmp_path, "moonshine") == {"cert-a"}
-    # The Sunshine state file is a different one and stays empty here.
+    # The sunshine state file is a different one and stays empty here.
     assert sandbox.paired_clients(tmp_path) == []
 
 

@@ -4,7 +4,7 @@ The counterpart to :mod:`podstage.core.sunshine_api`, and deliberately much
 smaller, because moonshine exposes much less:
 
 ===============  ==========================================  ==========================
-                 Sunshine                                    moonshine
+                 sunshine                                    moonshine
 ===============  ==========================================  ==========================
 pair             ``POST https://…:47990/api/pin``, TLS +     ``POST http://…:<base>/submit-pin``,
                  basic auth, JSON                            plain HTTP, **no auth**, form body
@@ -14,7 +14,7 @@ paired state     state.json in the sandbox HOME              state.toml in the s
 ===============  ==========================================  ==========================
 
 There is nothing to authenticate against here: the endpoint sits on the same
-port Moonlight talks to and takes anyone's PIN. That is moonshine's model, not
+port moonlight talks to and takes anyone's PIN. That is moonshine's model, not
 a setting podstage can tighten. It is the reason ``Backend.live_config`` is
 False and why quality settings are not wired for this backend.
 
@@ -31,7 +31,7 @@ from pathlib import Path
 
 from . import sandbox
 
-# Moonlight identifies itself with this fixed id, so nothing has to be
+# moonlight identifies itself with this fixed id, so nothing has to be
 # scraped out of a running session to complete a pairing.
 MOONLIGHT_CLIENT_ID = "0123456789ABCDEF"
 
@@ -61,9 +61,9 @@ def _post(path: str, port: int, form: dict[str, str],
 
 
 def pair(pin: str, port: int, unique_id: str = MOONLIGHT_CLIENT_ID) -> bool:
-    """Submit the 4-digit PIN Moonlight is showing. False when moonshine has
+    """Submit the 4-digit PIN moonlight is showing. False when moonshine has
     no pairing attempt pending (it answers an honest 400 for that, unlike
-    Sunshine); raises MoonshineApiError if it cannot be reached at all."""
+    sunshine); raises MoonshineApiError if it cannot be reached at all."""
     status, body = _post("/submit-pin", port, {"uniqueid": unique_id, "pin": pin})
     if status == 400:
         return False
@@ -87,7 +87,7 @@ def pair_verified(pin: str, home: Path, port: int,
     before = sandbox.paired_device_ids(home, backend="moonshine")
     if not pair(pin, port, unique_id):
         raise MoonshineApiError("no pairing attempt pending; start it in "
-                                "Moonlight first")
+                                "moonlight first")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if sandbox.paired_device_ids(home, backend="moonshine") - before:

@@ -9,7 +9,7 @@ Modules:
   udev          host udev rules (seat isolation + per-user device access)
   session       client profile to runtime container lifecycle
   monitor       one status snapshot per GUI refresh (GPU, host load, FPS)
-  sunshine_api  Sunshine's config/pairing HTTPS API
+  sunshine_api  sunshine's config/pairing HTTPS API
   moonshine_api moonshine's pairing HTTP API
   desktop       .desktop entry and icon for the host menu
   elevate       the one root step, run through pkexec

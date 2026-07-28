@@ -2,7 +2,7 @@
 
 Create/edit/delete profiles (config.toml), bootstrap a sandbox by running the
 isolated Steam visibly for first-time login, and show per-sandbox state:
-logged in, paired Moonlight clients, disk usage.
+logged in, paired moonlight clients, disk usage.
 """
 
 
@@ -114,7 +114,7 @@ class ProfileDialog(QDialog):
         self._dynamic = QCheckBox(tr("Follow the client's resolution"))
         self._dynamic.setToolTip(tr(
             "Render at the connecting client's resolution; the profile "
-            "resolution above is only the fallback. Sunshine locks the first "
+            "resolution above is only the fallback. sunshine locks the first "
             "client's mode until the session restarts, moonshine follows every "
             "reconnect. Off: always render at the profile resolution."))
         self._dynamic.setChecked(existing.dynamic_resolution if existing else True)
@@ -124,7 +124,7 @@ class ProfileDialog(QDialog):
         self._port = QSpinBox()
         self._port.setRange(1024, 64000)
         self._port.setValue(existing.sunshine_port_base if existing else 47989)
-        form.addRow(tr("Moonlight port"), self._port)
+        form.addRow(tr("moonlight port"), self._port)
 
         # Streaming backend. The labels carry the backend key in UserData so
         # a translated label never has to be parsed back (same approach as
@@ -136,7 +136,7 @@ class ProfileDialog(QDialog):
         idx = self._backend.findData(current_backend)
         self._backend.setCurrentIndex(max(idx, 0))
         self._backend.setToolTip(tr(
-            "Sunshine (default) works on every supported GPU. moonshine brings "
+            "sunshine (default) works on every supported GPU. moonshine brings "
             "its own compositor and encodes with Vulkan Video, which needs an "
             "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU, and its quality settings "
             "apply at the next session start instead of live. The Setup page "
@@ -148,7 +148,7 @@ class ProfileDialog(QDialog):
         self._backend_note.setWordWrap(True)
         form.addRow("", self._backend_note)
 
-        # moonshine-only: the streamed session's XKB layout. The Sunshine
+        # moonshine-only: the streamed session's XKB layout. The sunshine
         # pipeline has no equivalent, so the row appears and disappears with
         # the backend rather than sitting there inert.
         self._kb_row = QWidget()
@@ -753,7 +753,7 @@ class SandboxPage(QWidget):
             return
         body = tr(
             "The sandbox\n{home}\nboots into Big Picture's Steam sign-in over "
-            "the stream: connect with Moonlight and log in with the QR code "
+            "the stream: connect with moonlight and log in with the QR code "
             "(Steam Mobile App) or the on-screen keyboard.\n\nContinue?",
             home=sc.home_dir())
         answer = QMessageBox.question(self, tr("Streamed login"), body)
@@ -776,7 +776,7 @@ class SandboxPage(QWidget):
             self._status.setText(tr("Login session failed: {msg}", msg=msg))
             return
         self._status.setText(tr(
-            "Login session running: connect with Moonlight and sign in. "
+            "Login session running: connect with moonlight and sign in. "
             "Stop the session on the Session page when you are done; the "
             "next regular start provisions the game library."))
 

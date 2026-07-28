@@ -24,8 +24,8 @@ TEXTS: dict[str, str] = {
 
     # -- session page ----------------------------------------------------
     "Pair …": "Pairen …",
-    "Pair a new Moonlight client by PIN (session must be running)":
-        "Neuen Moonlight-Client per PIN pairen (Session muss laufen)",
+    "Pair a new moonlight client by PIN (session must be running)":
+        "Neuen moonlight-Client per PIN pairen (Session muss laufen)",
     "Game": "Spiel",
     "Preview": "Vorschau",
     "Refresh every": "Aktualisieren alle",
@@ -45,13 +45,13 @@ TEXTS: dict[str, str] = {
     "Apply live": "Live übernehmen",
     "Apply immediately to the running session (stream briefly reconnects)":
         "Auf die laufende Session sofort anwenden (Stream verbindet kurz neu)",
-    "Bitrate & codec are chosen by the Moonlight client; these control encoder "
+    "Bitrate & codec are chosen by the moonlight client; these control encoder "
     "quality on the server side.":
-        "Bitrate & Codec wählt der Moonlight-Client; diese steuern die "
+        "Bitrate & Codec wählt der moonlight-Client; diese steuern die "
         "Encoder-Qualität serverseitig.",
-    "Bitrate & codec are chosen by the Moonlight client. {backend} has no "
+    "Bitrate & codec are chosen by the moonlight client. {backend} has no "
     "config API, so this applies at the next session start.":
-        "Bitrate & Codec wählt der Moonlight-Client. {backend} hat kein "
+        "Bitrate & Codec wählt der moonlight-Client. {backend} hat kein "
         "Config-API, das hier gilt also ab dem nächsten Session-Start.",
     "Error correction": "Fehlerkorrektur",
     "moonshine default ({pct} %)": "moonshine-Standard ({pct} %)",
@@ -66,14 +66,14 @@ TEXTS: dict[str, str] = {
     "Saved. Applies at the next session start.":
         "Gespeichert. Gilt ab dem nächsten Session-Start.",
     "The {backend} backend has no live quality settings; these apply to "
-    "Sunshine profiles only.":
+    "sunshine profiles only.":
         "Das Backend {backend} hat keine Qualitätseinstellungen zur Laufzeit; "
-        "diese gelten nur für Sunshine-Profile.",
+        "diese gelten nur für sunshine-Profile.",
     "VBV buffer increase (%): a larger buffer reduces artifacts in fast motion "
-    "at the same bitrate. 0 = Sunshine default.":
+    "at the same bitrate. 0 = sunshine default.":
         "VBV-Puffer-Erhöhung (%): ein größerer Puffer reduziert Artefakte bei "
-        "schnellen Bewegungen bei gleicher Bitrate. 0 = Sunshine-Standard.",
-    "Open Sunshine web UI": "Sunshine Web-UI öffnen",
+        "schnellen Bewegungen bei gleicher Bitrate. 0 = sunshine-Standard.",
+    "Open sunshine web UI": "sunshine Web-UI öffnen",
     "Saved. Applies from the next stream start; use 'Apply live' for a "
     "running session.":
         "Gespeichert. Gilt ab dem nächsten Stream-Start; »Live übernehmen« "
@@ -92,13 +92,13 @@ TEXTS: dict[str, str] = {
         "'{name}' wählt seine Auflösung beim Start.\nAuflösung für diese "
         "Session:",
     "The PIN was submitted but no pairing completed. Restart the pairing in "
-    "Moonlight and enter the new PIN.":
+    "moonlight and enter the new PIN.":
         "Die PIN wurde übermittelt, aber kein Pairing abgeschlossen. Pairing "
-        "in Moonlight neu starten und die neue PIN eintragen.",
-    "Client '{name}' paired. Moonlight can stream now.":
-        "Client '{name}' gepairt. Moonlight kann jetzt streamen.",
-    "Paired. Moonlight can stream now.":
-        "Gepairt. Moonlight kann jetzt streamen.",
+        "in moonlight neu starten und die neue PIN eintragen.",
+    "Client '{name}' paired. moonlight can stream now.":
+        "Client '{name}' gepairt. moonlight kann jetzt streamen.",
+    "Paired. moonlight can stream now.":
+        "Gepairt. moonlight kann jetzt streamen.",
     "Pairing failed: {msg}": "Pairing fehlgeschlagen: {msg}",
     "Applying live … (stream briefly interrupts)":
         "Wende live an … (Stream unterbricht kurz)",
@@ -112,14 +112,14 @@ TEXTS: dict[str, str] = {
 
     # -- pair dialog -----------------------------------------------------
     "Pair client": "Client pairen",
-    "PIN from Moonlight, e.g. 1234": "PIN aus Moonlight, z. B. 1234",
+    "PIN from moonlight, e.g. 1234": "PIN aus moonlight, z. B. 1234",
     "Device name": "Gerätename",
-    "Select '{server}' in Moonlight and enter the 4-digit PIN it shows here.":
-        "In Moonlight »{server}« auswählen und die angezeigte 4-stellige "
+    "Select '{server}' in moonlight and enter the 4-digit PIN it shows here.":
+        "In moonlight »{server}« auswählen und die angezeigte 4-stellige "
         "PIN hier eintragen.",
 
-    # -- Sunshine web UI dialog ------------------------------------------
-    "Sunshine web UI": "Sunshine Web-UI",
+    # -- sunshine web UI dialog ------------------------------------------
+    "sunshine web UI": "sunshine Web-UI",
     "User": "Benutzer",
     "Password": "Passwort",
     "Copy password": "Passwort kopieren",
@@ -221,17 +221,17 @@ TEXTS: dict[str, str] = {
         "den Stream (QR-Code per Steam-Mobile-App oder Bildschirmtastatur). "
         "Auf dem Host öffnet sich kein Fenster.",
     "The sandbox\n{home}\nboots into Big Picture's Steam sign-in over "
-    "the stream: connect with Moonlight and log in with the QR code "
+    "the stream: connect with moonlight and log in with the QR code "
     "(Steam Mobile App) or the on-screen keyboard.\n\nContinue?":
         "Die Sandbox\n{home}\nstartet in Steams Big-Picture-Anmeldung über "
-        "den Stream: mit Moonlight verbinden und per QR-Code (Steam-Mobile-"
+        "den Stream: mit moonlight verbinden und per QR-Code (Steam-Mobile-"
         "App) oder Bildschirmtastatur einloggen.\n\nFortfahren?",
     "Starting login session …": "Starte Login-Session …",
     "Login session failed: {msg}": "Login-Session fehlgeschlagen: {msg}",
-    "Login session running: connect with Moonlight and sign in. "
+    "Login session running: connect with moonlight and sign in. "
     "Stop the session on the Session page when you are done; the "
     "next regular start provisions the game library.":
-        "Login-Session läuft: mit Moonlight verbinden und einloggen. "
+        "Login-Session läuft: mit moonlight verbinden und einloggen. "
         "Danach die Session auf der Session-Seite stoppen; der nächste "
         "normale Start provisioniert die Spiele-Bibliothek.",
 
@@ -241,14 +241,14 @@ TEXTS: dict[str, str] = {
     "custom": "benutzerdefiniert",
     "e.g. deck, laptop, livingroom": "z. B. deck, laptop, wohnzimmer",
     "WidthxHeight@Hz, e.g. 1920x1080@60": "BreitexHöhe@Hz, z. B. 1920x1080@60",
-    "Moonlight port": "Moonlight-Port",
+    "moonlight port": "moonlight-Port",
     "Backend": "Backend",
-    "Sunshine (default) works on every supported GPU. moonshine brings "
+    "sunshine (default) works on every supported GPU. moonshine brings "
     "its own compositor and encodes with Vulkan Video, which needs an "
     "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU, and its quality settings "
     "apply at the next session start instead of live. The Setup page "
     "checks whether this machine can run it.":
-        "Sunshine (Standard) läuft auf jeder unterstützten GPU. moonshine "
+        "sunshine (Standard) läuft auf jeder unterstützten GPU. moonshine "
         "bringt einen eigenen Compositor mit und kodiert per Vulkan Video, "
         "was eine NVIDIA RTX, AMD RDNA2+ oder Intel Arc voraussetzt, und "
         "seine Qualitätseinstellungen wirken erst ab dem nächsten "
@@ -424,17 +424,17 @@ TEXTS: dict[str, str] = {
         "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
     "HDR stream": "HDR-Stream",
     "DualSense pad (gyro)": "DualSense-Pad (Gyro)",
-    "Sunshine only. For PlayStation controllers.":
-        "Nur Sunshine. Für PlayStation-Controller.",
-    "Sunshine emulates a DualSense instead of the Xbox pad: gyro and "
-    "matching glyphs. Needed for such a client, since Sunshine picks "
+    "sunshine only. For PlayStation controllers.":
+        "Nur sunshine. Für PlayStation-Controller.",
+    "sunshine emulates a DualSense instead of the Xbox pad: gyro and "
+    "matching glyphs. Needed for such a client, since sunshine picks "
     "that pad by itself and fails without /dev/uhid. Steam Deck: needs "
-    "Steam Input off for Moonlight (no trackpad-mouse then). Mounts "
+    "Steam Input off for moonlight (no trackpad-mouse then). Mounts "
     "the host /dev.":
-        "Sunshine emuliert ein DualSense statt des Xbox-Pads: Gyro und "
-        "passende Tastensymbole. Für so einen Client nötig, weil Sunshine "
+        "sunshine emuliert ein DualSense statt des Xbox-Pads: Gyro und "
+        "passende Tastensymbole. Für so einen Client nötig, weil sunshine "
         "dieses Pad selbst wählt und ohne /dev/uhid scheitert. Steam Deck: "
-        "braucht Steam Input für Moonlight aus (dann keine Trackpad-Maus). "
+        "braucht Steam Input für moonlight aus (dann keine Trackpad-Maus). "
         "Mountet das Host-/dev.",
     "gamescope --hdr-enabled + DXVK_HDR, on moonshine also its own "
     "compositor. Whether the stream carries HDR is unverified.":
@@ -456,7 +456,7 @@ TEXTS: dict[str, str] = {
     "session start.":
         "Für reine Controller-Clients empfohlen: aus. Gilt ab dem nächsten "
         "Session-Start.",
-    "Sunshine only.": "Nur Sunshine.",
+    "sunshine only.": "Nur sunshine.",
     "Experimental features apply from the next session start.":
         "Experimentelle Features gelten ab dem nächsten Session-Start.",
     "Checks the GitHub releases for a newer version.":
@@ -517,11 +517,11 @@ TEXTS: dict[str, str] = {
     "Follow the client's resolution":
         "Auflösung folgt dem Client",
     "Render at the connecting client's resolution; the profile "
-    "resolution above is only the fallback. Sunshine locks the first "
+    "resolution above is only the fallback. sunshine locks the first "
     "client's mode until the session restarts, moonshine follows every "
     "reconnect. Off: always render at the profile resolution.":
         "Rendert in der Auflösung des verbindenden Clients; die "
-        "Profil-Auflösung oben ist nur der Fallback. Sunshine fixiert den "
+        "Profil-Auflösung oben ist nur der Fallback. sunshine fixiert den "
         "Modus des ersten Clients bis zum Session-Neustart, moonshine folgt "
         "jedem Reconnect. Aus: es wird immer in der Profil-Auflösung "
         "gerendert.",

@@ -272,7 +272,7 @@ def check_load_card_is_host_wide(win) -> bool:
 
 
 def check_pair_dialog_names_the_announced_host(win) -> bool:
-    """The pairing hint must name the host Moonlight actually lists.
+    """The pairing hint must name the host moonlight actually lists.
 
     The name is sanitised on its way to mDNS (backends.safe_name), so the
     dialog cannot repeat the raw profile name: a user told to look for
@@ -310,7 +310,7 @@ def check_pair_dialog_names_the_announced_host(win) -> bool:
             dlg = built[-1]
             announced = backends.get(backend).advertised_name(name)
             hint = next((w.text() for w in dlg.findChildren(QLabel)
-                         if "Moonlight" in w.text()), "")
+                         if "moonlight" in w.text()), "")
             if announced not in hint:
                 print(f"gui smoke: FAILED (pairing hint {hint!r} does not name "
                       f"the announced host {announced!r})")
@@ -319,7 +319,7 @@ def check_pair_dialog_names_the_announced_host(win) -> bool:
                 print(f"gui smoke: FAILED (pairing hint sends the user looking "
                       f"for the raw profile name {name!r}: {hint!r})")
                 ok = False
-            # The device name is a label Sunshine stores; moonshine records
+            # The device name is a label sunshine stores; moonshine records
             # none, so the field is off there rather than asking for one.
             if dlg.name.text() != name:
                 print(f"gui smoke: FAILED (device name defaulted to "

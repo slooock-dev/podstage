@@ -58,17 +58,17 @@ _EXPERIMENTAL_LABELS = {
 # the only place for. Unlike the two dicts above, a missing key is fine: no
 # entry means the feature needs no qualifier beyond its label.
 _EXPERIMENTAL_HINTS = {
-    "gamepad_ds5": lambda: tr("Sunshine only. For PlayStation controllers."),
+    "gamepad_ds5": lambda: tr("sunshine only. For PlayStation controllers."),
 }
 _EXPERIMENTAL_DETAILS = {
     "hdr": lambda: tr(
         "gamescope --hdr-enabled + DXVK_HDR, on moonshine also its own "
         "compositor. Whether the stream carries HDR is unverified."),
     "gamepad_ds5": lambda: tr(
-        "Sunshine emulates a DualSense instead of the Xbox pad: gyro and "
-        "matching glyphs. Needed for such a client, since Sunshine picks "
+        "sunshine emulates a DualSense instead of the Xbox pad: gyro and "
+        "matching glyphs. Needed for such a client, since sunshine picks "
         "that pad by itself and fails without /dev/uhid. Steam Deck: needs "
-        "Steam Input off for Moonlight (no trackpad-mouse then). Mounts "
+        "Steam Input off for moonlight (no trackpad-mouse then). Mounts "
         "the host /dev."),
 }
 
@@ -254,11 +254,11 @@ class SetupPage(QWidget):
         mkhint.setProperty("muted", True)
         mkhint.setWordWrap(True)
         # Its own line, not a tail on the sentence above: the switch gates the
-        # virtual mouse/keyboard Sunshine creates, while moonshine feeds the
+        # virtual mouse/keyboard sunshine creates, while moonshine feeds the
         # client's input straight into its compositor seat and has nothing to
         # switch off. A setting that silently does nothing on one backend has
         # to say so where it is read, not only in the docs.
-        mkbackend = QLabel(tr("Sunshine only."))
+        mkbackend = QLabel(tr("sunshine only."))
         mkbackend.setProperty("muted", True)
         mkbackend.setWordWrap(True)
         slay.addWidget(self._mouse_kb)

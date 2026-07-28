@@ -190,7 +190,7 @@ def test_moonshine_options_carry_dynamic_resolution():
 
 
 def test_ds5_experimental_does_not_leak_into_moonshine():
-    """gamepad_ds5 configures Sunshine's emulated pad; inputtino has its own
+    """gamepad_ds5 configures sunshine's emulated pad; inputtino has its own
     gamepad model and would ignore the flag."""
     app = AppConfig(experimental={"gamepad_ds5": True, "hdr": True})
     env = Session(_moonshine(), app_config=app)._options().env

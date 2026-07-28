@@ -40,7 +40,7 @@ try:  # fallback reference for the RAM meter when /proc/meminfo is unreadable
 except (ValueError, OSError):
     _RAM_TOTAL_MB = 0
 
-# Sunshine NVENC quality knobs (sunshine.conf value → translated label builder).
+# sunshine NVENC quality knobs (sunshine.conf value → translated label builder).
 # Built inside the widget so tr() resolves after the language is set.
 _PRESET_LABELS = {
     "1": lambda: tr("fastest encoding (default)"), "2": lambda: tr("faster"),
@@ -52,7 +52,7 @@ _TWOPASS_LABELS = {
     "quarter_res": lambda: tr("quarter resolution (default)"),
     "full_res": lambda: tr("full resolution"),
 }
-# Sunshine VAAPI quality knobs (AMD path). Values verified against Sunshine's
+# sunshine VAAPI quality knobs (AMD path). Values verified against sunshine's
 # configuration docs (vaapi_quality / vaapi_rc / vaapi_strict_rc_buffer).
 _VAAPI_QUALITY_LABELS = {
     "auto": lambda: tr("auto (default)"), "speed": lambda: tr("speed"),
@@ -73,7 +73,7 @@ THUMB_MAX_AGE_S = 45  # strict mode only: older previews count as stale
 
 
 class PairDialog(QDialog):
-    """Submit the PIN Moonlight shows to pair a new client."""
+    """Submit the PIN moonlight shows to pair a new client."""
 
     def __init__(self, parent, default_name: str, advertised: str = "") -> None:
         super().__init__(parent)
@@ -82,12 +82,12 @@ class PairDialog(QDialog):
         form = QFormLayout(self)
         form.setSpacing(8)
         self.pin = QLineEdit()
-        self.pin.setPlaceholderText(tr("PIN from Moonlight, e.g. 1234"))
+        self.pin.setPlaceholderText(tr("PIN from moonlight, e.g. 1234"))
         self.pin.setMaxLength(4)
         self.name = QLineEdit(default_name)
         form.addRow("PIN", self.pin)
         form.addRow(tr("Device name"), self.name)
-        hint = QLabel(tr("Select '{server}' in Moonlight and enter the 4-digit "
+        hint = QLabel(tr("Select '{server}' in moonlight and enter the 4-digit "
                          "PIN it shows here.", server=advertised or default_name))
         hint.setProperty("muted", True)
         hint.setWordWrap(True)
@@ -104,12 +104,12 @@ class PairDialog(QDialog):
 
 
 class WebUiDialog(QDialog):
-    """The Sunshine web-UI URL and its generated login, with a button to open
+    """The sunshine web-UI URL and its generated login, with a button to open
     it. The login is per install, so it is shown here rather than hidden."""
 
     def __init__(self, parent, url: str, user: str, password: str) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("Sunshine web UI"))
+        self.setWindowTitle(tr("sunshine web UI"))
         self.setMinimumWidth(400)
         form = QFormLayout(self)
         form.setSpacing(8)
@@ -172,12 +172,12 @@ class SessionPage(QWidget):
         self._stop_btn.setProperty("danger", True)
         self._stop_btn.clicked.connect(self._on_stop)
         self._pair_btn = QPushButton(tr("Pair …"))
-        self._pair_btn.setToolTip(tr("Pair a new Moonlight client by PIN "
+        self._pair_btn.setToolTip(tr("Pair a new moonlight client by PIN "
                                      "(session must be running)"))
         self._pair_btn.setEnabled(False)
         self._pair_btn.clicked.connect(self._on_pair)
         # "Sandbox", not "Client": the box picks the profile whose
-        # sandbox is streamed. The clients are the Moonlight devices
+        # sandbox is streamed. The clients are the moonlight devices
         # paired to it, which is what the Pair button next to it means.
         top.addWidget(QLabel(tr("Sandbox")))
         top.addWidget(self._client, 1)
@@ -290,7 +290,7 @@ class SessionPage(QWidget):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
         # NVENC (NVIDIA) and VAAPI (AMD/Intel) expose different encoder knobs;
-        # the runtime already picks the matching Sunshine encoder by GPU vendor.
+        # the runtime already picks the matching sunshine encoder by GPU vendor.
         if self._nvidia:
             self._build_nvenc_row(row)
         else:
@@ -301,7 +301,7 @@ class SessionPage(QWidget):
 
         bottom = QHBoxLayout()
         self._quality_hint = QLabel(tr(
-            "Bitrate & codec are chosen by the Moonlight client; these control "
+            "Bitrate & codec are chosen by the moonlight client; these control "
             "encoder quality on the server side."))
         self._quality_hint.setProperty("muted", True)
         self._quality_hint.setWordWrap(True)
@@ -309,7 +309,7 @@ class SessionPage(QWidget):
         self._apply_btn.setToolTip(tr("Apply immediately to the running session "
                                       "(stream briefly reconnects)"))
         self._apply_btn.clicked.connect(self._on_apply_quality)
-        self._web_btn = QPushButton(tr("Open Sunshine web UI"))
+        self._web_btn = QPushButton(tr("Open sunshine web UI"))
         self._web_btn.clicked.connect(self._open_web_ui)
         bottom.addWidget(self._quality_hint, 1)
         bottom.addWidget(self._apply_btn)
@@ -367,7 +367,7 @@ class SessionPage(QWidget):
         self._vbv.setSingleStep(25)
         self._vbv.setToolTip(tr(
             "VBV buffer increase (%): a larger buffer reduces artifacts in fast "
-            "motion at the same bitrate. 0 = Sunshine default."))
+            "motion at the same bitrate. 0 = sunshine default."))
         # Combos persist on change (survives restarts). The spinbox persists on
         # editingFinished (Enter / focus-out), NOT valueChanged: saving on every
         # keystroke emits config_changed → reload → setValue, which would clobber
@@ -460,10 +460,10 @@ class SessionPage(QWidget):
     def _load_backend(self, sc: config.SessionConfig) -> None:
         """Show the panel that belongs to this profile's backend.
 
-        Sunshine has encoder knobs applied through its config API; moonshine
+        sunshine has encoder knobs applied through its config API; moonshine
         has one transport knob and no API, so its value is saved to the
         profile and takes effect at the next start. The web UI button is
-        Sunshine's alone.
+        sunshine's alone.
         """
         spec = backends.get_or_default(sc.backend)
         self._set_backend_combo(spec.name)
@@ -474,14 +474,14 @@ class SessionPage(QWidget):
         self._web_btn.setVisible(spec.web_port_off is not None)
         if sunshine:
             self._quality_hint.setText(tr(
-                "Bitrate & codec are chosen by the Moonlight client; these "
+                "Bitrate & codec are chosen by the moonlight client; these "
                 "control encoder quality on the server side."))
         else:
             self._fec.blockSignals(True)
             self._fec.setValue(sc.moonshine_fec_percent)
             self._fec.blockSignals(False)
             self._quality_hint.setText(tr(
-                "Bitrate & codec are chosen by the Moonlight client. "
+                "Bitrate & codec are chosen by the moonlight client. "
                 "{backend} has no config API, so this applies at the next "
                 "session start.", backend=spec.label))
 
@@ -603,7 +603,7 @@ class SessionPage(QWidget):
 
     def _update_resolution(self, running: bool) -> None:
         """With dynamic resolution the render size is only known once a client
-        connects (the container drops it into the mounted HOME). Sunshine locks
+        connects (the container drops it into the mounted HOME). sunshine locks
         the first client's mode until the session restarts; moonshine rebuilds
         compositor and gamescope per session, so it follows every reconnect."""
         sc = self._profile()
@@ -815,16 +815,16 @@ class SessionPage(QWidget):
         home = sc.home_dir()
         self._pair_btn.setEnabled(False)
         failed = tr("The PIN was submitted but no pairing completed. Restart "
-                    "the pairing in Moonlight and enter the new PIN.")
+                    "the pairing in moonlight and enter the new PIN.")
 
         def _pair() -> str:
             if spec.name == backends.MOONSHINE.name:
                 if not moonshine_api.pair_verified(pin, home, port=base):
                     raise RuntimeError(failed)
-                return tr("Paired. Moonlight can stream now.")
+                return tr("Paired. moonlight can stream now.")
             if not sunshine_api.pair_verified(pin, name, home, base + 1):
                 raise RuntimeError(failed)
-            return tr("Client '{name}' paired. Moonlight can stream now.", name=name)
+            return tr("Client '{name}' paired. moonlight can stream now.", name=name)
 
         start_action(self._pool, _pair, "Pairing", self._on_pair_done)
 
@@ -840,7 +840,7 @@ class SessionPage(QWidget):
         if not backends.get_or_default(sc.backend).live_config:
             self._quality_hint.setText(tr(
                 "The {backend} backend has no live quality settings; these "
-                "apply to Sunshine profiles only.",
+                "apply to sunshine profiles only.",
                 backend=backends.get_or_default(sc.backend).label))
             return
         changes = self._quality_changes()

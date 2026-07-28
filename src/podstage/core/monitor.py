@@ -16,7 +16,7 @@ Everything here is readable as the plain user (the container is rootless):
     Compositor-side, so it is the one performance number that reads the same on
     NVIDIA, AMD and Intel.
 
-There is deliberately NO connected-client detection: Sunshine's media path is
+There is deliberately NO connected-client detection: sunshine's media path is
 unconnected UDP (no socket peer to read), and every heuristic tried around
 that (conntrack remnants, send-queue sampling, NVENC attribution) flickered —
 complexity without real value. The NVENC session count in the GPU stats is

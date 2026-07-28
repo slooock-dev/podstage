@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Show, and with --apply write, updates for the version pins in
 containers/runtime/Containerfile: the Arch base-image digest and the
-Sunshine release (tag + asset sha256).
+sunshine release (tag + asset sha256).
 
 Stdlib only. After --apply: `podstage runtime build`, `podstage doctor`,
 then stream once against a real client before committing.
@@ -52,7 +52,7 @@ def sunshine_latest() -> tuple[str, str]:
             if digest.startswith("sha256:"):
                 return tag, digest.removeprefix("sha256:")
             return tag, hashlib.sha256(fetch(asset["browser_download_url"])).hexdigest()
-    raise SystemExit(f"Sunshine {tag}: asset {name} not found")
+    raise SystemExit(f"sunshine {tag}: asset {name} not found")
 
 
 def main() -> int:

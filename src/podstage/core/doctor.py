@@ -4,7 +4,7 @@
 pipeline needs is present *before* anything tries to stream. Checks carry an
 optional ``fix`` — a ready-made (usually sudo) command line; ``podstage
 setup`` aggregates those into a guided one-shot script. Host-side gamescope/
-labwc/Sunshine are NOT checked anymore: they live inside the runtime image.
+labwc/sunshine are NOT checked anymore: they live inside the runtime image.
 """
 
 import getpass
@@ -216,7 +216,7 @@ def check_moonshine_gpu() -> CheckResult:
     """Can this GPU run moonshine at all?
 
     moonshine encodes through Vulkan Video, which needs NVIDIA RTX, AMD
-    RDNA2+ or Intel Arc. Every older GPU streams fine through Sunshine's
+    RDNA2+ or Intel Arc. Every older GPU streams fine through sunshine's
     NVENC/VAAPI path and cannot use this backend, so this is a hardware fact
     to surface before the choice is made, not something a fix can resolve.
     """
@@ -242,7 +242,7 @@ def check_moonshine_gpu() -> CheckResult:
 def check_udev_rules() -> CheckResult:
     """Both host udev rules must be installed: the static seat9 rule (input
     isolation) and the generated per-user OWNER rule (rootless device
-    access — without it Sunshine cannot open /dev/uinput and the stream has
+    access — without it sunshine cannot open /dev/uinput and the stream has
     no input at all)."""
     if not udev.STATIC_DEST.exists():
         return CheckResult(
@@ -258,7 +258,7 @@ def check_udev_rules() -> CheckResult:
         return CheckResult(
             "udev rules", Status.FAIL,
             "installed seat rule is outdated — it must match *passthrough* "
-            "(Sunshine's kb/mouse/touch) AND vendor 28de (Steam's virtual pad)",
+            "(sunshine's kb/mouse/touch) AND vendor 28de (Steam's virtual pad)",
             fix=UDEV_FIX,
         )
     if not udev.OWNER_DEST.exists():
@@ -284,7 +284,7 @@ def check_udev_rules() -> CheckResult:
 
 
 def check_mdns() -> CheckResult:
-    """Moonlight auto-discovery: the host announces via avahi; firewalld must
+    """moonlight auto-discovery: the host announces via avahi; firewalld must
     let mDNS (UDP 5353) in. Add-by-IP works without it."""
     fix = "sudo firewall-cmd --permanent --add-service=mdns && sudo firewall-cmd --reload"
     rc, out = _run(["firewall-cmd", "--query-service=mdns"])
@@ -295,11 +295,11 @@ def check_mdns() -> CheckResult:
     if rc != 0 and out.strip() not in ("no", ""):
         return CheckResult("mdns firewall", Status.WARN, f"cannot query firewalld ({out})", fix=fix)
     return CheckResult("mdns firewall", Status.WARN,
-                       "mDNS blocked — Moonlight won't auto-discover (add-by-IP still works)",
+                       "mDNS blocked — moonlight won't auto-discover (add-by-IP still works)",
                        fix=fix)
 
 
-# Ports Moonlight needs, as offsets from a profile's base port; a custom
+# Ports moonlight needs, as offsets from a profile's base port; a custom
 # base shifts the whole set. Both backends use the same block. The default base (47989) yields
 # TCP 47984/47989/48010 and UDP 47998-48000/48100/48200.
 # TCP: https/http/rtsp. UDP: video/control/audio + 2.
@@ -308,7 +308,7 @@ _STREAM_UDP_OFFSETS = [9, 10, 11, 111, 211]
 
 
 def stream_port_bases() -> list[int]:
-    """The Moonlight base ports the firewall must cover: one per configured
+    """The moonlight base ports the firewall must cover: one per configured
     session profile, or the default base with no (readable) config."""
     try:
         bases = {s.sunshine_port_base
@@ -354,14 +354,14 @@ def _fw_covered(port: int, proto: str, ranges: dict[str, list[tuple[int, int]]])
 
 
 def check_stream_firewall() -> CheckResult:
-    """Firewalld must let the Moonlight stream ports through, for every
+    """Firewalld must let the moonlight stream ports through, for every
     configured profile's base port and not just the default (a custom
     ``sunshine_port_base`` shifts the whole port set).
 
     Range-aware: a broad high-port range counts as open (so this doesn't warn on
     a host that opens e.g. 1025-65535). Only ports are inspected; if you opened
     them via a firewalld *service*, ignore a warning. Add-by-IP pairing still
-    needs these; without them Moonlight fails to pair/stream, often silently."""
+    needs these; without them moonlight fails to pair/stream, often silently."""
     tcp, udp = stream_ports()
     rc, state = _run(["firewall-cmd", "--state"])
     if rc != 0 or "running" not in state:
@@ -375,28 +375,28 @@ def check_stream_firewall() -> CheckResult:
     missing_udp = [p for p in udp if not _fw_covered(p, "udp", ranges)]
     if not missing_tcp and not missing_udp:
         bases = stream_port_bases()
-        detail = "Moonlight stream ports open"
+        detail = "moonlight stream ports open"
         if bases != [runtime.DEFAULT_STREAM_PORT]:
             detail += " (base " + ", ".join(str(b) for b in bases) + ")"
         return CheckResult("stream firewall", Status.OK, detail)
     missing = ([f"{p}/tcp" for p in missing_tcp]
                + [f"{p}/udp" for p in missing_udp])
     return CheckResult("stream firewall", Status.WARN,
-                       "closed: " + ", ".join(missing) + " — Moonlight may fail to pair/stream",
+                       "closed: " + ", ".join(missing) + " — moonlight may fail to pair/stream",
                        fix=_stream_fw_fix(missing_tcp, missing_udp))
 
 
 def check_avahi() -> CheckResult:
     if shutil.which("avahi-publish-service"):
         return CheckResult("avahi", Status.OK, "avahi-publish-service present")
-    # Only the Sunshine backend announces itself through the host's avahi;
+    # Only the sunshine backend announces itself through the host's avahi;
     # moonshine carries its own mDNS responder (Backend.host_mdns).
     if not any(backends.get_or_default(b).host_mdns
                for b in configured_backends()):
         return CheckResult("avahi", Status.OK,
                            "not needed, moonshine announces itself")
     return CheckResult("avahi", Status.WARN,
-                       "avahi-publish-service missing — no Moonlight auto-discovery")
+                       "avahi-publish-service missing — no moonlight auto-discovery")
 
 
 def check_cdi() -> CheckResult:
@@ -426,7 +426,7 @@ def check_uinput() -> CheckResult:
         return CheckResult("uinput", Status.OK, "/dev/uinput writable")
     return CheckResult(
         "uinput", Status.FAIL,
-        "/dev/uinput not writable — Sunshine cannot create input devices. "
+        "/dev/uinput not writable — sunshine cannot create input devices. "
         "Install the udev rules, then re-trigger",
         fix="sudo udevadm trigger --sysname-match=uinput")
 
@@ -504,16 +504,16 @@ def check_steam() -> CheckResult:
 
 
 def check_sunshine_conflict() -> CheckResult:
-    """Warn about an always-on Sunshine that would occupy podstage's ports."""
+    """Warn about an always-on sunshine that would occupy podstage's ports."""
     rc, state = _run(["systemctl", "--user", "is-enabled",
                       "app-dev.lizardbyte.app.Sunshine.service"])
     if rc == 0 and state.strip() == "enabled":
         return CheckResult(
             "sunshine-conflict", Status.WARN,
-            "flatpak Sunshine auto-start is enabled and will grab ports 47989/47990",
+            "flatpak sunshine auto-start is enabled and will grab ports 47989/47990",
             fix="systemctl --user disable --now app-dev.lizardbyte.app.Sunshine.service",
         )
-    return CheckResult("sunshine-conflict", Status.OK, "no always-on Sunshine service")
+    return CheckResult("sunshine-conflict", Status.OK, "no always-on sunshine service")
 
 
 # (check, group), in the order they are meant to be worked through: the host
@@ -531,9 +531,9 @@ ALL_CHECKS: list[tuple[Callable[[], CheckResult], str]] = [
     (check_mdns, GROUP_STREAMING),
     (check_stream_firewall, GROUP_STREAMING),
     (check_avahi, GROUP_STREAMING),
-    # An always-on Sunshine occupies the base port block, which collides with
+    # An always-on sunshine occupies the base port block, which collides with
     # a session on ANY backend, so this belongs to streaming, not to the
-    # Sunshine backend.
+    # sunshine backend.
     (check_sunshine_conflict, GROUP_STREAMING),
     (check_image, backends.SUNSHINE.name),
     (check_moonshine_gpu, backends.MOONSHINE.name),

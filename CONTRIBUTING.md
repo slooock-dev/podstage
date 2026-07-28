@@ -46,7 +46,7 @@ podstage runtime build --backend moonshine
 | GUI | `podstage.ui` | PyQt6 management window (setup, sandboxes, session, logs) |
 | CLI | `podstage.cli` | scriptable surface; `doctor`, `setup`, `runtime`, `session`, … |
 | Core | `podstage.core` | `backends`, `runtime`, `udev`, `provisioner`, `monitor`, `sandbox`, `doctor`, `elevate`, `sunshine_api`, `moonshine_api`, `steam`, `session`, `teardown` |
-| Image | `containers/runtime` | the self-contained streaming sandbox (labwc → gamescope → Steam + Sunshine) |
+| Image | `containers/runtime` | the self-contained streaming sandbox (labwc → gamescope → Steam + sunshine) |
 | Image | `containers/moonshine` | the alternative backend image (moonshine → gamescope → Steam), built FROM the one above |
 
 **`core/runtime.py` is the single source of truth** for the `podman run`
@@ -139,6 +139,6 @@ Language selection: `config.language` (`auto`/`en`/`de`, set in the Setup panel)
   whether there is a live config API). Add a backend trait there and read it
   in `core/runtime.py`; do not branch on the backend name at call sites.
 - **Updating the pinned versions**: `tools/bump_pins.py` compares the
-  Containerfile pins (Arch base digest, Sunshine release) against upstream;
+  Containerfile pins (Arch base digest, sunshine release) against upstream;
   `--apply` writes them. Then `podstage runtime build`, `podstage doctor`,
   and one real stream before committing.

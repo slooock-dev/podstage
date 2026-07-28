@@ -281,18 +281,18 @@ def cmd_session_start(args: argparse.Namespace) -> int:
 
 
 def _pair_hints(sc: SessionConfig) -> list[str]:
-    """How to pair with this profile's backend. Only Sunshine has a web UI."""
+    """How to pair with this profile's backend. Only sunshine has a web UI."""
     spec = backends.get_or_default(sc.backend)
     web = spec.web_port(sc.sunshine_port_base)
     # The name carries the backend, so a profile's two backends are two hosts
     # in the client with two pairings; say which one to pick.
-    lines = [f"  Moonlight lists it as: {spec.advertised_name(sc.name)}"]
+    lines = [f"  moonlight lists it as: {spec.advertised_name(sc.name)}"]
     if web is not None:
-        lines.append(f"  Pair once at https://localhost:{web}  (Sunshine web UI)")
-        lines.append(f"  or: podstage session pair {sc.name} <PIN>  (PIN shown by Moonlight)")
+        lines.append(f"  Pair once at https://localhost:{web}  (sunshine web UI)")
+        lines.append(f"  or: podstage session pair {sc.name} <PIN>  (PIN shown by moonlight)")
     else:
         lines.append(f"  Pair once: podstage session pair {sc.name} <PIN>  "
-                     "(PIN shown by Moonlight)")
+                     "(PIN shown by moonlight)")
     return lines
 
 
@@ -309,7 +309,7 @@ def cmd_session_login(args: argparse.Namespace) -> int:
         print(f"login start failed: {e}", file=sys.stderr)
         return 1
     print(f"Login session for '{args.name}' started (container podstage-runtime).")
-    print("  Connect with Moonlight; Big Picture shows the Steam sign-in")
+    print("  Connect with moonlight; Big Picture shows the Steam sign-in")
     print("  (QR code via the Steam Mobile App, or the on-screen keyboard).")
     for line in _pair_hints(s.cfg):
         print(line)
@@ -319,9 +319,9 @@ def cmd_session_login(args: argparse.Namespace) -> int:
 
 
 def cmd_session_pair(args: argparse.Namespace) -> int:
-    """Complete a Moonlight pairing, verified against the sandbox pairing
+    """Complete a moonlight pairing, verified against the sandbox pairing
     state on both backends (see the pair_verified helpers). moonshine records
-    no client names, so --device is Sunshine-only there."""
+    no client names, so --device is sunshine-only there."""
     s = _resolve_session(args.name)
     if s is None:
         return 1
@@ -340,7 +340,7 @@ def cmd_session_pair(args: argparse.Namespace) -> int:
     if not ok:
         print("PIN submitted, but no new pairing appeared; wrong/expired PIN, "
               "or a stale pairing attempt swallowed it (the server answers the "
-              "oldest one). Restart pairing in Moonlight and retry; if it "
+              "oldest one). Restart pairing in moonlight and retry; if it "
               "keeps failing, restart the session.", file=sys.stderr)
         return 1
     if moonshine:
@@ -655,14 +655,14 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--resolution", metavar="WxH@R",
                             help="resolution (required for a 'pick at startup' profile)")
         if action == "pair":
-            sp.add_argument("pin", help="4-digit PIN shown by Moonlight")
+            sp.add_argument("pin", help="4-digit PIN shown by moonlight")
             sp.add_argument("--device",
-                            help="client name recorded by Sunshine (default: profile name)")
+                            help="client name recorded by sunshine (default: profile name)")
         if action == "add":
             sp.add_argument("--resolution", default="1080p60", metavar="PRESET|WxH@R|ask",
                             help="pre-connect canvas + fallback size (default: 1080p60)")
             sp.add_argument("--port", type=int,
-                            help="Moonlight base port (default: first free block)")
+                            help="moonlight base port (default: first free block)")
             sp.add_argument("--backend", default=backends.DEFAULT,
                             choices=backends.names(),
                             help="streaming backend (default: "

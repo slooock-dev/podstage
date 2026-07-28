@@ -105,13 +105,13 @@ def overlay_dirs(home_dir: Path, library_path: Path) -> tuple[Path, Path]:
     root = overlay_root(home_dir) / f"{library_path.parent.name}-{slug}"
     return root / "upper", root / "work"
 
-# Sunshine web-UI login. Generated once per install — there is deliberately no
+# sunshine web-UI login. Generated once per install — there is deliberately no
 # fixed default ("podstage/podstage" was a LAN-reachable known credential).
 WEB_CREDENTIALS_FILE = DATA_DIR / "runtime" / "web_credentials.json"
 
 
 def sunshine_web_credentials() -> tuple[str, str]:
-    """(user, password) for the Sunshine web UI, creating them on first use.
+    """(user, password) for the sunshine web UI, creating them on first use.
 
     The GUI, CLI and container start all read the same file, so pairing keeps
     working across restarts. An explicit PS_WEB_USER/PS_WEB_PASS in the
@@ -136,9 +136,9 @@ def sunshine_web_credentials() -> tuple[str, str]:
 EXPERIMENTAL_FEATURES: dict[str, str] = {
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
     # SUNSHINE ONLY (session.py drops it for moonshine, which drives its own
-    # gamepads): Sunshine emulates a DualSense instead of the default Xbox
+    # gamepads): sunshine emulates a DualSense instead of the default Xbox
     # pad. Wanted whenever the client streams with a PlayStation controller,
-    # because Sunshine's `gamepad = auto` picks a DualSense for such a client
+    # because sunshine's `gamepad = auto` picks a DualSense for such a client
     # anyway and fails without /dev/uhid. Mounts the host /dev.
     "gamepad_ds5": "PS_GAMEPAD_DS5",
 }
@@ -200,7 +200,7 @@ class SessionConfig:
     name: str
     resolution: str = "deck"
     # Render at the connecting client's resolution (PS_DYNAMIC_RES). Off =
-    # fixed profile resolution. Sunshine locks the first client's mode until
+    # fixed profile resolution. sunshine locks the first client's mode until
     # the session restarts; moonshine rebuilds compositor and gamescope per
     # session, so there it follows every reconnect (backends.res_locked).
     dynamic_resolution: bool = True
@@ -209,7 +209,7 @@ class SessionConfig:
     # core/backends.py; moonshine needs a GPU with a Vulkan video-encode
     # queue and has no live config API.
     backend: str = "sunshine"
-    # Moonlight base port; the rest of the port block derives from it. The
+    # moonlight base port; the rest of the port block derives from it. The
     # key keeps its historical name so existing config.toml files keep their
     # ports (an unknown key would silently fall back to the default).
     sunshine_port_base: int = 47989
@@ -217,7 +217,7 @@ class SessionConfig:
     # Extra sunshine.conf lines (key → value), e.g. {"nvenc_preset": "1"}.
     # Injected via PS_SUNSHINE_EXTRA on every start — the durable counterpart
     # to live changes through the web API (which die with the container).
-    # Sunshine backend only; moonshine has its own two settings below.
+    # sunshine backend only; moonshine has its own two settings below.
     sunshine_extra: dict[str, str] = field(default_factory=dict)
     # moonshine backend only. Both keys were verified against the server:
     # it ignores unknown keys silently but rejects a wrong type, so a type
@@ -229,7 +229,7 @@ class SessionConfig:
     # ("no FEC", fine on a wired LAN) rather than a stand-in for "unset".
     moonshine_fec_percent: int = -1
     # XKB layout of the streamed session (compositor.keyboard). Empty keeps
-    # moonshine's default, which is "us". The Sunshine pipeline has no
+    # moonshine's default, which is "us". The sunshine pipeline has no
     # equivalent setting.
     moonshine_keyboard_layout: str = ""
     moonshine_keyboard_variant: str = ""

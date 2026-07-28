@@ -16,7 +16,7 @@ def test_owner_rule_covers_streaming_devices_and_uinput():
                   'ATTRS{name}=="*passthrough*"', 'ATTRS{id/vendor}=="28de"'):
         assert match in text
     assert 'KERNEL=="uinput"' in text
-    # The bundled Sunshine names all its devices "Sunshine …" / "… passthrough"
+    # The bundled sunshine names all its devices "Sunshine …" / "… passthrough"
     # — the old Wolf* match was a leftover and is gone.
     assert "Wolf" not in text
 

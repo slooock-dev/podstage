@@ -4,26 +4,26 @@ Alternative streaming image: **moonshine → gamescope → Steam Big Picture**,
 where [moonshine](https://github.com/hgaiser/moonshine) is compositor, capture
 path and GameStream server in one process. Built `FROM podstage-runtime`, so
 the base, the CDI GPU injection, the rootless `player` user, Steam and
-gamescope are identical to the Sunshine backend.
+gamescope are identical to the sunshine backend.
 
 Pick it per profile (`podstage session add --backend moonshine`, or the GUI's
-profile dialog). The Sunshine backend stays the default.
+profile dialog). The sunshine backend stays the default.
 
-## What changes against the Sunshine backend
+## What changes against the sunshine backend
 
-| | Sunshine backend | moonshine backend |
+| | sunshine backend | moonshine backend |
 |---|---|---|
 | compositor | labwc (headless) + seatd + seat-shim + keeper | moonshine's own (smithay) |
 | capture / encode | wlr-screencopy + NVENC/VAAPI | internal + Vulkan Video |
 | GPU requirement | every GPU podstage supports | Vulkan video-encode queue: NVIDIA RTX, AMD RDNA2+, Intel Arc |
-| input | Sunshine virtual evdev → udev OWNER rule → seat-shim fake hotplug | client input straight into moonshine's Wayland seat; inputtino creates the gamepads |
+| input | sunshine virtual evdev → udev OWNER rule → seat-shim fake hotplug | client input straight into moonshine's Wayland seat; inputtino creates the gamepads |
 | discovery | host `avahi-publish-service` (no avahi in the container) | built-in mDNS responder |
 | name in the client | `PS_SUNSHINE_NAME` → `sunshine.conf` | `PS_MOONSHINE_NAME` → `config.toml` + its mDNS record |
 | pairing | `POST /api/pin`, TLS + basic auth | `POST /submit-pin`, plain HTTP, **no auth** |
 | config changes | live via the web API | rewrite `config.toml`, restart the session |
 | quality settings | profile `sunshine_extra`, applied live | `fec_percentage`, applied at the next start |
 | keyboard layout | host default | `compositor.keyboard` per profile |
-| mouse & keyboard | `PS_MOUSE_INPUT` gates Sunshine's virtual devices | always in the compositor seat, nothing to gate |
+| mouse & keyboard | `PS_MOUSE_INPUT` gates sunshine's virtual devices | always in the compositor seat, nothing to gate |
 | GUI preview | wf-recorder on the labwc output | `gamescopectl screenshot` on the nested gamescope |
 | render size | first client's mode, locked until restart | the connecting client's mode, per session |
 
@@ -32,7 +32,7 @@ delegation) disappears structurally: moonshine's compositor never opens an
 evdev device. gamescope still runs nested, so the focus watchdog, the perf
 probe and the `touch_click_mode` pin carry over unchanged.
 
-`gamepad_ds5` is a Sunshine switch (`gamepad = ds5` in `sunshine.conf`), so
+`gamepad_ds5` is a sunshine switch (`gamepad = ds5` in `sunshine.conf`), so
 `core/session.py` drops `PS_GAMEPAD_DS5` here instead of shipping dead env.
 Which pad this inputtino builds is unmeasured. No `/dev` switch needed either:
 `full_dev=True` is fixed for this backend, every gamepad goes through uhid.
@@ -80,7 +80,7 @@ cursor. Also upstream-fixable: advertising xdg-decoration and answering
 "server-side" would make libdecor stand down on its own.
 
 **The preview loop in `entrypoint.sh`.** The host GUI reads
-`$HOME/.cache/podstage/thumb.png` from the mounted sandbox, and the Sunshine
+`$HOME/.cache/podstage/thumb.png` from the mounted sandbox, and the sunshine
 path fills it with wf-recorder. That does not work here: neither moonshine's
 compositor nor gamescope's `--expose-wayland` display implements
 wlr-screencopy (wf-recorder rejects both), and gamescope's PipeWire capture
@@ -102,13 +102,13 @@ session.
 | `healthcheck` | `moonshine healthcheck`: render node, EGL, Vulkan codecs, DMA-BUF, XWayland, uinput, uhid. A manual diagnostic; `podstage doctor` uses vulkaninfo against the runtime image instead |
 | `shell` | drop into bash with the buses and the systemd1 stub already up |
 
-`desktop`, `steam` and `probe` are Sunshine-only and exit with an error here.
+`desktop`, `steam` and `probe` are sunshine-only and exit with an error here.
 
 ## Ports
 
-The Moonlight block derives from the profile's base port with the usual
+The moonlight block derives from the profile's base port with the usual
 offsets (`base-5` https, `base` http, `+9/+10/+11` video/control/audio, `+21`
-rtsp), the same ones Sunshine uses, mirrored in `core/backends.py`. There is
+rtsp), the same ones sunshine uses, mirrored in `core/backends.py`. There is
 no web UI, so nothing sits on `base+1`.
 
 ## Status
@@ -130,13 +130,13 @@ Two things are understood well enough to describe but not fixed in 0.3.0.
 in Big Picture, and under a second at a time. Ruled out by measurement, not by
 argument: the picture gamescope hands over (14 captures, brightness spread
 0.12), forward error correction (just as bad at 20 %), and the idea that the
-two backends read the requested number differently (Sunshine asked for 50 sends
+two backends read the requested number differently (sunshine asked for 50 sends
 44.6 Mbit/s on average, peak 53.9, measured over 90 s of `tx_bytes`; moonshine
 asked for 12 sends 12; so both take it the same way). Lowering the bitrate is
 what helps: around 10 to 17 Mbit/s streams cleanly on the test setup, 50
-flickers while Sunshine runs at 50 over the same link. That is where it is left
+flickers while sunshine runs at 50 over the same link. That is where it is left
 for 0.3.0. Everything measured so far watches the sending side; the next step
-is the receiving one, which is Moonlight's performance overlay (received
+is the receiving one, which is moonlight's performance overlay (received
 bitrate, packet loss, dropped frames) plus `log_frame_spikes` and video-pipeline
 debug logging on the host.
 

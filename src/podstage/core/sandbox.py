@@ -19,7 +19,7 @@ from .. import config
 from . import backends, elevate, provisioner
 
 SUNSHINE_STATE = ".config/podstage-sunshine/state.json"
-# moonshine persists `unique_id`, `clients` (Moonlight's fixed 16-char ids)
+# moonshine persists `unique_id`, `clients` (moonlight's fixed 16-char ids)
 # and `paired_certs`. It stores no client NAMES, so the paired list reads as
 # ids on that backend.
 MOONSHINE_STATE = ".local/share/moonshine/state.toml"
@@ -45,10 +45,10 @@ def _moonshine_state(home: Path) -> dict:
 
 
 def paired_clients(home: Path, backend: str = backends.DEFAULT) -> list[str]:
-    """Moonlight clients paired to this sandbox (the state file appears with
+    """moonlight clients paired to this sandbox (the state file appears with
     the first pairing).
 
-    Sunshine records device names; moonshine only records client ids, so that
+    sunshine records device names; moonshine only records client ids, so that
     backend's list is ids.
     """
     if backend == backends.MOONSHINE.name:

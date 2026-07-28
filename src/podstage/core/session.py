@@ -141,7 +141,7 @@ class Session:
         if backend.name != backends.SUNSHINE.name and mode != "pipeline":
             raise RuntimeError(
                 f"the {backend.label} backend only supports mode=pipeline "
-                f"(got {mode!r}). desktop/steam/probe are Sunshine-only")
+                f"(got {mode!r}). desktop/steam/probe are sunshine-only")
         env: dict[str, str] = {}
         # Both backends run a preview loop into the same file, each capturing
         # the way its compositor allows (see containers/moonshine/entrypoint.sh).
@@ -150,11 +150,11 @@ class Session:
         else:
             env["PS_THUMBNAIL_INTERVAL"] = str(self.cfg.preview_interval_s)
         # Both render at the connecting client's mode, each in its own way:
-        # Sunshine waits for the first client and locks that mode, moonshine
+        # sunshine waits for the first client and locks that mode, moonshine
         # sizes the nested gamescope per session from MOONSHINE_CLIENT_*.
         env["PS_DYNAMIC_RES"] = ("enabled" if self.cfg.dynamic_resolution
                                  else "disabled")
-        # Settings that only exist on the labwc + Sunshine pipeline. Setting
+        # Settings that only exist on the labwc + sunshine pipeline. Setting
         # them for moonshine would be dead env, and silently pretending they
         # apply is worse than the honest gap (see containers/moonshine/).
         if backend.name == backends.SUNSHINE.name:

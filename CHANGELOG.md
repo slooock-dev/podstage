@@ -14,8 +14,8 @@ Three things to know:
   build --backend moonshine`.
 - **Reinstall the udev rules for the DualSense feature**: the generated owner
   rule now grants `/dev/uhid`. `doctor` reports it once the feature is on.
-- **The Sunshine host is listed under a new name**: `<profile>-sunshine`
-  instead of the constant "podstage". Pairings survive, Moonlight matches on
+- **The sunshine host is listed under a new name**: `<profile>-sunshine`
+  instead of the constant "podstage". Pairings survive, moonlight matches on
   the server UUID.
 
 ### Added
@@ -24,7 +24,7 @@ Three things to know:
   moonshine`, or the profile dialog). Compositor, capture path and GameStream
   server in one process, so the labwc input plumbing (dedicated seat, faked
   udev hotplug, pointer keeper, host mDNS) falls away; gamescope still runs
-  nested. Narrower than Sunshine: Vulkan Video encode only (no pre-Arc Intel,
+  nested. Narrower than sunshine: Vulkan Video encode only (no pre-Arc Intel,
   no pre-RDNA2 AMD), an unauthenticated pairing endpoint, and no config API,
   so quality settings apply at the next session start. Own image, built on
   the runtime one from source. See
@@ -34,7 +34,7 @@ Three things to know:
   output into the same file at the same interval.
 - **moonshine renders at the connecting client's resolution.** gamescope takes
   the size moonshine hands the application and re-sizes on every reconnect,
-  where Sunshine locks the first client's mode until restart.
+  where sunshine locks the first client's mode until restart.
 - **Two moonshine settings per profile**: forward error correction and the
   session keyboard layout (otherwise `us`). Both verified against the server
   by type error, since it ignores unknown keys but rejects a wrong type.
@@ -58,12 +58,12 @@ Three things to know:
 - **Per-profile extra mounts** for non-Steam games and launchers (`--mount
   /path`, `:rw` for launchers that update themselves), started from Big
   Picture as non-Steam shortcuts. Container path equals host path.
-- **DualSense emulation (`gamepad_ds5`, experimental).** Sunshine emulates a
+- **DualSense emulation (`gamepad_ds5`, experimental).** sunshine emulates a
   DualSense instead of the Xbox pad: gyro and matching glyphs. Not optional
   for a PlayStation controller, since `gamepad = auto` picks that pad anyway
   and fails without `/dev/uhid`; the runtime binds the host `/dev` while it is
-  on. Steam Deck needs Steam Input off for Moonlight, which costs the
-  trackpad-mouse. Sunshine only.
+  on. Steam Deck needs Steam Input off for moonlight, which costs the
+  trackpad-mouse. sunshine only.
 - **Container diagnostics in the image**: frame, X11, event-recorder and
   uinput probes.
 - **A folder picker for extra mounts**, with a *writable* box deciding
@@ -94,6 +94,10 @@ Three things to know:
 - `containers/runtime/run.sh` takes `PS_BACKEND` and no longer keeps its own
   copy of the forwarded environment.
 - The two spike harnesses are out of the tree.
+- **sunshine and moonlight are lower-case everywhere** in docs, GUI and CLI
+  output, like podstage and moonshine. Only identifiers keep their spelling:
+  the `LizardByte/Sunshine` URLs, the `app.Sunshine.service` unit and the
+  `ATTRS{name}=="Sunshine*"` udev match, which matches real device names.
 
 ### Fixed
 
@@ -104,7 +108,7 @@ Three things to know:
   `-`), the suffix reads `-sunshine` / `-moonshine`, and the seed profile is
   `sandbox-steam`. Existing profiles keep their name, only the wire form is
   sanitised.
-- **A Moonlight on the podstage machine itself never found the session.**
+- **A moonlight on the podstage machine itself never found the session.**
   avahi answered with the machine name, which also carries `127.0.0.1` and a
   scope-less link-local IPv6. The service points at its own
   `podstage-stream.local` with the LAN IPv4 only, and falls back to the
@@ -117,7 +121,7 @@ Three things to know:
 - **The error-correction box names its default** ("moonshine default (20 %)").
   One step below it sits 0, which switches FEC off entirely. The profile still
   stores -1 for "leave moonshine's default alone".
-- **A profile's two backends are two hosts in the client.** Sunshine announced
+- **A profile's two backends are two hosts in the client.** sunshine announced
   the constant "podstage" and moonshine the bare profile name, so nothing said
   which backend a host was, although their pairings are separate. Both
   announce `<profile>-<backend>` from `Backend.advertised_name`.
@@ -308,11 +312,11 @@ patch and the entrypoint changed.
 - **Experimental features card**: every experimental switch lives on the
   Setup page (persisted under `[experimental]` in config.toml, applied at the
   next session start). Current entries:
-  - *Follow client resolution*: a Sunshine prep-cmd resizes the output to
-    the connecting Moonlight client's resolution (`wlr-randr` inside the
+  - *Follow client resolution*: a sunshine prep-cmd resizes the output to
+    the connecting moonlight client's resolution (`wlr-randr` inside the
     container) and restores the profile resolution when the stream ends.
   - *HDR stream* (unverified): gamescope gets `--hdr-enabled`, games see
-    `DXVK_HDR=1`; whether the stream carries HDR depends on Sunshine's
+    `DXVK_HDR=1`; whether the stream carries HDR depends on sunshine's
     capture path and the client.
 
   Both need a current runtime image (`PS_DYNAMIC_RES`/`PS_HDR` also work as
@@ -332,7 +336,7 @@ patch and the entrypoint changed.
   GUI hid the last frame after 45 s without a new one; it now keeps it for
   the rest of the session (frames from a previous session stay excluded). A
   Setup → Streaming toggle restores the strict hiding.
-- The GUI's "open in browser" buttons (Sunshine web UI, release page) did
+- The GUI's "open in browser" buttons (sunshine web UI, release page) did
   nothing on KDE: `ui.sh` exported `QT_PLUGIN_PATH`, the spawned
   `xdg-open`/`kde-open` inherited it and aborted on the ABI-foreign Qt
   plugins before a browser could open. The plugin dir is now handed over
@@ -405,7 +409,7 @@ and podstage can now remove itself without residues.
 ### Removed
 
 - `PS_SHARED_LIBS_RO`: obsolete; the host library is always read-only now.
-- The `Wolf*` udev matches: the bundled Sunshine names its devices
+- The `Wolf*` udev matches: the bundled sunshine names its devices
   `Sunshine …` / `… passthrough`; the patterns were a Games-on-Whales
   leftover. Re-running the Setup rules install refreshes them (optional).
 
@@ -421,7 +425,7 @@ Steam Deck.
 
 - **Containerised runtime.** A self-contained image runs the full pipeline
   (`cage` headless → `gamescope` → Steam Big Picture) captured by a bundled
-  Sunshine (wlr screencopy, hardware encode via NVENC or VAAPI) with a private
+  sunshine (wlr screencopy, hardware encode via NVENC or VAAPI) with a private
   PipeWire stack.
 - **Runs entirely as your user.** No root, no daemons, no system services;
   the container is plain rootless podman (`--userns=keep-id`). Input hotplug
@@ -447,13 +451,13 @@ Steam Deck.
   with a Setup-panel selector and a `PS_LANG` override.
 - **CLI.** `doctor`, `setup`, `sunshine`, `runtime`, `session`, `provision`,
   all building on a single `core/runtime.py` container definition.
-- **Security defaults.** The Sunshine web-UI login is generated randomly per
+- **Security defaults.** The sunshine web-UI login is generated randomly per
   install (no default credential); the runtime base image is pinned by digest
-  and the bundled Sunshine package sha256-verified at build time; the README
+  and the bundled sunshine package sha256-verified at build time; the README
   documents the trade-offs honestly.
 - **AMD support.** Full `/dev/dri` + VAAPI path alongside NVIDIA: the runtime
   selects the VAAPI encoder, and the GUI shows VAAPI controls plus amdgpu-sysfs
-  telemetry. Sunshine ships as the release's native Arch package (not the
+  telemetry. sunshine ships as the release's native Arch package (not the
   AppImage, whose bundled libva can't load the image's Mesa VAAPI driver).
   Validated on a Rembrandt iGPU; it still sees far less mileage than NVIDIA.
 

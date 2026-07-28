@@ -47,7 +47,7 @@ def test_pair_posts_a_form_body_with_moonlights_fixed_id(monkeypatch):
 
 
 def test_pair_returns_false_on_the_honest_400(monkeypatch):
-    """moonshine answers 400 when no attempt is pending (Sunshine returns
+    """moonshine answers 400 when no attempt is pending (sunshine returns
     true regardless), so that is a result and not a transport failure."""
     err = urllib.error.HTTPError("u", 400, "Failed to register PIN.", {},
                                  io.BytesIO(b"Failed to register PIN."))

@@ -2,7 +2,7 @@
 
 Self-contained streaming sandbox image. Runs the full pipeline
 (**labwc(headless) → gamescope → Steam Big Picture**, captured by a bundled
-Sunshine with wlr + hardware encode) inside one podman container, so input and
+sunshine with wlr + hardware encode) inside one podman container, so input and
 audio can be isolated from the host via namespaces. gamescope renders directly
 on Vulkan; there is no virtual DRM display involved.
 
@@ -12,7 +12,7 @@ on Vulkan; there is no virtual DRM display involved.
 |---|---|
 | gamescope, labwc (stock Arch; pointer constraints and Xwayland are native), Vulkan loader (64+32-bit), mesa (RADV/ANV Vulkan, Mesa/iHD VAAPI) | GPU access: NVIDIA userspace via **CDI** (`--device nvidia.com/gpu=all`), matching the host driver; or `/dev/dri` on AMD/Intel |
 | Steam client, PipeWire stack | **HOME volume** `/home/player`: Steam login, saves, games, downloaded Proton |
-| Sunshine (pinned native Arch package) | |
+| sunshine (pinned native Arch package) | |
 
 ## Build
 
@@ -33,8 +33,8 @@ label, so `doctor` reports the image as stale.
 |---|---|
 | `probe` | gamescope Vulkan-init check only (fast smoke test) |
 | `shell` | drop into bash in the container |
-| `steam` | labwc → gamescope → Steam, **no** Sunshine (render smoke test) |
-| `pipeline` | full pipeline incl. Sunshine capture (**default**) |
+| `steam` | labwc → gamescope → Steam, **no** sunshine (render smoke test) |
+| `pipeline` | full pipeline incl. sunshine capture (**default**) |
 | `desktop` | like `pipeline` but without gamescope: Steam desktop UI (or `PS_DESKTOP_CMD`) as a window under labwc, mouse/keyboard enabled, cursor shown. A debug path, reachable only via `podstage runtime start --mode desktop`: the streamed login runs `pipeline` (Big Picture sign-in) and `podstage setup` opens Steam on the host, so neither goes through here |
 
 Examples:
@@ -42,7 +42,7 @@ Examples:
 ```bash
 ./run.sh probe                                   # is the GPU wired up?
 ./run.sh steam  homes/deck                     # does Steam render in the sandbox?
-./run.sh pipeline homes/deck 1280x800@60       # full stream, pair from Moonlight
+./run.sh pipeline homes/deck 1280x800@60       # full stream, pair from moonlight
 ```
 
 `homes/deck` is an isolated, already-logged-in Steam sandbox HOME as created by
@@ -84,7 +84,7 @@ The container is rootless (`--userns=keep-id`): no sudo, no extra capabilities.
   stays writable, and the host udev OWNER rule's chown on `/dev/uinput` and
   the streaming devices applies inside the container (groups don't map through
   the user namespace, owner-uid does).
-- `--device /dev/uinput` + `-v /dev/input:/dev/input`: Sunshine creates its
+- `--device /dev/uinput` + `-v /dev/input:/dev/input`: sunshine creates its
   virtual input devices on the real uinput, which is what keeps Steam Input
   working (Steam feeds its own virtual pad there too); labwc reads them from
   /dev/input.
@@ -96,7 +96,7 @@ The container is rootless (`--userns=keep-id`): no sudo, no extra capabilities.
   and podman's default `/dev/shm` is 64 MB, which crash-loops it into a black
   or flashing Big Picture.
 - `--security-opt label=disable`: host SELinux is enforcing.
-- `--network host`: Moonlight ports. (Collides with host X on the abstract
+- `--network host`: moonlight ports. (Collides with host X on the abstract
   `@/tmp/.X11-unix/X0`; gamescope harmlessly falls back to Xwayland `:2`.)
 - Shared host Steam libraries (steamapps + `compatibilitytools.d`) are
   **overlay volumes** (`:O,upperdir=…,workdir=…`) at their host paths: the
@@ -110,15 +110,15 @@ The container is rootless (`--userns=keep-id`): no sudo, no extra capabilities.
 ## Status
 
 The full stack runs self-contained: labwc → gamescope (Vulkan) → Steam
-`-gamepadui`, plus Sunshine with wlr screencopy capture and hardware encode
-(NVENC on NVIDIA, VAAPI on AMD/Intel) on 47984/47989/47990/48010. Pair from Moonlight,
+`-gamepadui`, plus sunshine with wlr screencopy capture and hardware encode
+(NVENC on NVIDIA, VAAPI on AMD/Intel) on 47984/47989/47990/48010. Pair from moonlight,
 or the web UI at `https://<host>:47990`. End-to-end streaming is verified: a
 game on a Steam Deck with controller and audio, the host desktop left
 undisturbed.
 
 ### How the hard parts are handled
 
-- **Input isolation.** Sunshine's virtual devices are pinned to a dedicated
+- **Input isolation.** sunshine's virtual devices are pinned to a dedicated
   seat (udev `ID_SEAT=seat9`, matching `*passthrough*` and Valve's vendor id
   28de) and labwc is pointed at that seat by a `libseat` LD_PRELOAD shim, so
   client input can't reach the host desktop and vice versa. A generated
@@ -131,7 +131,7 @@ undisturbed.
   and `SDL_JOYSTICK_DISABLE_UDEV=1` makes Steam/SDL discover gamepads via its
   own inotify fallback. Steam Input works because Steam's virtual X360 pad
   lives on the real uinput, with no proxy in between.
-- **Gamepad-only streams stay cursor-free.** Sunshine creates virtual mice
+- **Gamepad-only streams stay cursor-free.** sunshine creates virtual mice
   for every stream even with mouse injection off, so the seat shim blanks
   labwc's cursor by default (`PS_SHOW_CURSOR=1` shows it — the desktop-mode
   and mouse-input default). In Big Picture the outer cursor is
@@ -139,7 +139,7 @@ undisturbed.
   draws its own, which `-C 3000` hides 3 s after the last use.
 - **Mouse input survives device churn.** gamescope's (3.16) Wayland-backend
   input thread releases its `wl_pointer` whenever the seat's pointer
-  capability drops — which Sunshine's per-stream virtual devices would
+  capability drops — which sunshine's per-stream virtual devices would
   trigger constantly — and the recreated object never gets another `enter`,
   killing mouse input for the session. The entrypoint therefore starts
   `podstage-keeper`, a silent persistent uinput pointer that keeps the

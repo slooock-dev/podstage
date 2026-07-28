@@ -375,7 +375,7 @@ def test_moonshine_run_args_pick_its_own_image_and_bind_all_of_dev(monkeypatch):
     assert args[-1] == backends.MOONSHINE.image
     assert "/dev:/dev" in joined
     assert "/dev/input:/dev/input" not in joined
-    # The GPU wiring and the sandbox HOME are identical to the Sunshine path.
+    # The GPU wiring and the sandbox HOME are identical to the sunshine path.
     assert "/dev/nvidia-modeset" in joined
     assert "-v /tmp/home-x:/home/player" in joined
 
@@ -454,7 +454,7 @@ def test_backends_share_everything_that_is_not_backend_specific(monkeypatch):
 
 def test_the_advertised_name_carries_the_backend():
     """Both backends are separate servers with separate pairings, so a client
-    must be able to tell a profile's two sessions apart. Before this, Sunshine
+    must be able to tell a profile's two sessions apart. Before this, sunshine
     announced the constant "podstage" for every profile while moonshine
     announced the bare profile name."""
     assert backends.SUNSHINE.advertised_name("deck") == "deck-sunshine"
@@ -527,7 +527,7 @@ def test_start_skips_the_host_publisher_for_moonshine(tmp_path, monkeypatch):
 def test_publisher_points_the_service_at_its_own_host_name(monkeypatch):
     """avahi would otherwise answer with the machine's own name, which on the
     box running podstage also carries 127.0.0.1 and a scope-less link-local
-    IPv6. A Moonlight client on that same machine then lists no host at all,
+    IPv6. A moonlight client on that same machine then lists no host at all,
     silently. Measured A/B/A with one running session: machine name only, not
     listed; plus a name carrying only the LAN IPv4, listed after 10 s; machine
     name only again, not listed."""

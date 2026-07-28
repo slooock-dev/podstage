@@ -39,8 +39,8 @@ body:
   - type: input
     id: client
     attributes:
-      label: Moonlight client
-      placeholder: "e.g. Steam Deck (LCD), Moonlight flatpak"
+      label: moonlight client
+      placeholder: "e.g. Steam Deck (LCD), moonlight flatpak"
   - type: textarea
     id: logs
     attributes:

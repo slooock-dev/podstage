@@ -9,7 +9,7 @@ which holds everything that differs; the profile picks one):
 
   * ``sunshine`` (default): the container runs the full pipeline described in
     containers/runtime/: private PipeWire + session D-Bus → labwc(headless,
-    seat9) → gamescope(nested wayland) → Steam -gamepadui, plus Sunshine
+    seat9) → gamescope(nested wayland) → Steam -gamepadui, plus sunshine
     capturing labwc via wlr + NVENC/VAAPI.
   * ``moonshine``: see containers/moonshine/. moonshine is compositor,
     capture and server in one process, so labwc, seatd, the seat-shim and the
@@ -100,19 +100,19 @@ _COMMON_ENV: dict[str, str | None] = {
     "PS_PERF_METRICS": None,
     # In-container thumbnail loop (both entrypoints default to enabled, every
     # 10s). The capture differs per backend (wf-recorder on labwc for
-    # Sunshine, a gamescope screenshot for moonshine), but the setting, the
+    # sunshine, a gamescope screenshot for moonshine), but the setting, the
     # interval and the file the GUI reads do not.
     "PS_THUMBNAIL": None,
     "PS_THUMBNAIL_INTERVAL": None,
     # Render at the connecting client's mode. Both entrypoints default to
-    # enabled, so this is forwarded only to opt out (=disabled). Sunshine locks
+    # enabled, so this is forwarded only to opt out (=disabled). sunshine locks
     # the mode at the first client, moonshine re-sizes on every reconnect.
     "PS_DYNAMIC_RES": None,
     # Experimental feature (config.EXPERIMENTAL_FEATURES), "enabled".
     "PS_HDR": None,
 }
 
-# Sunshine-backend only: labwc, the seat-shim and Sunshine itself. PS_MOUSE_INPUT
+# sunshine-backend only: labwc, the seat-shim and sunshine itself. PS_MOUSE_INPUT
 # is driven by the mouse & keyboard setting; gamepad stays the default input path.
 _SUNSHINE_ENV: dict[str, str | None] = {
     "PS_NATIVE_TOUCH": "disabled",
@@ -135,7 +135,7 @@ _SUNSHINE_ENV: dict[str, str | None] = {
     # ';'-separated extra sunshine.conf lines ("key = value;key2 = value2"),
     # built from the profile's sunshine_extra (quality settings).
     "PS_SUNSHINE_EXTRA": None,
-    # Sunshine emulates a DualSense instead of an Xbox pad; moonshine's
+    # sunshine emulates a DualSense instead of an Xbox pad; moonshine's
     # inputtino has its own gamepad model, so this does not carry over.
     "PS_GAMEPAD_DS5": None,
 }
@@ -179,7 +179,7 @@ class RuntimeOptions:
     backend: str = backends.DEFAULT
     # Empty → the backend's image. Only set to pin a different tag.
     image: str = ""
-    # Moonlight base port; the whole port block derives from it
+    # moonlight base port; the whole port block derives from it
     # (backends.ports). Named per backend inside the container.
     stream_port: int = DEFAULT_STREAM_PORT
     provision: bool = True
@@ -331,7 +331,7 @@ def lan_ips() -> list[str]:
 
 
 def csrf_origins(web_port: int) -> str:
-    """Sunshine's web UI blocks requests whose Origin isn't allow-listed —
+    """sunshine's web UI blocks requests whose Origin isn't allow-listed —
     pairing from https://<host-ip>:47990 would otherwise fail. Detect the
     host's LAN IPv4s here (reliable host-side; the in-container fallback via
     ``hostname -I`` can come back empty)."""
@@ -362,9 +362,9 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
         "PS_MODE": opts.mode,
         "PS_RESOLUTION": opts.resolution,
         backend.port_env: str(opts.stream_port),
-        # What a Moonlight client lists this session as. Sunshine puts it in
+        # What a moonlight client lists this session as. sunshine puts it in
         # sunshine.conf, moonshine in its config.toml and its own mDNS
-        # responder; the host-side publisher (Sunshine only) announces the
+        # responder; the host-side publisher (sunshine only) announces the
         # same string. See Backend.advertised_name.
         backend.name_env: backend.advertised_name(opts.client),
         "PS_APP": opts.app,
@@ -389,7 +389,7 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
         env.update(_sunshine_only_env(opts, vendor))
     env.update(_forwarded_env(opts))
     # Desktop mode is pointer-driven; flip the defaults unless pinned.
-    # (Sunshine-only: the moonshine entrypoint rejects mode=desktop.)
+    # (sunshine-only: the moonshine entrypoint rejects mode=desktop.)
     if opts.mode == "desktop":
         for key, val in (("PS_MOUSE_INPUT", "enabled"), ("PS_SHOW_CURSOR", "1")):
             if key not in opts.env and not os.environ.get(key):
@@ -403,13 +403,13 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
 
 
 def _sunshine_only_env(opts: RuntimeOptions, vendor: str) -> dict[str, str]:
-    """Env the labwc + Sunshine pipeline needs and moonshine has no use for:
+    """Env the labwc + sunshine pipeline needs and moonshine has no use for:
     moonshine's compositor opens no evdev device (so nothing fakes a udev
     monitor), encodes through Vulkan Video (so there is no encoder to pick)
     and serves no web UI (so there is no origin to allow-list)."""
     return {
         "PS_CSRF_ORIGINS": csrf_origins(opts.web_port or 0),
-        # Sunshine encoder for the entrypoint's sunshine.conf: NVENC on
+        # sunshine encoder for the entrypoint's sunshine.conf: NVENC on
         # NVIDIA, VAAPI on AMD/Intel (Mesa userspace is baked into the image).
         "PS_ENCODER": "vaapi" if vendor in MESA_VENDORS else "nvenc",
         # The seat-shim fakes labwc's udev hotplug monitor via inotify on the
@@ -434,7 +434,7 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     env = container_env(opts, library_paths, vendor=vendor)
     args = ["run", "--rm", "--name", CONTAINER_NAME]
     args += ["-it"] if opts.attach else ["-d"]
-    # The whole host /dev: on Sunshine only for the ds5 experimental feature,
+    # The whole host /dev: on sunshine only for the ds5 experimental feature,
     # on moonshine always (inputtino creates its gamepads through /dev/uhid).
     # Read off the env that is actually handed to the container, so the flag
     # and the variable can never disagree.
@@ -476,7 +476,7 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     ``full_dev`` binds the host /dev wholesale instead of the uinput+input
     pair, because a kernel HID device created via /dev/uhid brings a
     dynamically appearing /dev/hidraw* node with it that Steam Input needs and
-    that cannot be pre-mounted. Sunshine needs this only for the gamepad_ds5
+    that cannot be pre-mounted. sunshine needs this only for the gamepad_ds5
     experimental feature; the moonshine backend always does, since inputtino
     creates every gamepad that way. Access control is unchanged either way:
     rootless podman has no device cgroup, so device access is plain file
@@ -677,7 +677,7 @@ def build_image(image: str = "", backend: str = backends.DEFAULT, *,
 # Host name the announced service points at, instead of the machine's own.
 # The machine name resolves to every address avahi knows for it, which on the
 # box running podstage includes 127.0.0.1 (from the `lo` announcement) and a
-# scope-less link-local IPv6 that is not reachable at all. A Moonlight client
+# scope-less link-local IPv6 that is not reachable at all. A moonlight client
 # on that same machine then lists no host, and as silently as the underscore
 # above. Remote clients never see the difference, they only get the
 # interface-scoped announcement. Established by A/B/A measurement, see the
@@ -687,12 +687,12 @@ STREAM_HOSTNAME = "podstage-stream.local"
 
 def start_publisher(name: str = "podstage",
                     port: int = DEFAULT_STREAM_PORT) -> tuple[int | None, int | None]:
-    """Announce the Sunshine instance via the HOST's avahi (the container has
+    """Announce the sunshine instance via the HOST's avahi (the container has
     no avahi daemon; ports are reachable anyway via --network host). Manual
-    add-by-IP in Moonlight works without this. Requires mDNS allowed in the
+    add-by-IP in moonlight works without this. Requires mDNS allowed in the
     host firewall (firewalld: ``firewall-cmd --add-service=mdns``).
 
-    Only the Sunshine backend needs this (``Backend.host_mdns``); moonshine
+    Only the sunshine backend needs this (``Backend.host_mdns``); moonshine
     answers mDNS itself from inside the container, under its own host name.
 
     Returns ``(service_pid, host_pid)``; the caller kills both on stop. The

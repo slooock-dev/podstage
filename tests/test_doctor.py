@@ -188,7 +188,7 @@ def test_avahi_is_not_required_for_a_moonshine_only_setup(tmp_path, monkeypatch)
     res = doctor.check_avahi()
     assert res.status is doctor.Status.OK
     assert "moonshine announces itself" in res.detail
-    # With a Sunshine profile in the mix the warning comes back.
+    # With a sunshine profile in the mix the warning comes back.
     _cfg_with(tmp_path, monkeypatch,
               '[[sessions]]\nname = "a"\n'
               '[[sessions]]\nname = "b"\nbackend = "moonshine"\n')
@@ -216,7 +216,7 @@ def test_base_image_row_says_why_it_is_there(tmp_path, monkeypatch):
     monkeypatch.setattr(doctor.runtime, "image_is_stale",
                         lambda image="", backend=None: False)
     assert "base image for the moonshine backend" in doctor.check_image().detail
-    # With a Sunshine profile present it is just the streaming image again.
+    # With a sunshine profile present it is just the streaming image again.
     _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
     assert "base image" not in doctor.check_image().detail
 
