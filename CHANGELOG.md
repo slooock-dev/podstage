@@ -4,7 +4,10 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.1] - 2026-08-10
+
+Needs a moonshine image rebuild (`podstage runtime build --backend
+moonshine`); the sunshine backend is unchanged.
 
 ### Fixed
 
@@ -17,8 +20,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   buffer that moonshine scans out directly. The flag alone is not enough:
   Steam writes `GAMESCOPE_COMPOSITE_FORCE=0` to the X root at startup and
   gamescope adopts it, so the entrypoint re-asserts the convar every 10 s.
-  Games were already a single opaque plane and are unaffected. Needs a
-  moonshine image rebuild.
+  Games were already a single opaque plane and are unaffected.
 
 ## [0.3.0] - 2026-08-09
 
