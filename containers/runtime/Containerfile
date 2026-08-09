@@ -138,6 +138,42 @@ RUN pacman -S --noconfirm --needed gcc && \
 RUN pacman -Sy --noconfirm --needed xdotool xorg-xwininfo xorg-xprop && \
     pacman -Scc --noconfirm
 
+# Patched wlroots for the headless output. Three frame-pacing defects in
+# 0.20.2, all silent (see wlroots-headless-timing.patch): the frame timer
+# truncates the period to whole milliseconds (60 Hz runs as 62.5 and beats
+# against the 60 fps encoder); the present event reports refresh=0, which
+# gamescope nested reads as a VRR display, and once Steam enables
+# adaptive-sync gamescope stops pacing the app entirely (games render
+# uncapped against a 60 fps stream); and presentation feedback is stamped
+# with dispatch time instead of the frame tick, whose jitter walks
+# gamescope's re-based frame clock off its period (~80 fps at -r 60). Built
+# from the pinned release tarball with the Arch feature set and installed
+# over the packaged library. The ldd check fails the build if labwc ever
+# links a different wlroots major, where the override would silently stop
+# applying.
+ARG WLROOTS_VERSION=0.20.2
+ARG WLROOTS_SHA256=972c7ac44b17828f4702bfae7cd8347346a3fb5b2c1076cfa2c3fcedac5ec343
+COPY wlroots-headless-timing.patch /tmp/
+RUN pacman -S --noconfirm --needed patch meson ninja gcc pkgconf glslang \
+        vulkan-headers wayland-protocols xorgproto && \
+    curl -fL "https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/${WLROOTS_VERSION}/wlroots-${WLROOTS_VERSION}.tar.gz" \
+        -o /tmp/wlroots.tar.gz && \
+    echo "${WLROOTS_SHA256}  /tmp/wlroots.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/wlroots.tar.gz -C /tmp && \
+    cd "/tmp/wlroots-${WLROOTS_VERSION}" && \
+    patch -p1 < /tmp/wlroots-headless-timing.patch && \
+    meson setup build --prefix=/usr --buildtype=release -Dexamples=false \
+        -Dxwayland=enabled -Drenderers=gles2,vulkan -Dbackends=drm,libinput,x11 \
+        -Dallocators=gbm,udmabuf -Dsession=enabled -Dcolor-management=enabled \
+        -Dlibliftoff=enabled -Dxcb-errors=enabled && \
+    ninja -C build && \
+    ninja -C build install && \
+    ldd /usr/bin/labwc | grep -q "libwlroots-0.20.so" && \
+    cd / && rm -rf /tmp/wlroots-${WLROOTS_VERSION} /tmp/wlroots.tar.gz \
+        /tmp/wlroots-headless-timing.patch && \
+    pacman -Rns --noconfirm patch meson ninja gcc pkgconf && \
+    pacman -Scc --noconfirm
+
 # --- unprivileged runtime user ---------------------------------------------
 RUN useradd -u 1000 -m -s /bin/bash player
 

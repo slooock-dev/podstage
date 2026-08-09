@@ -111,6 +111,18 @@ Three things to know:
 
 ### Fixed
 
+- **Judder on the sunshine backend: games no longer render past the 60 fps
+  stream.** wlroots' headless output reports refresh=0 in presentation
+  feedback, which the nested gamescope reads as a VRR display; once Steam
+  enables adaptive-sync, gamescope completes app frames on every compositor
+  wake and vsynced games run uncapped (measured 300+ fps into a 60 fps
+  encode). The same output also truncates its frame period to whole
+  milliseconds (60 Hz sessions ran at 62.5) and stamps presentation feedback
+  with dispatch time, whose jitter walks gamescope's re-based frame clock to
+  ~80 fps. The runtime image now builds wlroots with
+  `containers/runtime/wlroots-headless-timing.patch`: the timer keeps an
+  absolute nanosecond grid and the present event carries the real frame
+  period plus the grid tick as timestamp.
 - **A host compat mapping naming an uninstalled Proton kept its games from
   starting.** Steam answers a tool it cannot find by running the game's Windows
   binary directly ("cannot execute binary file"). Mirrored entries whose custom

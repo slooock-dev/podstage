@@ -23,16 +23,21 @@ log "argv='${*}' client=${SUNSHINE_CLIENT_WIDTH:-?}x${SUNSHINE_CLIENT_HEIGHT:-?}
 
 W=${SUNSHINE_CLIENT_WIDTH:-}
 H=${SUNSHINE_CLIENT_HEIGHT:-}
+R=${SUNSHINE_CLIENT_FPS:-${PS_R:-60}}
 if [ "${1:-}" = reset ]; then
     W=${PS_W:-}
     H=${PS_H:-}
+    R=${PS_R:-60}
 fi
 if [ -z "$W" ] || [ -z "$H" ]; then
     log "no geometry for '${1:-do}', skipping"
     exit 0
 fi
-wlr-randr --output HEADLESS-1 --custom-mode "${W%%.*}x${H%%.*}" >> "$LOG" 2>&1
-log "wlr-randr ${W%%.*}x${H%%.*} rc=$?"
+# The rate matters: the headless output derives its frame timer and the
+# refresh it reports to clients from the mode; without @R it falls back to
+# 60 for any profile rate.
+wlr-randr --output HEADLESS-1 --custom-mode "${W%%.*}x${H%%.*}@${R%%.*}" >> "$LOG" 2>&1
+log "wlr-randr ${W%%.*}x${H%%.*}@${R%%.*} rc=$?"
 
 # Wake the runner waiting on the first client (no-op afterwards: without a
 # reader the timeout drops the write).

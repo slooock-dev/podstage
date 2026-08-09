@@ -22,8 +22,11 @@ unset LD_PRELOAD
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 
 # Size the compositor's headless output to the session geometry (best-effort).
+# The @rate is load-bearing: the headless output derives its frame timer and
+# the refresh it reports to clients from the mode, and without it any
+# non-60 profile would silently tick at 60.
 for _ in $(seq 1 20); do wlr-randr >/dev/null 2>&1 && break; sleep 0.2; done
-wlr-randr --output HEADLESS-1 --custom-mode "${PS_W}x${PS_H}" >/dev/null 2>&1 || true
+wlr-randr --output HEADLESS-1 --custom-mode "${PS_W}x${PS_H}@${PS_R}" >/dev/null 2>&1 || true
 
 GS_EXTRA=()
 if [ "${PS_HDR:-}" = enabled ]; then

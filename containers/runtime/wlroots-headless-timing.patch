@@ -1,0 +1,108 @@
+diff --git a/backend/headless/output.c b/backend/headless/output.c
+index a4cdb17..d3f872a 100644
+--- a/backend/headless/output.c
++++ b/backend/headless/output.c
+@@ -1,6 +1,7 @@
+ #include <assert.h>
+ #include <stdlib.h>
+ #include <stdio.h>
++#include <time.h>
+ #include <wlr/interfaces/wlr_output.h>
+ #include <wlr/types/wlr_output_layer.h>
+ #include <wlr/util/log.h>
+@@ -28,7 +29,11 @@ static void output_update_refresh(struct wlr_headless_output *output,
+ 		refresh = HEADLESS_DEFAULT_REFRESH;
+ 	}
+ 
+-	output->frame_delay = 1000000 / refresh;
++	// refresh is in mHz; keep the period in nanoseconds. Deriving the timer
++	// delay in whole milliseconds here would truncate 16.67 ms to 16 ms and
++	// run the output at 62.5 Hz instead of 60.
++	output->frame_period_ns = 1000000000000ULL / (uint64_t)refresh;
++	output->next_frame_ns = 0;
+ }
+ 
+ static bool output_test(struct wlr_output *wlr_output,
+@@ -67,13 +72,56 @@ static bool output_commit(struct wlr_output *wlr_output,
+ 	}
+ 
+ 	if (output_pending_enabled(wlr_output, state)) {
++		struct timespec now_ts;
++		clock_gettime(CLOCK_MONOTONIC, &now_ts);
++		uint64_t now = (uint64_t)now_ts.tv_sec * 1000000000 +
++			(uint64_t)now_ts.tv_nsec;
++
++		// Keep the frame tick on an absolute grid. Only advance the target
++		// once the armed tick has passed; commits landing mid-period (e.g. a
++		// screencopy-triggered repaint) must not re-phase the clock. After an
++		// idle gap, re-base the grid on the reviving commit.
++		//
++		// vblank_ns is the grid tick this commit belongs to. The present
++		// event must carry it instead of the dispatch time: clients
++		// (gamescope nested) re-base their frame clocks on presented
++		// timestamps, and dispatch-time stamps carry the whole-millisecond
++		// jitter of wl_event_source_timer_update, which walks those clocks
++		// off their period.
++		uint64_t next = output->next_frame_ns;
++		uint64_t vblank_ns;
++		if (next == 0 || now >= next + output->frame_period_ns) {
++			vblank_ns = now;
++			next = now + output->frame_period_ns;
++		} else if (now >= next) {
++			vblank_ns = next;
++			next += output->frame_period_ns;
++		} else {
++			vblank_ns = next - output->frame_period_ns;
++		}
++		output->next_frame_ns = next;
++
+ 		struct wlr_output_event_present present_event = {
+ 			.commit_seq = wlr_output->commit_seq + 1,
+ 			.presented = true,
++			.when = {
++				.tv_sec = (time_t)(vblank_ns / 1000000000),
++				.tv_nsec = (long)(vblank_ns % 1000000000),
++			},
++			// A zero refresh prediction makes clients treat this output as
++			// variable-rate (gamescope nested flips into adaptive-sync and
++			// stops pacing its app), so always report the fixed frame period.
++			.refresh = (int)output->frame_period_ns,
+ 		};
+ 		output_defer_present(wlr_output, present_event);
+ 
+-		wl_event_source_timer_update(output->frame_timer, output->frame_delay);
++		// Round up: firing early would leave the tick unconsumed and spawn a
++		// 1 ms catch-up tick. The absolute grid absorbs the sub-ms lateness.
++		int delay_ms = (int)((next - now + 999999) / 1000000);
++		if (delay_ms < 1) {
++			delay_ms = 1;
++		}
++		wl_event_source_timer_update(output->frame_timer, delay_ms);
+ 	}
+ 
+ 	return true;
+diff --git a/include/backend/headless.h b/include/backend/headless.h
+index 21df86e..af0e273 100644
+--- a/include/backend/headless.h
++++ b/include/backend/headless.h
+@@ -1,6 +1,7 @@
+ #ifndef BACKEND_HEADLESS_H
+ #define BACKEND_HEADLESS_H
+ 
++#include <stdint.h>
+ #include <wlr/backend/headless.h>
+ #include <wlr/backend/interface.h>
+ 
+@@ -21,7 +22,11 @@ struct wlr_headless_output {
+ 	struct wl_list link;
+ 
+ 	struct wl_event_source *frame_timer;
+-	int frame_delay; // ms
++	uint64_t frame_period_ns;
++	// Absolute CLOCK_MONOTONIC target of the armed frame timer; 0 while the
++	// frame clock is idle. Keeps the tick grid exact despite the millisecond
++	// granularity of wl_event_source_timer_update.
++	uint64_t next_frame_ns;
+ };
+ 
+ struct wlr_headless_backend *headless_backend_from_backend(
