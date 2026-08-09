@@ -59,7 +59,23 @@ wired: `stream.video.encrypt`, `stream.timeout`. Verified absent despite the
 obvious guess: `stream.control.encrypt` (the control stream config only holds
 `gamepad`). Written but never type-checked: `compositor.hdr` (from `PS_HDR`).
 
-## Three pieces that need explaining
+## Four pieces that need explaining
+
+**A generated seccomp profile.** moonshine caches its Vulkan DMA-BUF imports by
+raw fd number and validates a hit with `kcmp(2)`: fd numbers are recycled and
+two images of one swapchain match in size, format, stride and modifier.
+Without that check the encoder re-encodes a stale frame from a dead buffer,
+fixed upstream in `749a663a`, which is why the pin is v0.15.0.
+
+podman's default profile blocks the syscall, and `--no-health-check` skips
+moonshine's own startup probe, so the gap surfaces as a panic on the first
+cache hit. `CAP_SYS_PTRACE` would unblock it but lands in the ambient set for a
+non-root user, and bubblewrap refuses to run with unexpected capabilities:
+every Steam and Proton start dies with "Steam now requires user namespaces to
+be enabled". So `core/runtime.py` writes podman's default back out with that
+one syscall ungated (`ensure_seccomp_profile`) and the container keeps an empty
+capability set. `core/backends.py` carries the flag (`needs_kcmp`), `podstage
+doctor` probes the syscall under the generated profile.
 
 **`systemd1-stub.py`.** moonshine's `Application::spawn` calls
 `StartTransientUnit` on the session bus with no fork/exec fallback, so without
@@ -123,22 +139,6 @@ resize cursor (confirmed in-container only), and image quality under a real
 client.
 
 ## Known limits
-
-Two things are understood well enough to describe but not fixed in 0.3.0.
-
-**The picture flickers in-game at a high bitrate.** Only inside a game, never
-in Big Picture, and under a second at a time. Ruled out by measurement, not by
-argument: the picture gamescope hands over (14 captures, brightness spread
-0.12), forward error correction (just as bad at 20 %), and the idea that the
-two backends read the requested number differently (sunshine asked for 50 sends
-44.6 Mbit/s on average, peak 53.9, measured over 90 s of `tx_bytes`; moonshine
-asked for 12 sends 12; so both take it the same way). Lowering the bitrate is
-what helps: around 10 to 17 Mbit/s streams cleanly on the test setup, 50
-flickers while sunshine runs at 50 over the same link. That is where it is left
-for 0.3.0. Everything measured so far watches the sending side; the next step
-is the receiving one, which is moonlight's performance overlay (received
-bitrate, packet loss, dropped frames) plus `log_frame_spikes` and video-pipeline
-debug logging on the host.
 
 **The preview loop costs a colour-converter rebuild.** Asking the nested
 gamescope for a screenshot takes it out of direct scanout, and moonshine

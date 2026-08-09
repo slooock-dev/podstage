@@ -27,8 +27,13 @@ Three things to know:
   nested. Narrower than sunshine: Vulkan Video encode only (no pre-Arc Intel,
   no pre-RDNA2 AMD), an unauthenticated pairing endpoint, and no config API,
   so quality settings apply at the next session start. Own image, built on
-  the runtime one from source. See
+  the runtime one from source. Pinned to moonshine v0.15.0. See
   [`containers/moonshine/README.md`](containers/moonshine/README.md).
+- **A seccomp profile for the moonshine container**, podman's own default with
+  `kcmp(2)` ungated, regenerated when that default changes. moonshine validates
+  every cached Vulkan DMA-BUF import with the syscall. `CAP_SYS_PTRACE` would
+  unblock it too but lands in the ambient set, which bubblewrap refuses, taking
+  every Steam start with it.
 - **Stream preview on moonshine.** Its compositor implements no
   wlr-screencopy, so the nested gamescope screenshots its own composited
   output into the same file at the same interval.
@@ -42,8 +47,8 @@ Three things to know:
 - **The GUI's backend-specific parts swap with the profile**: encoder presets
   or error correction in the quality card, keyboard fields only where they
   exist.
-- **`podstage doctor` gates moonshine**: image present and current, and
-  whether this GPU can Vulkan-encode.
+- **`podstage doctor` gates moonshine**: image present and current, whether
+  this GPU can Vulkan-encode, and whether `kcmp(2)` answers in the container.
 - **Preflight checks are grouped** by host, streaming and backend, each
   backend group with its own image build button. Every backend is checked
   regardless of use, so "can this machine run moonshine" is answered before
@@ -101,6 +106,11 @@ Three things to know:
 
 ### Fixed
 
+- **A host compat mapping naming an uninstalled Proton kept its games from
+  starting.** Steam answers a tool it cannot find by running the game's Windows
+  binary directly ("cannot execute binary file"). Mirrored entries whose custom
+  tool is absent are now skipped and named at session start, so those games run
+  on the default Proton; Steam's own tool names pass through.
 - **An underscore in the announced name made the session undiscoverable.**
   moonlight-qt receives PTR, SRV, TXT and A, caches them and lists no host,
   silently on every layer; moonlight-android is unaffected, it resolves the

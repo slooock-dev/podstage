@@ -155,8 +155,8 @@ and a pointer capability held up so gamescope keeps mouse input.
 **moonshine** is compositor, capture, Vulkan Video encode, mDNS and GameStream
 server in one Rust process. Steam and gamescope sit on top unchanged, but the
 input layer below disappears, because that compositor never opens an evdev
-device. At a high bitrate the picture can flicker briefly in-game; lowering it
-helps, the cause is still being investigated (see
+device. Its container runs under a seccomp profile derived from podman's own,
+with one syscall ungated for moonshine's DMA-BUF import cache (see
 [`containers/moonshine/README.md`](containers/moonshine/README.md)).
 
 Neither is strictly better: sunshine reaches every machine, moonshine is the

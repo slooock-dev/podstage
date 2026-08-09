@@ -58,7 +58,10 @@ RUN pacman -Syu --noconfirm && \
 # moonshine-bench drives the compositor and encode pipeline WITHOUT a Moonlight
 # client, the only way to get encode numbers out of a headless machine, and
 # the instrument behind the throughput table in the README.
-ARG MOONSHINE_VERSION=3f8e17c43b599545992915c56a133108333c2b89
+# v0.15.0. Below 749a663a the Vulkan import cache trusts the raw fd number and
+# re-encodes stale frames; from there on it validates with kcmp(2), which the
+# session has to allow (core/backends.py, needs_kcmp).
+ARG MOONSHINE_VERSION=77db826d8cab24b80e9e468b566f9c90d65a76e7
 # CARGO_HOME stays inside the RUN rather than an ENV: an ENV would survive into
 # the final image, and there is no way to unset one afterwards (setting it
 # empty leaves an empty value behind, which is worse than not having it).

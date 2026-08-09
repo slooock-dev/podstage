@@ -18,7 +18,7 @@ streaming instance need not re-download them.
 import os
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import config
@@ -209,25 +209,73 @@ def _extract_compat_block(text: str) -> str | None:
     return None
 
 
-def mirror_compat_mappings(stream_home: Path, steam_root: Path | None = None) -> bool:
+# Steam's own tools are named in snake_case and Steam resolves them itself; a
+# custom tool is named after its compatibilitytools.d directory, which the
+# sandbox either has as a shared symlink or not at all.
+_OFFICIAL_TOOL = re.compile(r"^(proton_[a-z0-9_]+|steamlinuxruntime(_[a-z0-9]+)?)$")
+
+# One mapping entry: an app id and a flat brace block, nothing nested.
+_COMPAT_ENTRY = re.compile(r'\n[\t ]*"\d+"\n[\t ]*\{[^{}]*\}')
+
+
+def usable_compat_tools(stream_home: Path) -> set[str]:
+    """Custom compat tools the sandbox can run, i.e. the shared symlinks."""
+    tools = stream_home / ".local/share/Steam/compatibilitytools.d"
+    try:
+        return {p.name for p in tools.iterdir()}
+    except OSError:
+        return set()
+
+
+def drop_unusable_mappings(block: str, usable: set[str]) -> tuple[str, list[str]]:
+    """``block`` without entries naming a custom tool the sandbox lacks.
+
+    A mapping to a tool installed nowhere does not fall back: Steam runs the
+    game's Windows binary directly, which dies with "cannot execute binary
+    file". Dropping the entry lets the global default apply. Host entries
+    outlive an uninstalled GE-Proton, so this is the normal state of a desktop
+    that keeps its Proton builds current.
+    """
+    dropped: list[str] = []
+
+    def keep(match: re.Match[str]) -> str:
+        name = re.search(r'"name"\s+"([^"]*)"', match.group(0))
+        tool = name.group(1) if name else ""
+        if not tool or tool in usable or _OFFICIAL_TOOL.match(tool):
+            return match.group(0)
+        dropped.append(tool)
+        return ""
+
+    return _COMPAT_ENTRY.sub(keep, block), sorted(set(dropped))
+
+
+def mirror_compat_mappings(stream_home: Path,
+                           steam_root: Path | None = None) -> tuple[bool, list[str]]:
     """Copy the host Steam's CompatToolMapping into the sandbox config.vdf.
 
     Games often need the exact Proton the user picked on the desktop (e.g.
     GE-Proton) — the sandbox's bare global default can crash them. The custom
     compat tools themselves are already shared via compatibilitytools.d
-    symlinks. Must run while the sandbox Steam is NOT running (it rewrites
-    config.vdf on exit). Returns True if the sandbox file changed.
+    symlinks; this runs after that sharing, so entries naming a tool the
+    sandbox does not have are dropped (:func:`drop_unusable_mappings`).
+
+    One-way and unconditional: a compat tool picked inside the streamed
+    session is replaced by the host's choice at the next start. Must run while
+    the sandbox Steam is NOT running (it rewrites config.vdf on exit).
+    Returns (sandbox file changed, dropped tool names).
     """
     steam_root = steam_root or steam.find_steam_root()
     cfg = stream_home / ".local/share/Steam/config/config.vdf"
     if steam_root is None or not cfg.exists():
-        return False
+        return False, []
     host_cfg = steam_root / "config/config.vdf"
     if not host_cfg.exists():
-        return False
+        return False, []
     host_block = _extract_compat_block(host_cfg.read_text(errors="replace"))
     if host_block is None:
-        return False
+        return False, []
+    host_block, dropped = drop_unusable_mappings(host_block,
+                                                 usable_compat_tools(stream_home))
     # Re-indent to the sandbox nesting depth (4 tabs for the section key).
     host_block = "\t\t\t\t" + host_block
 
@@ -235,15 +283,15 @@ def mirror_compat_mappings(stream_home: Path, steam_root: Path | None = None) ->
     existing = _extract_compat_block(text)
     if existing is not None:
         if existing.strip() == host_block.strip():
-            return False
+            return False, dropped
         new_text = text.replace(existing, host_block.strip(), 1)
     else:
         anchor = re.search(r'"Steam"\s*\n\s*\{\n', text)
         if anchor is None:
-            return False
+            return False, dropped
         new_text = text[: anchor.end()] + host_block + "\n" + text[anchor.end() :]
     cfg.write_text(new_text)
-    return True
+    return True, dropped
 
 
 def ensure_compat_default(stream_home: Path, tool: str = "proton_experimental") -> bool:
@@ -321,6 +369,9 @@ class ProvisionAllResult:
     custom_tools: list[str]
     compat_default_set: bool = False
     stale_uppers_purged: int = 0
+    # Host mappings pointing at a compat tool installed nowhere; named rather
+    # than counted, those games run on the default Proton now.
+    dropped_compat_tools: list[str] = field(default_factory=list)
 
 
 def ensure_all(stream_home: Path, steam_root: Path | None = None,
@@ -351,6 +402,9 @@ def ensure_all(stream_home: Path, steam_root: Path | None = None,
     for tool in tools:
         purged += _share_into(tool, target, stream_home)
     custom = share_custom_compat_tools(stream_home, steam_root)
-    compat = mirror_compat_mappings(stream_home, steam_root) or ensure_compat_default(stream_home)
+    # Order matters: the mappings are filtered against the symlinks above.
+    mirrored, dropped = mirror_compat_mappings(stream_home, steam_root)
+    compat = mirrored or ensure_compat_default(stream_home)
     return ProvisionAllResult([a.installdir for a in games], len(tools), custom, compat,
-                              stale_uppers_purged=purged)
+                              stale_uppers_purged=purged,
+                              dropped_compat_tools=dropped)

@@ -20,9 +20,10 @@ actually makes and runs the unit as a plain child process:
 plus the three signals it waits on: Manager.JobRemoved, Manager.UnitRemoved and
 Properties.PropertiesChanged(ActiveState) on the unit object. Of the unit
 properties moonshine sets, the ones with an effect here are ExecStart,
-ExecStartPre, ExecStopPost, Environment and StandardOutput/StandardError;
-Type, Slice, TimeoutStopUSec and CollectMode are accepted and ignored (no
-cgroup, so there is nothing to place or collect).
+ExecStartPre, ExecStopPost, Environment, StandardOutput/StandardError and
+their companion path properties (StandardOutputFile and friends); Type, Slice,
+TimeoutStopUSec and CollectMode are accepted and ignored (no cgroup, so there
+is nothing to place or collect).
 
 Not a systemd replacement: no cgroup accounting, no unit dependencies, no
 restart policy, and the exit status of a unit is reported as inactive/failed
@@ -72,7 +73,17 @@ def escape_unit_name(name):
     return "".join(out)
 
 
-def open_stream(value, default):
+# A path-based stdio setting arrives in two shapes: unit-file syntax packs both
+# halves into one string ("file:/path"), over StartTransientUnit systemd wants
+# the mode alone plus a companion property ("file" + StandardOutputFile=/path).
+# moonshine sent the first up to v0.14 and splits since v0.15, so both have to
+# work or the application log silently stays empty.
+_STDIO_MODES = {"file": "ab", "append": "ab", "truncate": "wb"}
+_STDIO_PATH_PROPS = {"file": "File", "append": "FileToAppend",
+                     "truncate": "FileToTruncate"}
+
+
+def open_stream(value, default, props=None, prop_prefix=""):
     """Map a systemd StandardOutput=/StandardError= value to a file object.
 
     PS_STUB_STDIO overrides whatever the unit asked for. The podstage config
@@ -82,20 +93,26 @@ def open_stream(value, default):
     benchmark run's output into the container log.
     """
     override = os.environ.get("PS_STUB_STDIO")
-    value = override or value or default
+    value = str(override or value or default)
     if value == "null":
         return subprocess.DEVNULL
     if value in ("inherit", "journal", "kmsg", "tty", "journal+console"):
         return None  # inherit the stub's own stdio
-    for prefix, mode in (("file:", "ab"), ("append:", "ab"), ("truncate:", "wb")):
-        if value.startswith(prefix):
-            path = value[len(prefix):]
-            try:
-                return open(path, mode)
-            except OSError as e:
-                log(f"cannot open {path}: {e}, falling back to inherit")
-                return None
-    return None
+    mode_name, _, inline_path = value.partition(":")
+    mode = _STDIO_MODES.get(mode_name)
+    if mode is None:
+        return None
+    path = inline_path
+    if not path and props is not None:
+        path = str(props.get(prop_prefix + _STDIO_PATH_PROPS[mode_name], ""))
+    if not path:
+        log(f"{value} names no path, falling back to inherit")
+        return None
+    try:
+        return open(path, mode)
+    except OSError as e:
+        log(f"cannot open {path}: {e}, falling back to inherit")
+        return None
 
 
 def exec_entries(value):
@@ -141,8 +158,10 @@ class Unit(dbus.service.Object):
             debug(f"{self.name}: ExecStartPre {argv}")
             subprocess.run(argv, executable=path, env=env, check=False)
 
-        stdout = open_stream(props.get("StandardOutput"), "null")
-        stderr = open_stream(props.get("StandardError"), "null")
+        stdout = open_stream(props.get("StandardOutput"), "null",
+                             props, "StandardOutput")
+        stderr = open_stream(props.get("StandardError"), "null",
+                             props, "StandardError")
         for s in (stdout, stderr):
             if hasattr(s, "close"):
                 self._streams.append(s)

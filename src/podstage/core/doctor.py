@@ -10,6 +10,7 @@ labwc/sunshine are NOT checked anymore: they live inside the runtime image.
 import getpass
 import glob
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -210,6 +211,61 @@ def parse_video_encode(out: str) -> tuple[bool, list[str]]:
     has_queue = _VK_ENCODE_QUEUE in out
     codecs = [label for ext, label in _VK_CODECS.items() if ext in out]
     return has_queue, codecs
+
+
+# moonshine validates every cached Vulkan DMA-BUF import with kcmp(2), which
+# a session gets through runtime.ensure_seccomp_profile. podstage starts it
+# with --no-health-check, so moonshine's own probe never runs and a missing
+# syscall surfaces as a panic mid-session.
+#
+# x86_64 syscall number; another architecture needs its own, so the probe
+# reports "not checked" instead of calling something else by that number.
+_KCMP_NR_X86_64 = 312
+_KCMP_PROBE = (
+    "import ctypes,os;"
+    "l=ctypes.CDLL('libc.so.6',use_errno=True);p=os.getpid();"
+    "a=os.open('/dev/null',os.O_RDONLY);b=os.dup(a);"
+    f"r=l.syscall({_KCMP_NR_X86_64},p,p,0,a,b);"
+    "print('ok' if r==0 else 'errno=%d' % ctypes.get_errno())"
+)
+
+
+def check_moonshine_kcmp() -> CheckResult:
+    """Does kcmp(2) answer inside the container the moonshine backend gets?
+
+    Probes with the profile a session would use, so green means the session
+    has the syscall too.
+    """
+    name = backends.MOONSHINE.name
+    if platform.machine() != "x86_64":
+        return CheckResult("moonshine kcmp", Status.OK,
+                           f"not checked on {platform.machine()}")
+    if _run(["podman", "image", "exists", runtime.DEFAULT_IMAGE])[0] != 0:
+        return CheckResult("moonshine kcmp", Status.OK,
+                           "not checked yet, needs the runtime image")
+    profile = runtime.ensure_seccomp_profile()
+    if profile is None:
+        return CheckResult(
+            "moonshine kcmp", _severity(name, Status.FAIL),
+            "podman's default seccomp profile could not be read, so the "
+            "session profile cannot be derived from it (`podman info`, "
+            "host.security.seccompProfilePath)")
+    rc, out = _run(["podman", "run", "--rm", "--name", "podstage-kcmp-doctor",
+                    "--userns=keep-id", "--security-opt", "label=disable",
+                    "--security-opt", f"seccomp={profile}",
+                    "--entrypoint", "/usr/bin/python3", runtime.DEFAULT_IMAGE,
+                    "-c", _KCMP_PROBE], timeout=120)
+    if "ok" in out:
+        return CheckResult("moonshine kcmp", Status.OK,
+                           "kcmp(2) answers under the generated seccomp profile")
+    if rc != 0 and "errno=" not in out:
+        return CheckResult("moonshine kcmp", Status.WARN,
+                           f"probe could not be run (exit {rc})")
+    return CheckResult(
+        "moonshine kcmp", _severity(name, Status.FAIL),
+        f"kcmp(2) stays blocked under the generated profile ({out.strip()}), "
+        "so moonshine aborts on its first cached DMA-BUF import; a kernel "
+        "without CONFIG_CHECKPOINT_RESTORE causes this")
 
 
 def check_moonshine_gpu() -> CheckResult:
@@ -537,6 +593,7 @@ ALL_CHECKS: list[tuple[Callable[[], CheckResult], str]] = [
     (check_sunshine_conflict, GROUP_STREAMING),
     (check_image, backends.SUNSHINE.name),
     (check_moonshine_gpu, backends.MOONSHINE.name),
+    (check_moonshine_kcmp, backends.MOONSHINE.name),
     (check_moonshine_image, backends.MOONSHINE.name),
 ]
 

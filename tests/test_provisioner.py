@@ -165,16 +165,45 @@ def test_mirror_compat_mappings_copies_host_block(main_steam: Path, tmp_path: Pa
         "\t\t\t}\n\t\t}\n\t}\n}\n"
     )
 
-    assert provisioner.mirror_compat_mappings(tmp_path / "home", main_steam) is True
+    # The custom tool has to exist in the sandbox to be mirrored at all.
+    tools = tmp_path / "home/.local/share/Steam/compatibilitytools.d"
+    tools.mkdir(parents=True)
+    (tools / "Proton-GE Latest").mkdir()
+
+    assert provisioner.mirror_compat_mappings(tmp_path / "home", main_steam) == (True, [])
     text = sandbox_cfg.read_text()
     assert '"Proton-GE Latest"' in text
     assert text.index("CompatToolMapping") < text.index("AutoUpdateWindowEnabled")
     # Second run: nothing to change.
-    assert provisioner.mirror_compat_mappings(tmp_path / "home", main_steam) is False
+    assert provisioner.mirror_compat_mappings(tmp_path / "home", main_steam) == (False, [])
     # Host mapping changes propagate by replacing the existing block.
     host_cfg.write_text(host_cfg.read_text().replace("Proton-GE Latest", "GE-Proton99"))
-    assert provisioner.mirror_compat_mappings(tmp_path / "home", main_steam) is True
-    assert '"GE-Proton99"' in sandbox_cfg.read_text()
+    assert provisioner.mirror_compat_mappings(tmp_path / "home", main_steam) == (True, ["GE-Proton99"])
+    sandbox = sandbox_cfg.read_text()
+    # Installed nowhere, so dropped instead of mirrored: Steam would otherwise
+    # exec the game's Windows binary directly.
+    assert "GE-Proton99" not in sandbox
+    assert '"1623730"' not in sandbox
+    assert '"proton_experimental"' in sandbox   # Steam's own name stays
+
+
+def test_drop_unusable_mappings_keeps_steam_own_tools():
+    """Steam resolves its own snake_case names itself, so they never drop; a
+    custom tool is usable only when the sandbox has the directory."""
+    block = (
+        '"CompatToolMapping"\n{\n'
+        '\t"0"\n\t{\n\t\t"name"\t\t"proton_experimental"\n\t}\n'
+        '\t"7"\n\t{\n\t\t"name"\t\t"steamlinuxruntime_sniper"\n\t}\n'
+        '\t"11"\n\t{\n\t\t"name"\t\t"GE-Proton10-34"\n\t}\n'
+        '\t"13"\n\t{\n\t\t"name"\t\t"GE-Proton10-17"\n\t}\n'
+        '\t"17"\n\t{\n\t\t"name"\t\t"proton-cachyos-10.0-x86_64_v4"\n\t}\n'
+        "}\n"
+    )
+    kept, dropped = provisioner.drop_unusable_mappings(block, {"GE-Proton10-34"})
+    assert dropped == ["GE-Proton10-17", "proton-cachyos-10.0-x86_64_v4"]
+    assert '"proton_experimental"' in kept and '"steamlinuxruntime_sniper"' in kept
+    assert '"GE-Proton10-34"' in kept
+    assert '"13"' not in kept and '"17"' not in kept
 
 
 def test_share_custom_compat_tools_links_resolved_root(main_steam: Path, tmp_path: Path):

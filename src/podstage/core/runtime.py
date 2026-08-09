@@ -35,6 +35,7 @@ Steam Input works because Steam creates and feeds its virtual X360 pad on the
 REAL /dev/uinput — there is no proxy layer in between.
 """
 
+import copy
 import glob
 import hashlib
 import json
@@ -313,6 +314,11 @@ def shared_library_paths(home_dir: Path, provision: bool = True,
                 + (f", {res.stale_uppers_purged} stale overlay upper(s) purged"
                    if res.stale_uppers_purged else "")
             )
+            if res.dropped_compat_tools:
+                # Silence here would look like a game behaving oddly.
+                print("[podstage] host compat mappings skipped, not installed: "
+                      + ", ".join(res.dropped_compat_tools)
+                      + "; those games run on the default Proton")
         except RuntimeError as exc:
             print(f"[podstage] provisioning skipped: {exc}")
     paths = [lib.steamapps for lib in steam.library_folders() if lib.steamapps.is_dir()]
@@ -440,7 +446,9 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     # and the variable can never disagree.
     full_dev = opts.spec.full_dev or env.get("PS_GAMEPAD_DS5") == "enabled"
     args += container_flags(library_paths, opts.home_dir, vendor=vendor,
-                            extra_mounts=opts.extra_mounts, full_dev=full_dev)
+                            extra_mounts=opts.extra_mounts, full_dev=full_dev,
+                            seccomp_profile=(SECCOMP_PROFILE if opts.spec.needs_kcmp
+                                             else None))
     args += ["-v", f"{opts.home_dir}:/home/player"]
     for key, val in env.items():
         args += ["-e", f"{key}={val}"]
@@ -466,10 +474,76 @@ def extra_mount_paths(extra_mounts: list[str]) -> tuple[list[Path], list[Path]]:
     return overlay, rw
 
 
+# podman's default seccomp profile gates kcmp(2) on CAP_SYS_PTRACE, which the
+# moonshine backend needs (backends.needs_kcmp). The capability is not usable
+# for it: podman puts it in the ambient set for a non-root user, bubblewrap
+# refuses to run with capabilities it did not expect, and every Steam and
+# Proton start goes through bubblewrap ("Steam now requires user namespaces to
+# be enabled"). So the container gets that profile with the one syscall
+# ungated, and no capability.
+SECCOMP_PROFILE = config.DATA_DIR / "runtime" / "seccomp-kcmp.json"
+
+
+def allow_kcmp(profile: dict) -> dict:
+    """``profile`` with kcmp(2) allowed unconditionally.
+
+    A rule left without names is dropped, an empty ``names`` list is invalid.
+    """
+    out = copy.deepcopy(profile)
+    kept = []
+    for rule in out.get("syscalls", []):
+        names = [n for n in rule.get("names", []) if n != "kcmp"]
+        if names:
+            rule["names"] = names
+            kept.append(rule)
+    kept.append({"names": ["kcmp"], "action": "SCMP_ACT_ALLOW"})
+    out["syscalls"] = kept
+    return out
+
+
+def podman_seccomp_default() -> Path | None:
+    """The profile podman would apply by default. Asked for rather than
+    assumed, containers.conf can point elsewhere."""
+    rc, out = _run(["podman", "info", "--format", "json"])
+    if rc == 0:
+        try:
+            path = json.loads(out)["host"]["security"]["seccompProfilePath"]
+        except (ValueError, KeyError, TypeError):
+            path = ""
+        if path and Path(path).is_file():
+            return Path(path)
+    fallback = Path("/usr/share/containers/seccomp.json")
+    return fallback if fallback.is_file() else None
+
+
+def ensure_seccomp_profile() -> Path | None:
+    """Write :data:`SECCOMP_PROFILE` from podman's default, return its path.
+
+    Rewritten whenever the derived content differs, so a podman update to the
+    default carries over. None when that default cannot be read.
+    """
+    src = podman_seccomp_default()
+    if src is None:
+        return None
+    try:
+        want = json.dumps(allow_kcmp(json.loads(src.read_text())), sort_keys=True)
+    except (OSError, ValueError):
+        return None
+    try:
+        if SECCOMP_PROFILE.read_text() == want:
+            return SECCOMP_PROFILE
+    except OSError:
+        pass
+    SECCOMP_PROFILE.parent.mkdir(parents=True, exist_ok=True)
+    SECCOMP_PROFILE.write_text(want)
+    return SECCOMP_PROFILE
+
+
 def container_flags(library_paths: list[Path], home_dir: Path,
                     vendor: str | None = None,
                     extra_mounts: list[str] | None = None,
-                    full_dev: bool = False) -> list[str]:
+                    full_dev: bool = False,
+                    seccomp_profile: Path | None = None) -> list[str]:
     """Devices, isolation and mounts of the rootless runtime container.
     Excludes: container name/detach, the client HOME volume, env, image.
 
@@ -480,7 +554,10 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     experimental feature; the moonshine backend always does, since inputtino
     creates every gamepad that way. Access control is unchanged either way:
     rootless podman has no device cgroup, so device access is plain file
-    permissions under keep-id, the same the user has on the host."""
+    permissions under keep-id, the same the user has on the host.
+
+    ``seccomp_profile`` replaces podman's default for the single syscall
+    moonshine needs, see :func:`ensure_seccomp_profile`."""
     vendor = vendor or gpu_vendor()
     if vendor in MESA_VENDORS:
         # AMD/Intel: plain DRI nodes; Mesa Vulkan (RADV/ANV) + VAAPI userspace
@@ -515,6 +592,8 @@ def container_flags(library_paths: list[Path], home_dir: Path,
         "--tz", "local",
         "--shm-size=1g",
     ]
+    if seccomp_profile is not None:
+        args += ["--security-opt", f"seccomp={seccomp_profile}"]
     if full_dev:
         args += ["-v", "/dev:/dev"]
     else:
@@ -834,6 +913,14 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
         print(f"[podstage] the {spec.label} image is stale, {spec.src_subdir}/ "
               "changed since it was built; rebuild with: "
               f"podstage runtime build --backend {spec.name}")
+
+    # Written on the run path, the args builder only names it. Without it
+    # moonshine aborts on its first cached DMA-BUF import.
+    if spec.needs_kcmp and ensure_seccomp_profile() is None:
+        raise RuntimeError(
+            f"the {spec.label} backend needs a seccomp profile derived from "
+            "podman's default, and that default could not be read (`podman "
+            "info`, host.security.seccompProfilePath)")
 
     # Provision here (the one place with the side effect), then hand the
     # discovered libraries to the pure args builder.

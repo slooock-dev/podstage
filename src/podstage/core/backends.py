@@ -98,6 +98,11 @@ class Backend:
                   /dev/hidraw* node appearing with them, which cannot be
                   pre-mounted)
     vulkan_video  requires a Vulkan video-encode queue on the GPU
+    needs_kcmp    needs kcmp(2), which podman's default seccomp profile blocks;
+                  moonshine validates every cached Vulkan DMA-BUF import with
+                  it and panics on the first cache hit without it.
+                  core/runtime.py answers this with a derived profile, not with
+                  CAP_SYS_PTRACE (see there)
     summary       one line for `podstage session list` / the GUI
     """
 
@@ -114,6 +119,7 @@ class Backend:
     res_locked: bool
     full_dev: bool
     vulkan_video: bool
+    needs_kcmp: bool
     summary: str
 
     def web_port(self, base: int) -> int | None:
@@ -151,6 +157,7 @@ SUNSHINE = Backend(
     res_locked=True,         # the first client's mode, until the container restarts
     full_dev=False,          # /dev/uinput + /dev/input suffice
     vulkan_video=False,
+    needs_kcmp=False,
     summary="labwc + gamescope + sunshine (NVENC/VAAPI), works on every supported GPU",
 )
 
@@ -170,6 +177,7 @@ MOONSHINE = Backend(
     res_locked=False,        # compositor and app are relaunched per session
     full_dev=True,           # inputtino: /dev/uhid + the hidraw node
     vulkan_video=True,
+    needs_kcmp=True,         # kcmp(2) for the DMA-BUF import cache
     summary="moonshine's own compositor + Vulkan Video, needs NVIDIA RTX, AMD RDNA2+ or Intel Arc",
 )
 

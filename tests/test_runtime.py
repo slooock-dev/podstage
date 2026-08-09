@@ -217,6 +217,39 @@ def test_full_dev_mount_for_ds5():
     assert "/dev/uinput" not in ds5
 
 
+def test_only_moonshine_swaps_the_seccomp_profile(monkeypatch):
+    """moonshine panics on its first cached DMA-BUF import without kcmp(2), and
+    --no-health-check skips its own startup probe. CAP_SYS_PTRACE would unblock
+    the syscall too but lands in the ambient set, which bubblewrap refuses and
+    every Steam start goes through bubblewrap."""
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "nvidia")
+    ms = " ".join(runtime.podman_run_args(_ms(), library_paths=LIBS))
+    assert f"--security-opt seccomp={runtime.SECCOMP_PROFILE}" in ms
+    assert "--cap-add" not in ms
+    assert "seccomp=" not in " ".join(runtime.podman_run_args(_opts(), library_paths=LIBS))
+
+
+def test_allow_kcmp_ungates_exactly_one_syscall():
+    """The default names kcmp twice, in a capability-gated allow and in an
+    EPERM catch-all. Neither may keep it, a rule left without names is
+    invalid, and nothing else may move."""
+    profile = {"defaultAction": "SCMP_ACT_ERRNO", "syscalls": [
+        {"names": ["kcmp", "process_madvise"], "action": "SCMP_ACT_ALLOW",
+         "includes": {"caps": ["CAP_SYS_PTRACE"]}},
+        {"names": ["kcmp"], "action": "SCMP_ACT_ERRNO"},
+        {"names": ["read", "write"], "action": "SCMP_ACT_ALLOW"},
+    ]}
+    out = runtime.allow_kcmp(profile)
+    assert out["defaultAction"] == "SCMP_ACT_ERRNO"
+    assert {"names": ["kcmp"], "action": "SCMP_ACT_ALLOW"} in out["syscalls"]
+    assert [r for r in out["syscalls"] if "kcmp" in r["names"]] == [
+        {"names": ["kcmp"], "action": "SCMP_ACT_ALLOW"}]
+    assert {"names": ["process_madvise"], "action": "SCMP_ACT_ALLOW",
+            "includes": {"caps": ["CAP_SYS_PTRACE"]}} in out["syscalls"]
+    assert {"names": ["read", "write"], "action": "SCMP_ACT_ALLOW"} in out["syscalls"]
+    assert profile["syscalls"][1]["names"] == ["kcmp"]   # input untouched
+
+
 def test_ds5_env_switches_run_args(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime, "gpu_vendor", lambda: "amd")
     opts = runtime.RuntimeOptions(home_dir=tmp_path,
