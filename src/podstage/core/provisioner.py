@@ -215,7 +215,12 @@ def _extract_compat_block(text: str) -> str | None:
 _OFFICIAL_TOOL = re.compile(r"^(proton_[a-z0-9_]+|steamlinuxruntime(_[a-z0-9]+)?)$")
 
 # One mapping entry: an app id and a flat brace block, nothing nested.
-_COMPAT_ENTRY = re.compile(r'\n[\t ]*"\d+"\n[\t ]*\{[^{}]*\}')
+_COMPAT_ENTRY = re.compile(r'\n[\t ]*"(\d+)"\n[\t ]*\{[^{}]*\}')
+
+# What was last mirrored, kept beside the other per-sandbox state so it is
+# created and deleted with the sandbox. Without it a stream-side choice and a
+# stale leftover look the same, see merge_compat_mappings.
+COMPAT_BASELINE = ".cache/podstage/compat-baseline.vdf"
 
 
 def usable_compat_tools(stream_home: Path) -> set[str]:
@@ -249,49 +254,124 @@ def drop_unusable_mappings(block: str, usable: set[str]) -> tuple[str, list[str]
     return _COMPAT_ENTRY.sub(keep, block), sorted(set(dropped))
 
 
+def _compat_entries(block: str) -> dict[str, str]:
+    """``{app id: entry text}``, verbatim with its leading newline and indent."""
+    return {m.group(1): m.group(0) for m in _COMPAT_ENTRY.finditer(block)}
+
+
+def merge_compat_mappings(host_block: str, sandbox_block: str,
+                          baseline: str) -> tuple[str, int]:
+    """Three-way merge of the host block into the sandbox one, stream wins.
+
+    ``baseline`` is the host block as last mirrored. Only against it is a
+    differing sandbox entry decidable: changed since the baseline means the
+    choice was made in the streamed session, unchanged means it is the mirrored
+    copy. Both sides changed is a conflict and the session's choice stays, so a
+    game set in the stream follows the stream until it is set there again.
+    Without a baseline every difference counts as a session choice.
+
+    Returns the merged block and the number of entries the session held.
+    """
+    host = _compat_entries(host_block)
+    sandbox = _compat_entries(sandbox_block)
+    base = _compat_entries(baseline)
+    def norm(entry: str) -> str:
+        return "".join(entry.split())   # indentation must not count as a change
+
+    merged = host_block
+    extra: list[str] = []
+    kept = 0
+    for app in set(host) | set(sandbox):
+        if norm(sandbox.get(app, "")) == norm(base.get(app, "")):
+            continue  # the session did not touch it, the host decides
+        kept += 1
+        if app in host:
+            merged = merged.replace(host[app], sandbox.get(app, ""), 1)
+        elif app in sandbox:
+            extra.append(sandbox[app])
+    if extra:
+        close = merged.rfind("}")
+        head = merged[:close].rstrip("\n\t ")
+        merged = head + "".join(extra) + merged[len(head):close] + merged[close:]
+    return merged, kept
+
+
+@dataclass
+class CompatMirror:
+    """What the mirror did: file changed, tools skipped, entries the session
+    kept against the host."""
+
+    changed: bool = False
+    dropped: list[str] = field(default_factory=list)
+    kept_from_session: int = 0
+
+
 def mirror_compat_mappings(stream_home: Path,
-                           steam_root: Path | None = None) -> tuple[bool, list[str]]:
-    """Copy the host Steam's CompatToolMapping into the sandbox config.vdf.
+                           steam_root: Path | None = None) -> CompatMirror:
+    """Bring the host Steam's CompatToolMapping into the sandbox config.vdf.
 
     Games often need the exact Proton the user picked on the desktop (e.g.
     GE-Proton) — the sandbox's bare global default can crash them. The custom
     compat tools themselves are already shared via compatibilitytools.d
     symlinks; this runs after that sharing, so entries naming a tool the
-    sandbox does not have are dropped (:func:`drop_unusable_mappings`).
+    sandbox does not have are dropped (:func:`drop_unusable_mappings`), whether
+    they come from the host or from the session.
 
-    One-way and unconditional: a compat tool picked inside the streamed
-    session is replaced by the host's choice at the next start. Must run while
-    the sandbox Steam is NOT running (it rewrites config.vdf on exit).
-    Returns (sandbox file changed, dropped tool names).
+    A choice made inside the streamed session survives, see
+    :func:`merge_compat_mappings`. Must run while the sandbox Steam is NOT
+    running (it rewrites config.vdf on exit).
     """
     steam_root = steam_root or steam.find_steam_root()
     cfg = stream_home / ".local/share/Steam/config/config.vdf"
     if steam_root is None or not cfg.exists():
-        return False, []
+        return CompatMirror()
     host_cfg = steam_root / "config/config.vdf"
     if not host_cfg.exists():
-        return False, []
+        return CompatMirror()
     host_block = _extract_compat_block(host_cfg.read_text(errors="replace"))
     if host_block is None:
-        return False, []
-    host_block, dropped = drop_unusable_mappings(host_block,
-                                                 usable_compat_tools(stream_home))
+        return CompatMirror()
+    usable = usable_compat_tools(stream_home)
+    host_block, host_dropped = drop_unusable_mappings(host_block, usable)
     # Re-indent to the sandbox nesting depth (4 tabs for the section key).
     host_block = "\t\t\t\t" + host_block
 
     text = cfg.read_text(errors="replace")
     existing = _extract_compat_block(text)
+    baseline = stream_home / COMPAT_BASELINE
+    try:
+        base_text = baseline.read_text(errors="replace")
+    except OSError:
+        base_text = ""
+
+    merged, kept = merge_compat_mappings(host_block, existing or "", base_text)
+    # Twice on purpose: the first pass takes the host's unusable entries out
+    # before the merge sees them, this one the session's own.
+    merged, session_dropped = drop_unusable_mappings(merged, usable)
+    _write_compat_baseline(baseline, host_block)
+    result = CompatMirror(dropped=sorted(set(host_dropped) | set(session_dropped)),
+                          kept_from_session=kept)
+
     if existing is not None:
-        if existing.strip() == host_block.strip():
-            return False, dropped
-        new_text = text.replace(existing, host_block.strip(), 1)
+        if existing.strip() == merged.strip():
+            return result
+        new_text = text.replace(existing, merged.strip(), 1)
     else:
         anchor = re.search(r'"Steam"\s*\n\s*\{\n', text)
         if anchor is None:
-            return False, dropped
-        new_text = text[: anchor.end()] + host_block + "\n" + text[anchor.end() :]
+            return result
+        new_text = text[: anchor.end()] + merged + "\n" + text[anchor.end() :]
     cfg.write_text(new_text)
-    return True, dropped
+    result.changed = True
+    return result
+
+
+def _write_compat_baseline(path: Path, host_block: str) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(host_block)
+    except OSError:
+        pass  # only costs the next run its knowledge of who changed what
 
 
 def ensure_compat_default(stream_home: Path, tool: str = "proton_experimental") -> bool:
@@ -372,6 +452,8 @@ class ProvisionAllResult:
     # Host mappings pointing at a compat tool installed nowhere; named rather
     # than counted, those games run on the default Proton now.
     dropped_compat_tools: list[str] = field(default_factory=list)
+    # Entries where the streamed session's choice beat the host's.
+    kept_compat_mappings: int = 0
 
 
 def ensure_all(stream_home: Path, steam_root: Path | None = None,
@@ -403,8 +485,9 @@ def ensure_all(stream_home: Path, steam_root: Path | None = None,
         purged += _share_into(tool, target, stream_home)
     custom = share_custom_compat_tools(stream_home, steam_root)
     # Order matters: the mappings are filtered against the symlinks above.
-    mirrored, dropped = mirror_compat_mappings(stream_home, steam_root)
-    compat = mirrored or ensure_compat_default(stream_home)
+    mirror = mirror_compat_mappings(stream_home, steam_root)
+    compat = mirror.changed or ensure_compat_default(stream_home)
     return ProvisionAllResult([a.installdir for a in games], len(tools), custom, compat,
                               stale_uppers_purged=purged,
-                              dropped_compat_tools=dropped)
+                              dropped_compat_tools=mirror.dropped,
+                              kept_compat_mappings=mirror.kept_from_session)

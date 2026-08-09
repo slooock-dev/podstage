@@ -319,6 +319,9 @@ def shared_library_paths(home_dir: Path, provision: bool = True,
                 print("[podstage] host compat mappings skipped, not installed: "
                       + ", ".join(res.dropped_compat_tools)
                       + "; those games run on the default Proton")
+            if res.kept_compat_mappings:
+                print(f"[podstage] {res.kept_compat_mappings} compat mapping(s) "
+                      "kept from the streamed session, host value not applied")
         except RuntimeError as exc:
             print(f"[podstage] provisioning skipped: {exc}")
     paths = [lib.steamapps for lib in steam.library_folders() if lib.steamapps.is_dir()]

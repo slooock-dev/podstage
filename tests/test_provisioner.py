@@ -170,21 +170,70 @@ def test_mirror_compat_mappings_copies_host_block(main_steam: Path, tmp_path: Pa
     tools.mkdir(parents=True)
     (tools / "Proton-GE Latest").mkdir()
 
-    assert provisioner.mirror_compat_mappings(tmp_path / "home", main_steam) == (True, [])
+    first = provisioner.mirror_compat_mappings(tmp_path / "home", main_steam)
+    assert (first.changed, first.dropped) == (True, [])
     text = sandbox_cfg.read_text()
     assert '"Proton-GE Latest"' in text
     assert text.index("CompatToolMapping") < text.index("AutoUpdateWindowEnabled")
     # Second run: nothing to change.
-    assert provisioner.mirror_compat_mappings(tmp_path / "home", main_steam) == (False, [])
-    # Host mapping changes propagate by replacing the existing block.
+    assert provisioner.mirror_compat_mappings(tmp_path / "home", main_steam).changed is False
+    # Host mapping changes propagate while the session left the entry alone.
     host_cfg.write_text(host_cfg.read_text().replace("Proton-GE Latest", "GE-Proton99"))
-    assert provisioner.mirror_compat_mappings(tmp_path / "home", main_steam) == (True, ["GE-Proton99"])
+    second = provisioner.mirror_compat_mappings(tmp_path / "home", main_steam)
+    assert (second.changed, second.dropped) == (True, ["GE-Proton99"])
     sandbox = sandbox_cfg.read_text()
     # Installed nowhere, so dropped instead of mirrored: Steam would otherwise
     # exec the game's Windows binary directly.
     assert "GE-Proton99" not in sandbox
     assert '"1623730"' not in sandbox
     assert '"proton_experimental"' in sandbox   # Steam's own name stays
+
+
+def _block(*entries: tuple[str, str]) -> str:
+    body = "".join(f'\n\t\t\t\t\t"{app}"\n\t\t\t\t\t{{\n\t\t\t\t\t\t"name"\t\t"{tool}"'
+                   f"\n\t\t\t\t\t}}" for app, tool in entries)
+    return '"CompatToolMapping"\n\t\t\t\t{' + body + "\n\t\t\t\t}"
+
+
+def test_merge_compat_mappings_lets_the_session_win():
+    """A sandbox entry differing from the baseline was set in the streamed
+    session and stays, including against a host that changed the same entry.
+    An untouched entry follows the host, which is how a desktop change still
+    arrives."""
+    base = _block(("11", "GE-Proton10-34"), ("22", "proton_experimental"))
+    host = _block(("11", "GE-Proton11-3"), ("22", "proton_experimental"))
+    # 11 set in the session, 22 untouched, 33 added there.
+    sandbox = _block(("11", "GE-Proton10-14"), ("22", "proton_experimental"),
+                     ("33", "GE-Proton11-1"))
+
+    merged, kept = provisioner.merge_compat_mappings(host, sandbox, base)
+    assert kept == 2                          # the changed one and the added one
+    assert '"GE-Proton10-14"' in merged       # session choice beats the host
+    assert '"GE-Proton11-3"' not in merged
+    assert '"33"' in merged and '"GE-Proton11-1"' in merged
+    assert merged.count('"22"') == 1
+
+    # Host-only change with the session untouched: the host value arrives.
+    merged, kept = provisioner.merge_compat_mappings(host, base, base)
+    assert (kept, '"GE-Proton11-3"' in merged) == (0, True)
+
+
+def test_merge_compat_mappings_keeps_a_session_deletion():
+    """Removing the mapping in the session is a choice like any other."""
+    base = _block(("11", "GE-Proton10-34"))
+    merged, kept = provisioner.merge_compat_mappings(base, _block(), base)
+    assert kept == 1
+    assert '"11"' not in merged and merged.strip().endswith("}")
+
+
+def test_merge_compat_mappings_without_baseline_keeps_the_sandbox():
+    """A sandbox from before the baseline existed: nothing says whether its
+    entries are session choices or an old mirror, so they are treated as
+    choices rather than silently overwritten."""
+    host = _block(("11", "GE-Proton11-3"))
+    sandbox = _block(("11", "GE-Proton10-14"))
+    merged, kept = provisioner.merge_compat_mappings(host, sandbox, "")
+    assert (kept, '"GE-Proton10-14"' in merged) == (1, True)
 
 
 def test_drop_unusable_mappings_keeps_steam_own_tools():

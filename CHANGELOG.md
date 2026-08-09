@@ -77,6 +77,11 @@ Three things to know:
 
 ### Changed
 
+- **A compat tool picked inside the streamed session survives the next start.**
+  The host mapping is merged three-way against the block last mirrored, which
+  is what tells a session choice from a stale copy; on a conflict the session
+  wins, untouched entries still follow the desktop. The baseline lives with the
+  sandbox in `.cache/podstage/compat-baseline.vdf`.
 - **The Load card reads the whole machine** (`/proc/stat`, `/proc/meminfo`),
   which needs nothing from the container and works on both backends; the
   cgroup was located through labwc, which moonshine does not run. RAM is
