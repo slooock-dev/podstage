@@ -260,6 +260,23 @@ if [ "${PS_TOUCH_CLICK_MODE:-1}" != steam ]; then
     ) &
 fi
 
+# Keep gamescope compositing (single buffer on its root surface). app.sh
+# starts it with --force-composition, but Steam writes the root property
+# GAMESCOPE_COMPOSITE_FORCE=0 during startup and gamescope adopts that,
+# silently reverting to plane presentation: a 1x1 black backing on the root
+# surface with the content on subsurfaces. moonshine miscomposites that tree
+# (moving regions flicker with stale content) and its direct scanout only
+# looks at the root buffer, so the session is stuck on the bad path.
+# Re-asserting the convar wins over the property until the next write; 10 s
+# keeps the window after a clobber short.
+(
+    wait_gamescope_socket || exit 0
+    while :; do
+        gamescopectl composite_force 1 >/dev/null 2>&1
+        sleep 10
+    done
+) &
+
 # Preview for the host GUI: one scaled frame every N seconds into the mounted
 # sandbox HOME, exactly where the Sunshine loop drops it
 # (containers/runtime/runner.sh, $HOME/.cache/podstage/thumb.png).

@@ -4,6 +4,22 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Moving content no longer flickers in Big Picture on the moonshine
+  backend.** Without composition gamescope presents client buffers as
+  separate subsurface planes (a 1x1 black backing on the root surface, the
+  Steam UI on subsurfaces), and moonshine miscomposites that tree: regions
+  that move between frames show stale content. gamescope now runs with
+  `--force-composition` on moonshine only, committing a single composited
+  buffer that moonshine scans out directly. The flag alone is not enough:
+  Steam writes `GAMESCOPE_COMPOSITE_FORCE=0` to the X root at startup and
+  gamescope adopts it, so the entrypoint re-asserts the convar every 10 s.
+  Games were already a single opaque plane and are unaffected. Needs a
+  moonshine image rebuild.
+
 ## [0.3.0] - 2026-08-09
 
 Upgrading from 0.2.4 needs no migration: profiles, sandboxes, overlay storage

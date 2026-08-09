@@ -79,6 +79,16 @@ echo "[podstage-app] WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset}" \
 mkdir -p "${XDG_RUNTIME_DIR:-/tmp}/no-libdecor"
 export LIBDECOR_PLUGIN_DIR="${XDG_RUNTIME_DIR:-/tmp}/no-libdecor"
 
+# --force-composition is also moonshine-only. Without composition gamescope
+# presents client buffers as separate subsurface planes (Big Picture: a black
+# backing plane plus the Steam UI with alpha on top), and moonshine
+# miscomposites that tree: regions that move between frames flicker with
+# stale content (verified live; forcing a single composited buffer removes
+# it). labwc handles the same plane tree correctly, so the Sunshine runner
+# keeps direct scan-out. The flag alone does not survive Steam's startup:
+# Steam writes GAMESCOPE_COMPOSITE_FORCE=0 to the X root and gamescope
+# adopts it, so the entrypoint re-asserts the convar (see there).
+
 exec gamescope --backend wayland -W "$W" -H "$H" -w "$W" -h "$H" -r "$R" \
     -f -b "${GS_EXTRA[@]}" -C 3000 --expose-wayland --force-windows-fullscreen \
-    -e -- "${STEAM_LAUNCH[@]}"
+    --force-composition -e -- "${STEAM_LAUNCH[@]}"
