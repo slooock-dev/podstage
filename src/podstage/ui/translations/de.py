@@ -24,8 +24,8 @@ TEXTS: dict[str, str] = {
 
     # -- session page ----------------------------------------------------
     "Pair …": "Pairen …",
-    "Pair a new Moonlight client by PIN (session must be running)":
-        "Neuen Moonlight-Client per PIN pairen (Session muss laufen)",
+    "Pair a new moonlight client by PIN (session must be running)":
+        "Neuen moonlight-Client per PIN pairen (Session muss laufen)",
     "Game": "Spiel",
     "Preview": "Vorschau",
     "Refresh every": "Aktualisieren alle",
@@ -33,6 +33,8 @@ TEXTS: dict[str, str] = {
     "from the next stream start.":
         "Wie oft die Vorschau im Container aufgenommen wird; 0 schaltet sie aus. "
         "Wirkt ab dem nächsten Stream-Start.",
+    "{w}x{h}@{r} · follows the connected client":
+        "{w}x{h}@{r} · folgt dem verbundenen Client",
     "Preview appears here while streaming.":
         "Die Vorschau erscheint hier während des Streams.",
     "Preview is off": "Vorschau ist aus",
@@ -43,15 +45,35 @@ TEXTS: dict[str, str] = {
     "Apply live": "Live übernehmen",
     "Apply immediately to the running session (stream briefly reconnects)":
         "Auf die laufende Session sofort anwenden (Stream verbindet kurz neu)",
-    "Bitrate & codec are chosen by the Moonlight client; these control encoder "
+    "Bitrate & codec are chosen by the moonlight client; these control encoder "
     "quality on the server side.":
-        "Bitrate & Codec wählt der Moonlight-Client; diese steuern die "
+        "Bitrate & Codec wählt der moonlight-Client; diese steuern die "
         "Encoder-Qualität serverseitig.",
+    "Bitrate & codec are chosen by the moonlight client. {backend} has no "
+    "config API, so this applies at the next session start.":
+        "Bitrate & Codec wählt der moonlight-Client. {backend} hat kein "
+        "Config-API, das hier gilt also ab dem nächsten Session-Start.",
+    "Error correction": "Fehlerkorrektur",
+    "moonshine default ({pct} %)": "moonshine-Standard ({pct} %)",
+    "Forward error correction: how much redundancy is sent so lost "
+    "packets do not become visible artifacts. Higher survives a lossy "
+    "WiFi and costs bandwidth. 0 turns it off, and then every lost "
+    "packet is visible in the picture.":
+        "Vorwärtsfehlerkorrektur: wie viel Redundanz mitgesendet wird, damit "
+        "verlorene Pakete keine sichtbaren Artefakte werden. Höher übersteht "
+        "ein verlustbehaftetes WLAN und kostet Bandbreite. 0 schaltet sie ab, "
+        "dann ist jedes verlorene Paket im Bild zu sehen.",
+    "Saved. Applies at the next session start.":
+        "Gespeichert. Gilt ab dem nächsten Session-Start.",
+    "The {backend} backend has no live quality settings; these apply to "
+    "sunshine profiles only.":
+        "Das Backend {backend} hat keine Qualitätseinstellungen zur Laufzeit; "
+        "diese gelten nur für sunshine-Profile.",
     "VBV buffer increase (%): a larger buffer reduces artifacts in fast motion "
-    "at the same bitrate. 0 = Sunshine default.":
+    "at the same bitrate. 0 = sunshine default.":
         "VBV-Puffer-Erhöhung (%): ein größerer Puffer reduziert Artefakte bei "
-        "schnellen Bewegungen bei gleicher Bitrate. 0 = Sunshine-Standard.",
-    "Open Sunshine web UI": "Sunshine Web-UI öffnen",
+        "schnellen Bewegungen bei gleicher Bitrate. 0 = sunshine-Standard.",
+    "Open sunshine web UI": "sunshine Web-UI öffnen",
     "Saved. Applies from the next stream start; use 'Apply live' for a "
     "running session.":
         "Gespeichert. Gilt ab dem nächsten Stream-Start; »Live übernehmen« "
@@ -70,11 +92,13 @@ TEXTS: dict[str, str] = {
         "'{name}' wählt seine Auflösung beim Start.\nAuflösung für diese "
         "Session:",
     "The PIN was submitted but no pairing completed. Restart the pairing in "
-    "Moonlight and enter the new PIN.":
+    "moonlight and enter the new PIN.":
         "Die PIN wurde übermittelt, aber kein Pairing abgeschlossen. Pairing "
-        "in Moonlight neu starten und die neue PIN eintragen.",
-    "Client '{name}' paired. Moonlight can stream now.":
-        "Client '{name}' gepairt. Moonlight kann jetzt streamen.",
+        "in moonlight neu starten und die neue PIN eintragen.",
+    "Client '{name}' paired. moonlight can stream now.":
+        "Client '{name}' gepairt. moonlight kann jetzt streamen.",
+    "Paired. moonlight can stream now.":
+        "Gepairt. moonlight kann jetzt streamen.",
     "Pairing failed: {msg}": "Pairing fehlgeschlagen: {msg}",
     "Applying live … (stream briefly interrupts)":
         "Wende live an … (Stream unterbricht kurz)",
@@ -88,14 +112,14 @@ TEXTS: dict[str, str] = {
 
     # -- pair dialog -----------------------------------------------------
     "Pair client": "Client pairen",
-    "PIN from Moonlight, e.g. 1234": "PIN aus Moonlight, z. B. 1234",
+    "PIN from moonlight, e.g. 1234": "PIN aus moonlight, z. B. 1234",
     "Device name": "Gerätename",
-    "Select the server in Moonlight and enter the 4-digit PIN it shows here.":
-        "In Moonlight den Server auswählen und die angezeigte 4-stellige "
+    "Select '{server}' in moonlight and enter the 4-digit PIN it shows here.":
+        "In moonlight »{server}« auswählen und die angezeigte 4-stellige "
         "PIN hier eintragen.",
 
-    # -- Sunshine web UI dialog ------------------------------------------
-    "Sunshine web UI": "Sunshine Web-UI",
+    # -- sunshine web UI dialog ------------------------------------------
+    "sunshine web UI": "sunshine Web-UI",
     "User": "Benutzer",
     "Password": "Passwort",
     "Copy password": "Passwort kopieren",
@@ -167,12 +191,49 @@ TEXTS: dict[str, str] = {
     "✓ logged in": "✓ eingeloggt",
     "— empty": "— leer",
     "✗ no login": "✗ kein Login",
-    "Setup: 'Start Steam login' opens the isolated Steam visibly on the "
-    "desktop. Log in there (Steam Guard), then close Steam; the game library "
-    "is provisioned automatically.":
-        "Einrichtung: »Steam-Login starten« öffnet das isolierte Steam sichtbar "
-        "auf dem Desktop. Dort einloggen (Steam Guard), dann Steam schließen; "
-        "die Spiele-Bibliothek wird automatisch provisioniert.",
+    "Setup: 'Streamed login' signs in over the stream (QR code, no "
+    "window on the host). 'Start Steam login' opens the isolated "
+    "Steam visibly on the desktop instead, useful for settings Big "
+    "Picture does not expose. Either way the game library is "
+    "provisioned automatically afterwards.":
+        "Einrichtung: »Gestreamter Login« loggt sich über den Stream ein "
+        "(QR-Code, kein Fenster auf dem Host). »Steam-Login starten« öffnet "
+        "stattdessen das isolierte Steam sichtbar auf dem Desktop, nützlich "
+        "für Einstellungen, die Big Picture nicht anbietet. In beiden Fällen "
+        "wird die Spiele-Bibliothek danach automatisch provisioniert.",
+    "Streamed login": "Gestreamter Login",
+    "Extra mounts": "Zusätzliche Mounts",
+    "Invalid extra mount": "Ungültiger Mount",
+    "One host directory per line, mounted into the session at the "
+    "same path (start its games via non-Steam shortcuts in Big "
+    "Picture). Default is a read-only overlay like the Steam "
+    "libraries; append ':rw' for launchers that update themselves "
+    "in place.":
+        "Ein Host-Verzeichnis pro Zeile, wird unter demselben Pfad in die "
+        "Session gemountet (Spiele darin über Non-Steam-Shortcuts in Big "
+        "Picture starten). Standard ist ein read-only-Overlay wie bei den "
+        "Steam-Bibliotheken; ':rw' anhängen für Launcher, die sich selbst "
+        "aktualisieren.",
+    "Boots this sandbox into Big Picture's Steam sign-in over the "
+    "stream (QR code via the Steam Mobile App, or the on-screen "
+    "keyboard). No window opens on the host.":
+        "Startet diese Sandbox direkt in Steams Big-Picture-Anmeldung über "
+        "den Stream (QR-Code per Steam-Mobile-App oder Bildschirmtastatur). "
+        "Auf dem Host öffnet sich kein Fenster.",
+    "The sandbox\n{home}\nboots into Big Picture's Steam sign-in over "
+    "the stream: connect with moonlight and log in with the QR code "
+    "(Steam Mobile App) or the on-screen keyboard.\n\nContinue?":
+        "Die Sandbox\n{home}\nstartet in Steams Big-Picture-Anmeldung über "
+        "den Stream: mit moonlight verbinden und per QR-Code (Steam-Mobile-"
+        "App) oder Bildschirmtastatur einloggen.\n\nFortfahren?",
+    "Starting login session …": "Starte Login-Session …",
+    "Login session failed: {msg}": "Login-Session fehlgeschlagen: {msg}",
+    "Login session running: connect with moonlight and sign in. "
+    "Stop the session on the Session page when you are done; the "
+    "next regular start provisions the game library.":
+        "Login-Session läuft: mit moonlight verbinden und einloggen. "
+        "Danach die Session auf der Session-Seite stoppen; der nächste "
+        "normale Start provisioniert die Spiele-Bibliothek.",
 
     # -- sandbox page: profile dialog -----------------------------------
     "Edit profile": "Profil bearbeiten",
@@ -180,7 +241,33 @@ TEXTS: dict[str, str] = {
     "custom": "benutzerdefiniert",
     "e.g. deck, laptop, livingroom": "z. B. deck, laptop, wohnzimmer",
     "WidthxHeight@Hz, e.g. 1920x1080@60": "BreitexHöhe@Hz, z. B. 1920x1080@60",
-    "Sunshine port": "Sunshine-Port",
+    "moonlight port": "moonlight-Port",
+    "Backend": "Backend",
+    "sunshine (default) works on every supported GPU. moonshine brings "
+    "its own compositor and encodes with Vulkan Video, which needs an "
+    "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU, and its quality settings "
+    "apply at the next session start instead of live. The Setup page "
+    "checks whether this machine can run it.":
+        "sunshine (Standard) läuft auf jeder unterstützten GPU. moonshine "
+        "bringt einen eigenen Compositor mit und kodiert per Vulkan Video, "
+        "was eine NVIDIA RTX, AMD RDNA2+ oder Intel Arc voraussetzt, und "
+        "seine Qualitätseinstellungen wirken erst ab dem nächsten "
+        "Session-Start statt sofort. Die Setup-Seite prüft, ob diese "
+        "Maschine das kann.",
+    "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
+    "Intel Arc). Save this profile, then build its image and check "
+    "the GPU on the Setup page. Its quality setting applies at the "
+    "next start instead of live.":
+        "Braucht eine GPU mit Vulkan-Video-Encode (NVIDIA RTX, AMD RDNA2+, "
+        "Intel Arc). Profil speichern, dann auf der Setup-Seite das Image "
+        "bauen und die GPU prüfen. Die Qualitätseinstellung gilt ab dem "
+        "nächsten Start statt live.",
+    "Keyboard": "Tastatur",
+    "variant, e.g. nodeadkeys": "Variante, z. B. nodeadkeys",
+    "XKB layout of the streamed session, empty keeps moonshine's "
+    "default (us). Affects typing in Big Picture and in games.":
+        "XKB-Belegung der gestreamten Session, leer behält moonshines "
+        "Standard (us). Betrifft Texteingabe in Big Picture und in Spielen.",
     "Games in this sandbox": "Spiele in dieser Sandbox",
     "Include every installed game (and any you add later)":
         "Alle installierten Spiele einschließen (auch später hinzugefügte)",
@@ -192,8 +279,10 @@ TEXTS: dict[str, str] = {
     "All {total} games included.": "Alle {total} Spiele einbezogen.",
     "{n} of {total} games selected.": "{n} von {total} Spielen ausgewählt.",
     "Invalid name": "Ungültiger Name",
-    "Only letters, digits, '-' and '_' are allowed.":
-        "Nur Buchstaben, Ziffern, '-' und '_' erlaubt.",
+    "Only letters, digits, '-' and '_' are allowed "
+    "(must start with a letter or digit).":
+        "Nur Buchstaben, Ziffern, '-' und '_' erlaubt "
+        "(muss mit Buchstabe oder Ziffer beginnen).",
     "Name taken": "Name vergeben",
     "A profile '{name}' already exists.": "Ein Profil '{name}' existiert bereits.",
     "Invalid resolution": "Ungültige Auflösung",
@@ -268,6 +357,9 @@ TEXTS: dict[str, str] = {
 
     # -- setup page ------------------------------------------------------
     "Preflight checks": "Preflight-Checks",
+    # "Host" and "Streaming" are identical in German, so the English fallback
+    # already covers those two check-group headings.
+    "{name} backend": "Backend {name}",
     "Re-check": "Neu prüfen",
     "checking …": "prüfe …",
     "Check failed: {msg}": "Prüfung fehlgeschlagen: {msg}",
@@ -330,16 +422,24 @@ TEXTS: dict[str, str] = {
     "features need a current runtime image.":
         "Globale Schalter, gelten ab dem nächsten Session-Start. "
         "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
-    "Desktop (experimental)": "Desktop (experimentell)",
-    "Big Picture (gamepad) or the Steam desktop UI with mouse and "
-    "keyboard (experimental). Applies at the next start.":
-        "Big Picture (Gamepad) oder die Steam-Desktop-UI mit Maus und "
-        "Tastatur (experimentell). Gilt ab dem nächsten Start.",
     "HDR stream": "HDR-Stream",
-    "gamescope advertises an HDR output and games see DXVK_HDR. Unverified "
-    "end to end.":
-        "gamescope meldet einen HDR-Output und Spiele sehen DXVK_HDR. "
-        "Ende-zu-Ende unverifiziert.",
+    "DualSense pad (gyro)": "DualSense-Pad (Gyro)",
+    "sunshine only. For PlayStation controllers.":
+        "Nur sunshine. Für PlayStation-Controller.",
+    "sunshine emulates a DualSense instead of the Xbox pad: gyro and "
+    "matching glyphs. Needed for such a client, since sunshine picks "
+    "that pad by itself and fails without /dev/uhid. Steam Deck: needs "
+    "Steam Input off for moonlight (no trackpad-mouse then). Mounts "
+    "the host /dev.":
+        "sunshine emuliert ein DualSense statt des Xbox-Pads: Gyro und "
+        "passende Tastensymbole. Für so einen Client nötig, weil sunshine "
+        "dieses Pad selbst wählt und ohne /dev/uhid scheitert. Steam Deck: "
+        "braucht Steam Input für moonlight aus (dann keine Trackpad-Maus). "
+        "Mountet das Host-/dev.",
+    "gamescope --hdr-enabled + DXVK_HDR, on moonshine also its own "
+    "compositor. Whether the stream carries HDR is unverified.":
+        "gamescope --hdr-enabled + DXVK_HDR, bei moonshine zusätzlich "
+        "dessen Compositor. Ob der Stream HDR trägt, ist unverifiziert.",
     "Performance metrics (FPS)": "Performance-Metriken (FPS)",
     "A probe in the container asks gamescope for the presented frametime of "
     "the running game and shows FPS on the Session page. Works on any GPU "
@@ -356,6 +456,7 @@ TEXTS: dict[str, str] = {
     "session start.":
         "Für reine Controller-Clients empfohlen: aus. Gilt ab dem nächsten "
         "Session-Start.",
+    "sunshine only.": "Nur sunshine.",
     "Experimental features apply from the next session start.":
         "Experimentelle Features gelten ab dem nächsten Session-Start.",
     "Checks the GitHub releases for a newer version.":
@@ -415,14 +516,33 @@ TEXTS: dict[str, str] = {
         "»Sandboxen« anmelden.",
     "Follow the client's resolution":
         "Auflösung folgt dem Client",
-    "Render at the first connecting client's resolution, locked until "
-    "the session restarts. The profile resolution above is only the "
-    "fallback. Off: always render at the profile resolution.":
-        "Rendert in der Auflösung des zuerst verbindenden Clients, fixiert "
-        "bis zum Neustart der Session. Die Profil-Auflösung oben ist nur der "
-        "Fallback. Aus: es wird immer in der Profil-Auflösung gerendert.",
+    "Render at the connecting client's resolution; the profile "
+    "resolution above is only the fallback. sunshine locks the first "
+    "client's mode until the session restarts, moonshine follows every "
+    "reconnect. Off: always render at the profile resolution.":
+        "Rendert in der Auflösung des verbindenden Clients; die "
+        "Profil-Auflösung oben ist nur der Fallback. sunshine fixiert den "
+        "Modus des ersten Clients bis zum Session-Neustart, moonshine folgt "
+        "jedem Reconnect. Aus: es wird immer in der Profil-Auflösung "
+        "gerendert.",
+    "Stop the session to switch the backend.":
+        "Zum Wechseln des Backends die Session stoppen.",
+    "Applies at the next session start. Each backend keeps its own pairings, "
+    "so a client paired to one must be paired again for the other.":
+        "Gilt ab dem nächsten Session-Start. Jedes Backend führt eigene "
+        "Pairings, ein Client muss für das andere also erneut gepairt werden.",
     "Client (auto)":
         "Client (auto)",
+    "Add folder …": "Ordner hinzufügen …",
+    "writable": "schreibbar",
+    "Add the chosen folder as ':rw'. Only for launchers that update "
+    "themselves in place: a writable mount lets the session change "
+    "host files.":
+        "Fügt den gewählten Ordner als »:rw« hinzu. Nur für Launcher, die "
+        "sich selbst an Ort und Stelle aktualisieren: ein schreibbarer Mount "
+        "lässt die Session Host-Dateien verändern.",
+    "Choose a folder to mount into the session":
+        "Ordner wählen, der in die Session gemountet wird",
     "{w}x{h}@{r} · locked until the session restarts":
         "{w}x{h}@{r} · fixiert bis zum Session-Neustart",
     "waiting for the first client …":

@@ -3,6 +3,14 @@
 Thanks for your interest! podstage is early and the architecture is still
 solidifying; issues and design discussion are especially welcome.
 
+podstage is developed with AI coding assistants under human direction. The
+design, the architecture and the concepts behind them are human: what gets
+built, how the pieces fit, which trade-offs are acceptable and what is rejected
+are decisions made by a person, and the assistants implement against them.
+Changes are reviewed, tested and verified on real hardware before they land;
+what could not be verified is marked as such in the CHANGELOG. Contributions
+are held to the same bar, whatever tooling produced them.
+
 ## Development setup
 
 ```bash
@@ -23,14 +31,23 @@ This stamps a hash of `containers/runtime/` into the image; `doctor` flags an
 image whose sources changed since the build (a plain `podman build` counts as
 stale because it lacks the label).
 
+The moonshine backend has its own image, built on top of that one and only
+needed if you work on that path (it compiles moonshine from source, so expect
+a long first build):
+
+```bash
+podstage runtime build --backend moonshine
+```
+
 ## Architecture at a glance
 
 | Layer | Package | Responsibility |
 |-------|---------|----------------|
 | GUI | `podstage.ui` | PyQt6 management window (setup, sandboxes, session, logs) |
 | CLI | `podstage.cli` | scriptable surface; `doctor`, `setup`, `runtime`, `session`, … |
-| Core | `podstage.core` | `runtime`, `udev`, `provisioner`, `monitor`, `sandbox`, `doctor`, `elevate`, `sunshine_api`, `steam`, `session`, `teardown` |
-| Image | `containers/runtime` | the self-contained streaming sandbox (cage → gamescope → Steam + Sunshine) |
+| Core | `podstage.core` | `backends`, `runtime`, `udev`, `provisioner`, `monitor`, `sandbox`, `doctor`, `elevate`, `sunshine_api`, `moonshine_api`, `steam`, `session`, `teardown` |
+| Image | `containers/runtime` | the self-contained streaming sandbox (labwc → gamescope → Steam + sunshine) |
+| Image | `containers/moonshine` | the alternative backend image (moonshine → gamescope → Steam), built FROM the one above |
 
 **`core/runtime.py` is the single source of truth** for the `podman run`
 invocation. Both the CLI and the GUI build the container command from it, so
@@ -56,7 +73,7 @@ they cannot drift. Change container flags there.
   image store on a 1–2 user gaming PC.
 - **Rootless container.** `--userns=keep-id`, no sudo at runtime. Input
   hotplug (uevents don't reach user namespaces) is solved in userspace: the
-  seat-shim fakes cage's udev monitor via inotify, SDL uses its inotify
+  seat-shim fakes the compositor's udev monitor via inotify, SDL uses its inotify
   fallback (`SDL_JOYSTICK_DISABLE_UDEV=1`), and a generated per-user udev
   OWNER rule provides device access. The one-time udev install is the only
   root step.
@@ -113,13 +130,15 @@ Language selection: `config.language` (`auto`/`en`/`de`, set in the Setup panel)
   offscreen smoke test above.
 - After changing `containers/runtime/`, rebuild the image (Setup → *Build
   image* or `podstage runtime build`); the next start picks it up directly
-  from your user's image store. `doctor` warns while the image is stale.
-- The cage patch (`containers/runtime/patches/`) is vendored. To change it:
-  download the tarball pinned in the Containerfile (`CAGE_VERSION` +
-  `CAGE_SHA256`), unpack, `git init && git add -A && git commit`, apply the
-  patch, edit, then regenerate it with `git diff` and rebuild the image.
+  from your user's image store. `doctor` warns while the image is stale. Each
+  backend hashes its own `containers/<x>/`, so the two do not invalidate each
+  other, but the moonshine image is layered on the runtime one and needs a
+  rebuild after a base change.
+- **`core/backends.py` holds everything that differs between the two
+  streaming backends** (image, port env, whether the host publishes mDNS,
+  whether there is a live config API). Add a backend trait there and read it
+  in `core/runtime.py`; do not branch on the backend name at call sites.
 - **Updating the pinned versions**: `tools/bump_pins.py` compares the
-  Containerfile pins (Arch base digest, Sunshine release, cage release)
-  against upstream; `--apply` writes them. Then `podstage runtime build`,
-  `podstage doctor`, and one real stream before committing. A cage bump
-  additionally needs the vendored patch re-applied (see above).
+  Containerfile pins (Arch base digest, sunshine release) against upstream;
+  `--apply` writes them. Then `podstage runtime build`, `podstage doctor`,
+  and one real stream before committing.

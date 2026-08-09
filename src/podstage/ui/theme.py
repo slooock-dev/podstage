@@ -5,6 +5,10 @@ depth, one accent, monospace for data. Spacing on a 4px grid, radius system
 6/8px, four-level contrast hierarchy.
 """
 
+from pathlib import Path
+
+from PyQt6.QtCore import QPointF, QStandardPaths, Qt
+from PyQt6.QtGui import QColor, QPainter, QPixmap, QPolygonF
 from PyQt6.QtWidgets import QWidget
 
 # -- palette ----------------------------------------------------------------
@@ -30,6 +34,71 @@ def repolish(w: QWidget) -> None:
     w.style().polish(w)
 
 
+# -- stepper arrows ---------------------------------------------------------
+# Styling a widget through a stylesheet drops Qt's own rendering of its
+# sub-controls, so spin boxes and combos need their arrows supplied here. Qt
+# cannot draw a triangle from a stylesheet: the CSS border trick that works in
+# browsers comes out as a small filled rectangle (verified). So the arrows are
+# painted to real files in the cache dir at startup and the stylesheet points
+# at those, which keeps the theme self-contained without committing binary
+# assets and lets the colour follow the palette above.
+_ARROW_W, _ARROW_H = 9, 5
+
+
+def _draw_arrow(path: Path, colour: str, *, down: bool) -> None:
+    pix = QPixmap(_ARROW_W, _ARROW_H)
+    pix.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(colour))
+    if down:
+        points = [(0, 0), (_ARROW_W, 0), (_ARROW_W / 2, _ARROW_H)]
+    else:
+        points = [(0, _ARROW_H), (_ARROW_W, _ARROW_H), (_ARROW_W / 2, 0)]
+    painter.drawPolygon(QPolygonF([QPointF(x, y) for x, y in points]))
+    painter.end()
+    pix.save(str(path), "PNG")
+
+
+def arrow_icons() -> dict[str, str]:
+    """``{name: path}`` for the stepper arrows, (re)drawn on each start.
+
+    Needs a QApplication, so this runs from the window rather than at import.
+    """
+    cache = Path(QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.CacheLocation) or "/tmp") / "arrows"
+    cache.mkdir(parents=True, exist_ok=True)
+    icons = {}
+    for name, colour, down in (("up", SECONDARY, False), ("down", SECONDARY, True),
+                               ("up-off", FAINT, False), ("down-off", FAINT, True)):
+        target = cache / f"{name}.png"
+        _draw_arrow(target, colour, down=down)
+        icons[name] = target.as_posix()
+    return icons
+
+
+def qss() -> str:
+    """The stylesheet with the freshly drawn arrow paths filled in.
+
+    A read-only or full cache dir costs the arrows, not the window: Qt draws
+    nothing for a missing image, which is exactly the state this replaced.
+    """
+    try:
+        icons = arrow_icons()
+    except OSError:
+        return QSS
+    return QSS + f"""
+QSpinBox::up-arrow {{ image: url("{icons['up']}"); }}
+QSpinBox::down-arrow, QComboBox::down-arrow {{ image: url("{icons['down']}"); }}
+QSpinBox::up-arrow:disabled, QSpinBox::up-arrow:off {{
+    image: url("{icons['up-off']}");
+}}
+QSpinBox::down-arrow:disabled, QSpinBox::down-arrow:off,
+QComboBox::down-arrow:disabled {{ image: url("{icons['down-off']}"); }}
+"""
+
+
 QSS = f"""
 QWidget {{ background: {BG}; color: {FG}; font-size: 12px; }}
 QLabel {{ background: transparent; }}
@@ -49,6 +118,10 @@ QLabel#globalState[state="running"] {{ color: {OK}; }}
 QFrame[card="true"] {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 8px; }}
 QFrame[card="true"] > QWidget {{ background: transparent; }}
 QLabel[cardTitle="true"] {{ color: {MUTED}; font-size: 11px; font-weight: 600; letter-spacing: 1px; }}
+/* Sub-heading INSIDE a card (the doctor check groups): brighter than the
+   muted detail text it sits above, but without the card kicker's uppercase
+   letter-spacing, so it never competes with the card title. */
+QLabel[groupTitle="true"] {{ color: {FG}; font-size: 11px; font-weight: 600; }}
 QLabel#pageTitle {{ font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }}
 
 /* -- text roles --------------------------------------------------------- */
@@ -63,6 +136,9 @@ QLabel#sessionState[state="error"] {{ color: {ERR}; }}
 QLabel[status="ok"] {{ color: {OK}; }}
 QLabel[status="warn"] {{ color: {WARN}; }}
 QLabel[status="fail"] {{ color: {ERR}; }}
+/* Neutral: a fact about a path this install does not take. Muted on
+   purpose, so "cannot run here" never reads as a green all-clear. */
+QLabel[status="info"] {{ color: {FAINT}; }}
 
 /* -- controls ----------------------------------------------------------- */
 QPushButton {{
@@ -85,7 +161,26 @@ QComboBox, QSpinBox, QLineEdit {{
 }}
 QComboBox:hover, QSpinBox:hover, QLineEdit:hover {{ border-color: #3c434c; }}
 QComboBox:focus, QSpinBox:focus, QLineEdit:focus {{ border-color: {ACCENT}; }}
+/* Sub-controls of spin boxes and combos. Styling a widget through a
+   stylesheet at all makes Qt drop the NATIVE rendering of its sub-controls,
+   so without explicit rules the steppers are bare boxes with no arrows. The
+   buttons are styled here; the arrow images come from qss(), which paints
+   them at startup (see the stepper-arrow section above). */
 QComboBox::drop-down {{ border: none; width: 20px; }}
+QSpinBox::up-button, QSpinBox::down-button {{
+    subcontrol-origin: border; background: transparent; border: none;
+    width: 16px; margin-right: 2px;
+}}
+QSpinBox::up-button {{ subcontrol-position: top right; }}
+QSpinBox::down-button {{ subcontrol-position: bottom right; }}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
+    background: rgba(255,255,255,0.06); border-radius: 3px;
+}}
+/* The arrow images themselves are appended by qss(): they are painted at
+   startup, because a stylesheet cannot draw a triangle (see _draw_arrow). */
+QSpinBox::up-arrow, QSpinBox::down-arrow, QComboBox::down-arrow {{
+    width: 9px; height: 5px;
+}}
 QComboBox QAbstractItemView {{
     background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 6px;
     selection-background-color: rgba(61,126,255,0.2); color: {FG}; outline: none;

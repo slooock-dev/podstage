@@ -35,9 +35,9 @@ def run_root(shell: str, timeout: int = 600) -> tuple[int, str]:
         )
         out = (p.stdout + p.stderr).strip()
         if p.returncode == PKEXEC_DISMISSED:
-            out = out or "Autorisierung abgebrochen"
+            out = out or "authorization dismissed"
         elif p.returncode == PKEXEC_NOT_AUTHORIZED:
-            out = out or "Autorisierung fehlgeschlagen"
+            out = out or "authorization failed"
         return p.returncode, out
     except (OSError, subprocess.SubprocessError) as e:
         return 1, str(e)

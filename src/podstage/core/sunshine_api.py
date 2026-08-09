@@ -1,6 +1,6 @@
-"""Thin client for the runtime container's Sunshine web API.
+"""Thin client for the runtime container's sunshine web API.
 
-Sunshine's web UI (https://localhost:<web_port>) exposes a JSON API guarded by
+sunshine's web UI (https://localhost:<web_port>) exposes a JSON API guarded by
 basic auth (the per-install random credentials from
 ``config.sunshine_web_credentials``, seeded headlessly by the entrypoint) and a
 self-signed TLS cert — hence the unverified SSL context. Config changes via
@@ -54,7 +54,7 @@ def _request(path: str, web_port: int, payload: dict | None = None,
         with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
             body = resp.read().decode()
     except (urllib.error.URLError, OSError, TimeoutError) as e:
-        raise SunshineApiError(f"Sunshine API unreachable ({e})") from e
+        raise SunshineApiError(f"sunshine API unreachable ({e})") from e
     try:
         return json.loads(body) if body.strip() else {}
     except json.JSONDecodeError as e:
@@ -77,8 +77,8 @@ def set_options(changes: dict[str, str], web_port: int = DEFAULT_WEB_PORT) -> No
 
 
 def pair(pin: str, name: str, web_port: int = DEFAULT_WEB_PORT) -> bool:
-    """Complete a Moonlight pairing: the client shows a 4-digit PIN, this
-    submits it (what the web UI's PIN form does). Sunshine must be running."""
+    """Complete a moonlight pairing: the client shows a 4-digit PIN, this
+    submits it (what the web UI's PIN form does). sunshine must be running."""
     resp = _request("/api/pin", web_port, payload={"pin": pin, "name": name})
     return str(resp.get("status", "")).lower() == "true"
 
@@ -93,7 +93,7 @@ def pair_verified(pin: str, name: str, home: Path,
     before = sandbox.paired_device_ids(home)
     if not pair(pin, name, web_port):
         raise SunshineApiError("no pairing attempt pending; start it in "
-                               "Moonlight first")
+                               "moonlight first")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if sandbox.paired_device_ids(home) - before:
@@ -103,7 +103,7 @@ def pair_verified(pin: str, name: str, home: Path,
 
 
 def restart(web_port: int = DEFAULT_WEB_PORT) -> None:
-    """Apply a posted config: Sunshine restarts itself (stream drops briefly).
+    """Apply a posted config: sunshine restarts itself (stream drops briefly).
     The API often closes the connection mid-restart — that is success."""
     try:
         _request("/api/restart", web_port, payload={})

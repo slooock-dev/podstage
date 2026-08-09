@@ -28,20 +28,19 @@ from PyQt6.QtWidgets import (
 )
 
 from ... import config
-from ...core import monitor, runtime, sandbox, sunshine_api
+from ...core import backends, monitor, moonshine_api, runtime, sandbox, sunshine_api
 from ...core.session import Session
 from .. import theme
 from ..i18n import tr
 from ..widgets import AspectPixmapLabel, InfoRow, Meter, align_captions, card
 from ..workers import start_action
 
-_NCPU = os.cpu_count() or 1
-try:  # host RAM in MB, the reference for the RAM meter (0 = unknown)
+try:  # fallback reference for the RAM meter when /proc/meminfo is unreadable
     _RAM_TOTAL_MB = (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")) >> 20
 except (ValueError, OSError):
     _RAM_TOTAL_MB = 0
 
-# Sunshine NVENC quality knobs (sunshine.conf value → translated label builder).
+# sunshine NVENC quality knobs (sunshine.conf value → translated label builder).
 # Built inside the widget so tr() resolves after the language is set.
 _PRESET_LABELS = {
     "1": lambda: tr("fastest encoding (default)"), "2": lambda: tr("faster"),
@@ -53,7 +52,7 @@ _TWOPASS_LABELS = {
     "quarter_res": lambda: tr("quarter resolution (default)"),
     "full_res": lambda: tr("full resolution"),
 }
-# Sunshine VAAPI quality knobs (AMD path). Values verified against Sunshine's
+# sunshine VAAPI quality knobs (AMD path). Values verified against sunshine's
 # configuration docs (vaapi_quality / vaapi_rc / vaapi_strict_rc_buffer).
 _VAAPI_QUALITY_LABELS = {
     "auto": lambda: tr("auto (default)"), "speed": lambda: tr("speed"),
@@ -74,22 +73,22 @@ THUMB_MAX_AGE_S = 45  # strict mode only: older previews count as stale
 
 
 class PairDialog(QDialog):
-    """Submit the PIN Moonlight shows to pair a new client."""
+    """Submit the PIN moonlight shows to pair a new client."""
 
-    def __init__(self, parent, default_name: str) -> None:
+    def __init__(self, parent, default_name: str, advertised: str = "") -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Pair client"))
         self.setMinimumWidth(320)
         form = QFormLayout(self)
         form.setSpacing(8)
         self.pin = QLineEdit()
-        self.pin.setPlaceholderText(tr("PIN from Moonlight, e.g. 1234"))
+        self.pin.setPlaceholderText(tr("PIN from moonlight, e.g. 1234"))
         self.pin.setMaxLength(4)
         self.name = QLineEdit(default_name)
         form.addRow("PIN", self.pin)
         form.addRow(tr("Device name"), self.name)
-        hint = QLabel(tr("Select the server in Moonlight and enter the 4-digit "
-                         "PIN it shows here."))
+        hint = QLabel(tr("Select '{server}' in moonlight and enter the 4-digit "
+                         "PIN it shows here.", server=advertised or default_name))
         hint.setProperty("muted", True)
         hint.setWordWrap(True)
         form.addRow(hint)
@@ -105,12 +104,12 @@ class PairDialog(QDialog):
 
 
 class WebUiDialog(QDialog):
-    """The Sunshine web-UI URL and its generated login, with a button to open
+    """The sunshine web-UI URL and its generated login, with a button to open
     it. The login is per install, so it is shown here rather than hidden."""
 
     def __init__(self, parent, url: str, user: str, password: str) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("Sunshine web UI"))
+        self.setWindowTitle(tr("sunshine web UI"))
         self.setMinimumWidth(400)
         form = QFormLayout(self)
         form.setSpacing(8)
@@ -166,12 +165,6 @@ class SessionPage(QWidget):
         top.setSpacing(8)
         self._client = QComboBox()
         self._client.currentTextChanged.connect(self._on_profile_selected)
-        self._mode = QComboBox()
-        self._mode.addItem(tr("Big Picture"), "pipeline")
-        self._mode.addItem(tr("Desktop (experimental)"), "desktop")
-        self._mode.setToolTip(tr(
-            "Big Picture (gamepad) or the Steam desktop UI with mouse and "
-            "keyboard (experimental). Applies at the next start."))
         self._start_btn = QPushButton(tr("Start"))
         self._start_btn.setProperty("primary", True)
         self._start_btn.clicked.connect(self._on_start)
@@ -179,13 +172,15 @@ class SessionPage(QWidget):
         self._stop_btn.setProperty("danger", True)
         self._stop_btn.clicked.connect(self._on_stop)
         self._pair_btn = QPushButton(tr("Pair …"))
-        self._pair_btn.setToolTip(tr("Pair a new Moonlight client by PIN "
+        self._pair_btn.setToolTip(tr("Pair a new moonlight client by PIN "
                                      "(session must be running)"))
         self._pair_btn.setEnabled(False)
         self._pair_btn.clicked.connect(self._on_pair)
-        top.addWidget(QLabel(tr("Client")))
+        # "Sandbox", not "Client": the box picks the profile whose
+        # sandbox is streamed. The clients are the moonlight devices
+        # paired to it, which is what the Pair button next to it means.
+        top.addWidget(QLabel(tr("Sandbox")))
         top.addWidget(self._client, 1)
-        top.addWidget(self._mode)
         top.addWidget(self._start_btn)
         top.addWidget(self._stop_btn)
         top.addWidget(self._pair_btn)
@@ -201,9 +196,29 @@ class SessionPage(QWidget):
 
         self._game = InfoRow(tr("Game"))
         self._resolution = InfoRow(tr("Resolution"))
-        self._backend = InfoRow(tr("Backend"))
-        align_captions(self._game, self._resolution, self._backend)
-        for w in (self._game, self._resolution, self._backend):
+        # The backend is a per-profile setting, not just a status line, and it
+        # belongs here as well as in the profile dialog: comparing the two is
+        # exactly what this page is for. Editable while stopped; while a
+        # session runs it shows the running backend and locks, since a switch
+        # could not take effect anyway.
+        self._backend_row = QWidget()
+        brow = QHBoxLayout(self._backend_row)
+        brow.setContentsMargins(0, 0, 0, 0)
+        brow.setSpacing(8)
+        caption = QLabel(tr("Backend"))
+        caption.setProperty("muted", True)
+        caption.setFixedWidth(
+            max(48, caption.fontMetrics().horizontalAdvance(tr("Backend")) + 4))
+        self._backend_row.caption_label = caption
+        self._backend = QComboBox()
+        for spec in backends.BACKENDS.values():
+            self._backend.addItem(spec.label, spec.name)
+        self._backend.currentIndexChanged.connect(self._on_backend_selected)
+        brow.addWidget(caption)
+        brow.addWidget(self._backend)
+        brow.addStretch(1)
+        align_captions(self._game, self._resolution, self._backend_row)
+        for w in (self._game, self._resolution, self._backend_row):
             lay.addWidget(w)
         return frame
 
@@ -267,19 +282,26 @@ class SessionPage(QWidget):
 
     def _build_quality_card(self) -> QWidget:
         frame, lay = card(tr("Stream quality"))
-        row = QHBoxLayout()
+        # The two backends expose entirely different knobs, so the card swaps
+        # its panel with the selected profile's backend rather than greying
+        # one set out (see _load_backend).
+        self._sunshine_panel = QWidget()
+        row = QHBoxLayout(self._sunshine_panel)
+        row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
         # NVENC (NVIDIA) and VAAPI (AMD/Intel) expose different encoder knobs;
-        # the runtime already picks the matching Sunshine encoder by GPU vendor.
+        # the runtime already picks the matching sunshine encoder by GPU vendor.
         if self._nvidia:
             self._build_nvenc_row(row)
         else:
             self._build_vaapi_row(row)
-        lay.addLayout(row)
+        lay.addWidget(self._sunshine_panel)
+        self._moonshine_panel = self._build_moonshine_row()
+        lay.addWidget(self._moonshine_panel)
 
         bottom = QHBoxLayout()
         self._quality_hint = QLabel(tr(
-            "Bitrate & codec are chosen by the Moonlight client; these control "
+            "Bitrate & codec are chosen by the moonlight client; these control "
             "encoder quality on the server side."))
         self._quality_hint.setProperty("muted", True)
         self._quality_hint.setWordWrap(True)
@@ -287,13 +309,51 @@ class SessionPage(QWidget):
         self._apply_btn.setToolTip(tr("Apply immediately to the running session "
                                       "(stream briefly reconnects)"))
         self._apply_btn.clicked.connect(self._on_apply_quality)
-        web_btn = QPushButton(tr("Open Sunshine web UI"))
-        web_btn.clicked.connect(self._open_web_ui)
+        self._web_btn = QPushButton(tr("Open sunshine web UI"))
+        self._web_btn.clicked.connect(self._open_web_ui)
         bottom.addWidget(self._quality_hint, 1)
         bottom.addWidget(self._apply_btn)
-        bottom.addWidget(web_btn)
+        bottom.addWidget(self._web_btn)
         lay.addLayout(bottom)
         return frame
+
+    def _build_moonshine_row(self) -> QWidget:
+        """moonshine's one transport knob. It has no config API, so this is
+        saved to the profile and applied at the next session start."""
+        panel = QWidget()
+        row = QHBoxLayout(panel)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        self._fec = QSpinBox()
+        self._fec.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        # -1 is the minimum so it can carry the special text: 0 is a real
+        # setting of its own ("no FEC"), not a stand-in for "leave default".
+        self._fec.setRange(-1, 100)
+        # Spell the default out, because the value one step below it is 0,
+        # which switches error correction OFF entirely. Without the number the
+        # safe setting and the most harmful one in the box sit next to each
+        # other and read alike.
+        self._fec.setSpecialValueText(
+            tr("moonshine default ({pct} %)", pct=config.MOONSHINE_FEC_DEFAULT))
+        self._fec.setSuffix(" %")
+        self._fec.setToolTip(tr(
+            "Forward error correction: how much redundancy is sent so lost "
+            "packets do not become visible artifacts. Higher survives a lossy "
+            "WiFi and costs bandwidth. 0 turns it off, and then every lost "
+            "packet is visible in the picture."))
+        self._fec.editingFinished.connect(self._persist_moonshine)
+        row.addWidget(QLabel(tr("Error correction")))
+        row.addWidget(self._fec)
+        row.addStretch(1)
+        return panel
+
+    def _persist_moonshine(self) -> None:
+        sc = self._profile()
+        if sc is None:
+            return
+        sc.moonshine_fec_percent = self._fec.value()
+        self._ctx.save()
+        self._quality_hint.setText(tr("Saved. Applies at the next session start."))
 
     def _build_nvenc_row(self, row: QHBoxLayout) -> None:
         self._preset = QComboBox()
@@ -307,7 +367,7 @@ class SessionPage(QWidget):
         self._vbv.setSingleStep(25)
         self._vbv.setToolTip(tr(
             "VBV buffer increase (%): a larger buffer reduces artifacts in fast "
-            "motion at the same bitrate. 0 = Sunshine default."))
+            "motion at the same bitrate. 0 = sunshine default."))
         # Combos persist on change (survives restarts). The spinbox persists on
         # editingFinished (Enter / focus-out), NOT valueChanged: saving on every
         # keystroke emits config_changed → reload → setValue, which would clobber
@@ -370,7 +430,60 @@ class SessionPage(QWidget):
         if sc is None:
             return
         self._load_quality(sc)
+        self._load_backend(sc)
         self._load_preview(sc)
+
+    def _set_backend_combo(self, name: str) -> None:
+        idx = self._backend.findData(name)
+        if idx < 0 or idx == self._backend.currentIndex():
+            return
+        self._backend.blockSignals(True)
+        self._backend.setCurrentIndex(idx)
+        self._backend.blockSignals(False)
+
+    def _on_backend_selected(self) -> None:
+        """Write the picked backend to the profile.
+
+        It cannot apply to a running session (different server, different
+        pairings), so the box is disabled while one runs and this only ever
+        fires from the stopped state.
+        """
+        sc = self._profile()
+        chosen = self._backend.currentData()
+        if sc is None or not chosen or chosen == sc.backend:
+            return
+        sc.backend = chosen
+        self._ctx.save()
+        self._load_backend(sc)     # swap the quality panel with it
+        self._load_preview(sc)
+
+    def _load_backend(self, sc: config.SessionConfig) -> None:
+        """Show the panel that belongs to this profile's backend.
+
+        sunshine has encoder knobs applied through its config API; moonshine
+        has one transport knob and no API, so its value is saved to the
+        profile and takes effect at the next start. The web UI button is
+        sunshine's alone.
+        """
+        spec = backends.get_or_default(sc.backend)
+        self._set_backend_combo(spec.name)
+        sunshine = spec.name == backends.SUNSHINE.name
+        self._sunshine_panel.setVisible(sunshine)
+        self._moonshine_panel.setVisible(not sunshine)
+        self._apply_btn.setVisible(spec.live_config)
+        self._web_btn.setVisible(spec.web_port_off is not None)
+        if sunshine:
+            self._quality_hint.setText(tr(
+                "Bitrate & codec are chosen by the moonlight client; these "
+                "control encoder quality on the server side."))
+        else:
+            self._fec.blockSignals(True)
+            self._fec.setValue(sc.moonshine_fec_percent)
+            self._fec.blockSignals(False)
+            self._quality_hint.setText(tr(
+                "Bitrate & codec are chosen by the moonlight client. "
+                "{backend} has no config API, so this applies at the next "
+                "session start.", backend=spec.label))
 
     def _load_preview(self, sc: config.SessionConfig) -> None:
         if self._preview_interval.hasFocus():  # don't clobber an in-progress edit
@@ -464,38 +577,55 @@ class SessionPage(QWidget):
             self._detail.setText("")
 
         self._start_btn.setEnabled(not busy and not snap.running)
-        self._mode.setEnabled(not busy and not snap.running)
         self._stop_btn.setEnabled(not busy and snap.running)
         self._pair_btn.setEnabled(not busy and snap.running)
 
         self._game.set(snap.game.name if snap.game else
                        (tr("Big Picture / menu") if snap.running else None))
         self._update_resolution(snap.running)
-        self._backend.set(snap.detail if snap.running else None)
+        # The row means the streaming backend, not the container state: one
+        # word with two meanings in the same window is worse than no row.
+        # Running: what the container actually runs, box locked, since
+        # switching cannot take effect. Stopped: the profile's choice,
+        # editable.
+        sc = self._profile()
+        self._set_backend_combo(snap.backend if snap.running
+                                else (sc.backend if sc else backends.DEFAULT))
+        self._backend.setEnabled(not snap.running)
+        self._backend.setToolTip(
+            tr("Stop the session to switch the backend.") if snap.running
+            else tr("Applies at the next session start. Each backend keeps its "
+                    "own pairings, so a client paired to one must be paired "
+                    "again for the other."))
         self._update_perf(snap)
         self._update_load(snap)
         self._update_thumbnail(snap.running)
 
     def _update_resolution(self, running: bool) -> None:
-        """With dynamic resolution the render size is only known once the
-        first client connects (the entrypoint drops it into the mounted HOME)
-        and stays locked until the session restarts."""
+        """With dynamic resolution the render size is only known once a client
+        connects (the container drops it into the mounted HOME). sunshine locks
+        the first client's mode until the session restarts; moonshine rebuilds
+        compositor and gamescope per session, so it follows every reconnect."""
         sc = self._profile()
         if not running or sc is None:
             self._resolution.set(None)
             return
-        # Desktop mode has no gamescope lock; the output follows each client.
-        if not sc.dynamic_resolution or self._mode.currentData() == "desktop":
+        if not sc.dynamic_resolution:
             self._resolution.set(None if sc.is_ask() else sc.resolution)
             return
         try:
             w, h, r = (sc.home_dir() / ".cache/podstage/client-mode") \
                 .read_text().split()
+        except (OSError, ValueError):
+            self._resolution.set(tr("waiting for the first client …"))
+            return
+        if backends.get_or_default(sc.backend).res_locked:
             self._resolution.set(tr(
                 "{w}x{h}@{r} · locked until the session restarts",
                 w=w, h=h, r=r))
-        except (OSError, ValueError):
-            self._resolution.set(tr("waiting for the first client …"))
+        else:
+            self._resolution.set(tr(
+                "{w}x{h}@{r} · follows the connected client", w=w, h=h, r=r))
 
     def _update_thumbnail(self, running: bool) -> None:
         """Show the preview frame the in-container loop drops into the mounted
@@ -516,8 +646,10 @@ class SessionPage(QWidget):
             self._show_thumb_placeholder(tr("waiting for preview …"))
             return
         if self._ctx.config.preview_keep_last:
-            # wlr-screencopy delivers no frame while the picture is static —
-            # keep the last one, but never a frame from a previous session.
+            # Neither capture path delivers continuously: wlr-screencopy hands
+            # out no frame while the picture is static, and under moonshine
+            # gamescope exists only while a client is connected. Keep the last
+            # frame, but never one from a previous session.
             stale = mtime < (runtime.load_state() or {}).get("started", 0)
         else:
             # Strict mode (Setup toggle): hide a frame once it is older than a
@@ -550,10 +682,9 @@ class SessionPage(QWidget):
             theme.repolish(self._state)
 
     def _update_perf(self, snap: monitor.Snapshot) -> None:
-        """Current FPS from the in-container probe. The row is hidden unless
-        the experimental feature is on, so nobody stares at a permanent dash."""
-        self._fps.setVisible(
-            self._ctx.config.experimental.get("perf_metrics", False))
+        """Current FPS from the in-container probe. The row is hidden while
+        the setting is off, so nobody stares at a permanent dash."""
+        self._fps.setVisible(self._ctx.config.perf_metrics)
         perf = snap.perf if snap.running else None
         if perf is None:
             self._fps.set(None)
@@ -566,15 +697,17 @@ class SessionPage(QWidget):
             self._fps.set(tr("no new frames"))
 
     def _update_load(self, snap: monitor.Snapshot) -> None:
-        c = snap.container
-        if c and c.cpu_pct is not None:
-            # cpu_pct is "100% per core" — scale the bar to the whole machine.
-            self._cpu.set(c.cpu_pct / _NCPU, f"{c.cpu_pct:.0f} %")
+        # Whole machine, both backends: the session's own cgroup was located
+        # through labwc, which moonshine does not run (monitor.host_stats).
+        h = snap.host
+        if h and h.cpu_pct is not None:
+            self._cpu.set(h.cpu_pct, f"{h.cpu_pct:.0f} %")
         else:
             self._cpu.set(None)
-        if c and c.mem_used_mb and _RAM_TOTAL_MB:
-            self._ram.set(c.mem_used_mb * 100 / _RAM_TOTAL_MB,
-                          f"{c.mem_used_mb} / {_RAM_TOTAL_MB} MB")
+        total_mb = (h.mem_total_mb if h and h.mem_total_mb else _RAM_TOTAL_MB)
+        if h and h.mem_used_mb and total_mb:
+            self._ram.set(h.mem_used_mb * 100 / total_mb,
+                          f"{h.mem_used_mb} / {total_mb} MB")
         else:
             self._ram.set(None)
 
@@ -621,13 +754,11 @@ class SessionPage(QWidget):
             if resolution is None:
                 return
 
-        mode = self._mode.currentData()
-
         def _launch() -> runtime.RuntimeStatus:
             if close_sandbox_steam and not session.close_sandbox_steam():
                 raise RuntimeError(tr(
                     "Could not close the sandbox Steam; close it manually."))
-            return session.start(resolution=resolution, mode=mode)
+            return session.start(resolution=resolution)
 
         self._last_error = ""
         self._pending = "start"
@@ -671,21 +802,29 @@ class SessionPage(QWidget):
         sc = self._profile()
         if sc is None:
             return
-        dlg = PairDialog(self, sc.name)
+        spec = backends.get_or_default(sc.backend)
+        dlg = PairDialog(self, sc.name, spec.advertised_name(sc.name))
+        # moonshine records no client names, so asking for one would suggest
+        # a label that is never stored anywhere.
+        dlg.name.setEnabled(spec.name == backends.SUNSHINE.name)
         if not dlg.exec():
             return
         pin = dlg.pin.text().strip()
         name = dlg.name.text().strip() or sc.name
-        web_port = sc.sunshine_port_base + 1
+        base = sc.sunshine_port_base
         home = sc.home_dir()
         self._pair_btn.setEnabled(False)
+        failed = tr("The PIN was submitted but no pairing completed. Restart "
+                    "the pairing in moonlight and enter the new PIN.")
 
         def _pair() -> str:
-            if not sunshine_api.pair_verified(pin, name, home, web_port):
-                raise RuntimeError(tr("The PIN was submitted but no pairing "
-                                      "completed. Restart the pairing in "
-                                      "Moonlight and enter the new PIN."))
-            return tr("Client '{name}' paired. Moonlight can stream now.", name=name)
+            if spec.name == backends.MOONSHINE.name:
+                if not moonshine_api.pair_verified(pin, home, port=base):
+                    raise RuntimeError(failed)
+                return tr("Paired. moonlight can stream now.")
+            if not sunshine_api.pair_verified(pin, name, home, base + 1):
+                raise RuntimeError(failed)
+            return tr("Client '{name}' paired. moonlight can stream now.", name=name)
 
         start_action(self._pool, _pair, "Pairing", self._on_pair_done)
 
@@ -697,6 +836,12 @@ class SessionPage(QWidget):
     def _on_apply_quality(self) -> None:
         sc = self._profile()
         if sc is None:
+            return
+        if not backends.get_or_default(sc.backend).live_config:
+            self._quality_hint.setText(tr(
+                "The {backend} backend has no live quality settings; these "
+                "apply to sunshine profiles only.",
+                backend=backends.get_or_default(sc.backend).label))
             return
         changes = self._quality_changes()
         sc.sunshine_extra.update(changes)  # already persisted on change; idempotent

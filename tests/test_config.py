@@ -239,9 +239,83 @@ def test_set_sessions_home_root_moves(tmp_path: Path, monkeypatch):
 def test_load_or_seed_creates_default(tmp_path: Path):
     path = tmp_path / "config.toml"
     cfg = AppConfig.load_or_seed(path)
-    assert [s.name for s in cfg.sessions] == ["sandbox_steam"]
+    # No underscore: the seed name reaches the announced mDNS service name,
+    # and one there makes moonlight-qt drop the session silently.
+    assert [s.name for s in cfg.sessions] == ["sandbox-steam"]
     assert path.exists()
     # second load returns the saved config, not a fresh seed
     cfg.sessions[0].resolution = "1440p60"
     cfg.save(path)
     assert [s.resolution for s in AppConfig.load_or_seed(path).sessions] == ["1440p60"]
+
+
+def test_perf_metrics_migrates_from_experimental(tmp_path: Path):
+    path = tmp_path / "c.toml"
+    path.write_text('[experimental]\nperf_metrics = true\n')
+    cfg = AppConfig.load(path)
+    assert cfg.perf_metrics is True
+    # The graduated key is no longer a known experimental feature.
+    assert "perf_metrics" not in cfg.experimental
+
+    path.write_text('perf_metrics = false\n')
+    assert AppConfig.load(path).perf_metrics is False
+
+    # Default (no key anywhere): on.
+    path.write_text('language = "en"\n')
+    assert AppConfig.load(path).perf_metrics is True
+
+
+def test_perf_metrics_save_roundtrip(tmp_path: Path):
+    path = tmp_path / "c.toml"
+    AppConfig(perf_metrics=False).save(path)
+    assert AppConfig.load(path).perf_metrics is False
+    AppConfig().save(path)
+    assert "perf_metrics" not in path.read_text()
+
+
+def test_extra_mounts_save_roundtrip(tmp_path: Path):
+    path = tmp_path / "c.toml"
+    cfg = AppConfig(sessions=[SessionConfig(
+        name="deck", extra_mounts=["/srv/gog-games", "/srv/heroic:rw"])])
+    cfg.save(path)
+    loaded = AppConfig.load(path)
+    assert loaded.sessions[0].extra_mounts == ["/srv/gog-games", "/srv/heroic:rw"]
+
+
+# -- streaming backend -------------------------------------------------------
+
+def test_backend_defaults_to_sunshine():
+    assert SessionConfig(name="a").backend == "sunshine"
+
+
+def test_backend_round_trips_through_config_toml(tmp_path):
+    path = tmp_path / "config.toml"
+    AppConfig(sessions=[SessionConfig(name="tv", backend="moonshine")]).save(path)
+    assert AppConfig.load(path).get("tv").backend == "moonshine"
+
+
+def test_unknown_backend_falls_back_instead_of_crashing(tmp_path):
+    """Same policy as unknown config keys: a profile from a newer podstage
+    must not take the whole app down at startup."""
+    assert SessionConfig(name="a", backend="warpdrive").backend == "sunshine"
+    path = tmp_path / "config.toml"
+    path.write_text('[[sessions]]\nname = "a"\nbackend = "warpdrive"\n')
+    assert AppConfig.load(path).get("a").backend == "sunshine"
+
+
+def test_moonshine_settings_round_trip(tmp_path):
+    path = tmp_path / "config.toml"
+    AppConfig(sessions=[SessionConfig(
+        name="tv", backend="moonshine", moonshine_fec_percent=30,
+        moonshine_keyboard_layout="de",
+        moonshine_keyboard_variant="nodeadkeys")]).save(path)
+    tv = AppConfig.load(path).get("tv")
+    assert tv.moonshine_fec_percent == 30
+    assert (tv.moonshine_keyboard_layout, tv.moonshine_keyboard_variant) == \
+        ("de", "nodeadkeys")
+
+
+def test_moonshine_settings_default_to_upstreams_own():
+    sc = SessionConfig(name="tv")
+    assert sc.moonshine_fec_percent == -1        # -1: do not write the key
+    assert sc.moonshine_keyboard_layout == ""    # empty: moonshine's "us"

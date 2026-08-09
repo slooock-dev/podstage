@@ -2,10 +2,11 @@
 
 Create/edit/delete profiles (config.toml), bootstrap a sandbox by running the
 isolated Steam visibly for first-time login, and show per-sandbox state:
-logged in, paired Moonlight clients, disk usage.
+logged in, paired moonlight clients, disk usage.
 """
 
-import re
+
+from pathlib import Path
 
 from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt
 from PyQt6.QtWidgets import (
@@ -13,6 +14,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -21,6 +23,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QSpinBox,
@@ -31,13 +34,33 @@ from PyQt6.QtWidgets import (
 )
 
 from ... import config
-from ...core import provisioner, runtime, sandbox
+from ...core import backends, provisioner, runtime, sandbox
 from ...core.session import Session
 from ..i18n import tr
 from ..widgets import card
 from ..workers import start_action
 
-_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+# Columns of the sandbox table, declared in one place: key, label, whether the
+# column takes the leftover width, and whether its value is right-aligned.
+# Only Name and Pairings vary in length, everything else is a short fixed
+# token, so those two take the leftover width and the rest is sized to fit.
+# Labels are callables so tr() still sees literals (the i18n catalog test
+# scans for them) while resolving after the language is set.
+#
+# EVERY access to a cell goes through COL[key], never a literal index, so a
+# column can be inserted here without touching any other code.
+_STRETCH, _FIT = True, False
+_COLUMNS: tuple[tuple, ...] = (
+    ("name", lambda: tr("Name"), _STRETCH, False),
+    ("resolution", lambda: tr("Resolution"), _FIT, False),
+    ("backend", lambda: tr("Backend"), _FIT, False),
+    ("port", lambda: tr("Port"), _FIT, True),
+    ("login", lambda: tr("Login"), _FIT, False),
+    ("pairings", lambda: tr("Pairings"), _STRETCH, False),
+    ("size", lambda: tr("Size"), _FIT, True),
+    ("overlay", lambda: tr("Overlay"), _FIT, True),
+)
+COL: dict[str, int] = {key: i for i, (key, *_rest) in enumerate(_COLUMNS)}
 
 
 def _fmt_size(size: int | None) -> str:
@@ -90,9 +113,10 @@ class ProfileDialog(QDialog):
 
         self._dynamic = QCheckBox(tr("Follow the client's resolution"))
         self._dynamic.setToolTip(tr(
-            "Render at the first connecting client's resolution, locked until "
-            "the session restarts. The profile resolution above is only the "
-            "fallback. Off: always render at the profile resolution."))
+            "Render at the connecting client's resolution; the profile "
+            "resolution above is only the fallback. sunshine locks the first "
+            "client's mode until the session restarts, moonshine follows every "
+            "reconnect. Off: always render at the profile resolution."))
         self._dynamic.setChecked(existing.dynamic_resolution if existing else True)
         form.addRow("", self._dynamic)
         self._sync_custom(self._resolution.currentText())
@@ -100,15 +124,137 @@ class ProfileDialog(QDialog):
         self._port = QSpinBox()
         self._port.setRange(1024, 64000)
         self._port.setValue(existing.sunshine_port_base if existing else 47989)
-        form.addRow(tr("Sunshine port"), self._port)
+        form.addRow(tr("moonlight port"), self._port)
+
+        # Streaming backend. The labels carry the backend key in UserData so
+        # a translated label never has to be parsed back (same approach as
+        # the resolution combo above).
+        self._backend = QComboBox()
+        for spec in backends.BACKENDS.values():
+            self._backend.addItem(spec.label, spec.name)
+        current_backend = existing.backend if existing else backends.DEFAULT
+        idx = self._backend.findData(current_backend)
+        self._backend.setCurrentIndex(max(idx, 0))
+        self._backend.setToolTip(tr(
+            "sunshine (default) works on every supported GPU. moonshine brings "
+            "its own compositor and encodes with Vulkan Video, which needs an "
+            "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU, and its quality settings "
+            "apply at the next session start instead of live. The Setup page "
+            "checks whether this machine can run it."))
+        self._backend.currentIndexChanged.connect(self._sync_backend_note)
+        form.addRow(tr("Backend"), self._backend)
+        self._backend_note = QLabel()
+        self._backend_note.setProperty("muted", True)
+        self._backend_note.setWordWrap(True)
+        form.addRow("", self._backend_note)
+
+        # moonshine-only: the streamed session's XKB layout. The sunshine
+        # pipeline has no equivalent, so the row appears and disappears with
+        # the backend rather than sitting there inert.
+        self._kb_row = QWidget()
+        kb = QHBoxLayout(self._kb_row)
+        kb.setContentsMargins(0, 0, 0, 0)
+        kb.setSpacing(8)
+        self._kb_layout = QLineEdit(existing.moonshine_keyboard_layout if existing else "")
+        self._kb_layout.setPlaceholderText("de")
+        self._kb_variant = QLineEdit(existing.moonshine_keyboard_variant if existing else "")
+        self._kb_variant.setPlaceholderText(tr("variant, e.g. nodeadkeys"))
+        kb.addWidget(self._kb_layout, 1)
+        kb.addWidget(self._kb_variant, 2)
+        self._kb_row.setToolTip(tr(
+            "XKB layout of the streamed session, empty keeps moonshine's "
+            "default (us). Affects typing in Big Picture and in games."))
+        self._kb_label = QLabel(tr("Keyboard"))
+        form.addRow(self._kb_label, self._kb_row)
+        self._sync_backend_note()
 
         form.addRow(self._build_games(existing))
+
+        self._mounts = QPlainTextEdit()
+        self._mounts.setPlaceholderText("/path/to/games\n/path/to/launcher:rw")
+        self._mounts.setFixedHeight(64)
+        self._mounts.setToolTip(tr(
+            "One host directory per line, mounted into the session at the "
+            "same path (start its games via non-Steam shortcuts in Big "
+            "Picture). Default is a read-only overlay like the Steam "
+            "libraries; append ':rw' for launchers that update themselves "
+            "in place."))
+        if existing and existing.extra_mounts:
+            self._mounts.setPlainText("\n".join(existing.extra_mounts))
+        # The list stays editable text (that is how a path gets removed or an
+        # existing entry switched), with a picker on top so a mount can be
+        # added without typing a path from memory.
+        mount_box = QWidget()
+        mv = QVBoxLayout(mount_box)
+        mv.setContentsMargins(0, 0, 0, 0)
+        mv.setSpacing(6)
+        mv.addWidget(self._mounts)
+        picker = QHBoxLayout()
+        picker.setSpacing(8)
+        browse = QPushButton(tr("Add folder …"))
+        browse.setAutoDefault(False)  # otherwise Enter in a field opens it
+        browse.clicked.connect(self._on_browse_mount)
+        self._mount_writable = QCheckBox(tr("writable"))
+        self._mount_writable.setToolTip(tr(
+            "Add the chosen folder as ':rw'. Only for launchers that update "
+            "themselves in place: a writable mount lets the session change "
+            "host files."))
+        picker.addWidget(browse)
+        picker.addWidget(self._mount_writable)
+        picker.addStretch(1)
+        mv.addLayout(picker)
+        form.addRow(tr("Extra mounts"), mount_box)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                                    | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+
+    def _on_browse_mount(self) -> None:
+        """Append a picked host directory to the extra-mount list.
+
+        Starts in the last entry's parent so adding a second library next to
+        the first is one dialog, not a walk from $HOME. Duplicates are dropped
+        rather than reported: the same path twice is a no-op, not an error.
+        """
+        lines = [ln.strip() for ln in self._mounts.toPlainText().splitlines()
+                 if ln.strip()]
+        # A half-typed line must not break the picker, so parsing is
+        # best-effort here; _on_accept is where an invalid entry is reported.
+        paths = []
+        for line in lines:
+            try:
+                paths.append(config.parse_extra_mount(line)[0])
+            except ValueError:
+                pass
+        start = str(Path.home())
+        if paths and paths[-1].parent.is_dir():
+            start = str(paths[-1].parent)
+        chosen = QFileDialog.getExistingDirectory(
+            self, tr("Choose a folder to mount into the session"), start)
+        if not chosen:
+            return
+        if Path(chosen) in paths:
+            return  # already on the list, adding it twice is a no-op
+        lines.append(f"{chosen}:rw" if self._mount_writable.isChecked() else chosen)
+        self._mounts.setPlainText("\n".join(lines))
+
+    def _sync_backend_note(self) -> None:
+        """Follow the backend choice: spell out the moonshine trade-offs (the
+        tooltip is not enough for a choice that can make a GPU unable to
+        stream) and show only the fields that backend actually has."""
+        moonshine = self._backend.currentData() == backends.MOONSHINE.name
+        self._kb_row.setVisible(moonshine)
+        self._kb_label.setVisible(moonshine)
+        if moonshine:
+            self._backend_note.setText(tr(
+                "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
+                "Intel Arc). Save this profile, then build its image and check "
+                "the GPU on the Setup page. Its quality setting applies at the "
+                "next start instead of live."))
+        else:
+            self._backend_note.setText("")
 
     def _sync_custom(self, choice: str) -> None:
         self._custom.setVisible(choice == self._custom_label)
@@ -209,9 +355,13 @@ class ProfileDialog(QDialog):
 
     def _on_accept(self) -> None:
         name = self._name.text().strip()
-        if not _NAME_RE.match(name):
+        try:
+            # Single source of truth — the same guard AppConfig.upsert enforces.
+            config.validate_client_name(name)
+        except ValueError:
             QMessageBox.warning(self, tr("Invalid name"),
-                                tr("Only letters, digits, '-' and '_' are allowed."))
+                                tr("Only letters, digits, '-' and '_' are allowed "
+                                   "(must start with a letter or digit)."))
             return
         if self._existing is None and self._cfg.get(name) is not None:
             QMessageBox.warning(self, tr("Name taken"),
@@ -242,13 +392,26 @@ class ProfileDialog(QDialog):
                                 tr("Port {port} is already used by profile '{name}'.",
                                    port=port, name=clash.name))
             return
+        mounts = [ln.strip() for ln in self._mounts.toPlainText().splitlines()
+                  if ln.strip()]
+        try:
+            for m in mounts:
+                config.parse_extra_mount(m)
+        except ValueError as e:
+            QMessageBox.warning(self, tr("Invalid extra mount"), str(e))
+            return
         base = self._existing or config.SessionConfig(name=name)
         self.result_profile = config.SessionConfig(
             name=name, resolution=resolution,
             dynamic_resolution=self._dynamic.isChecked(), app_ids=app_ids,
+            backend=self._backend.currentData() or backends.DEFAULT,
             sunshine_port_base=port, home=base.home,
             sunshine_extra=dict(base.sunshine_extra),
             preview_interval_s=base.preview_interval_s,
+            extra_mounts=mounts,
+            moonshine_fec_percent=base.moonshine_fec_percent,
+            moonshine_keyboard_layout=self._kb_layout.text().strip(),
+            moonshine_keyboard_variant=self._kb_variant.text().strip(),
         )
         self.accept()
 
@@ -320,18 +483,22 @@ class SandboxPage(QWidget):
         root.setSpacing(12)
 
         frame, lay = card(tr("Steam sandboxes"))
-        self._table = QTableWidget(0, 7)
+        self._table = QTableWidget(0, len(_COLUMNS))
         self._table.setHorizontalHeaderLabels(
-            [tr("Name"), tr("Resolution"), tr("Port"), tr("Login"),
-             tr("Pairings"), tr("Size"), tr("Overlay")])
+            [label() for _key, label, _s, _a in _COLUMNS])
         self._table.verticalHeader().setVisible(False)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setAlternatingRowColors(True)
-        # All columns share the width evenly and follow window resizes.
-        self._table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch)
+        # Fixed-token columns take exactly what they need; Name and Pairings
+        # split the rest, so a long profile name or client list still fits at
+        # the minimum window width.
+        header = self._table.horizontalHeader()
+        for col, (_key, _label, stretch, _align) in enumerate(_COLUMNS):
+            header.setSectionResizeMode(
+                col, QHeaderView.ResizeMode.Stretch if stretch
+                else QHeaderView.ResizeMode.ResizeToContents)
         self._table.setMinimumHeight(160)
         self._table.itemSelectionChanged.connect(self._update_login_btn)
         lay.addWidget(self._table)
@@ -351,14 +518,21 @@ class SandboxPage(QWidget):
             "(game updates re-apply in the next session). Host libraries and "
             "the sandbox HOME are untouched."))
         self._clear_overlay_btn.clicked.connect(self._on_clear_overlay)
+        self._stream_login_btn = QPushButton(tr("Streamed login"))
+        self._stream_login_btn.setProperty("primary", True)
+        self._stream_login_btn.setToolTip(tr(
+            "Boots this sandbox into Big Picture's Steam sign-in over the "
+            "stream (QR code via the Steam Mobile App, or the on-screen "
+            "keyboard). No window opens on the host."))
+        self._stream_login_btn.clicked.connect(self._on_stream_login)
         self._login_btn = QPushButton(tr("Start Steam login"))
-        self._login_btn.setProperty("primary", True)
         self._login_btn.clicked.connect(self._on_bootstrap)
         buttons.addWidget(new_btn)
         buttons.addWidget(edit_btn)
         buttons.addWidget(self._delete_btn)
         buttons.addWidget(self._clear_overlay_btn)
         buttons.addStretch(1)
+        buttons.addWidget(self._stream_login_btn)
         buttons.addWidget(self._login_btn)
         lay.addLayout(buttons)
 
@@ -369,9 +543,11 @@ class SandboxPage(QWidget):
         root.addWidget(frame)
 
         hint = QLabel(tr(
-            "Setup: 'Start Steam login' opens the isolated Steam visibly on the "
-            "desktop. Log in there (Steam Guard), then close Steam; the game "
-            "library is provisioned automatically."))
+            "Setup: 'Streamed login' signs in over the stream (QR code, no "
+            "window on the host). 'Start Steam login' opens the isolated "
+            "Steam visibly on the desktop instead, useful for settings Big "
+            "Picture does not expose. Either way the game library is "
+            "provisioned automatically afterwards."))
         hint.setProperty("muted", True)
         hint.setWordWrap(True)
         root.addWidget(hint)
@@ -382,7 +558,7 @@ class SandboxPage(QWidget):
         row = self._table.currentRow()
         if row < 0:
             return None
-        return self._ctx.config.get(self._table.item(row, 0).text())
+        return self._ctx.config.get(self._table.item(row, COL["name"]).text())
 
     def refresh(self) -> None:
         selected = self._table.currentRow()
@@ -399,15 +575,29 @@ class SandboxPage(QWidget):
             login = tr("✓ logged in") if info.logged_in else (
                 tr("— empty") if not info.exists else tr("✗ no login"))
             paired = ", ".join(info.paired) if info.paired else "—"
-            values = [sc.name, resolution, str(sc.sunshine_port_base), login,
-                      paired, _fmt_size(self._sizes.get(sc.name)),
-                      _fmt_size(self._overlay_sizes.get(sc.name))]
-            for col, value in enumerate(values):
+            # Keyed, not positional: a column declared without a value raises
+            # KeyError here instead of shifting every later cell one to the
+            # left. An assert would not, it disappears under python -O.
+            values = {
+                "name": sc.name,
+                "resolution": resolution,
+                "backend": backends.get_or_default(sc.backend).label,
+                "port": str(sc.sunshine_port_base),
+                "login": login,
+                "pairings": paired,
+                "size": _fmt_size(self._sizes.get(sc.name)),
+                "overlay": _fmt_size(self._overlay_sizes.get(sc.name)),
+            }
+            for key, _label, _stretch, right in _COLUMNS:
+                value = values[key]
                 item = QTableWidgetItem(value)
-                if col in (2, 5, 6):
+                if right:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight
                                           | Qt.AlignmentFlag.AlignVCenter)
-                self._table.setItem(row, col, item)
+                # A long name or client list still elides at the minimum
+                # window width; the tooltip keeps it readable.
+                item.setToolTip(value)
+                self._table.setItem(row, COL[key], item)
         if 0 <= selected < len(sessions):
             self._table.selectRow(selected)
         self._update_login_btn()
@@ -436,12 +626,22 @@ class SandboxPage(QWidget):
         start_action(self._pool, _measure, "Sizes", self._on_sizes_done)
 
     def _on_sizes_done(self, ok: bool, _msg: str) -> None:
-        if ok:
-            for row in range(self._table.rowCount()):
-                name = self._table.item(row, 0).text()
-                self._table.item(row, 5).setText(_fmt_size(self._sizes.get(name)))
-                self._table.item(row, 6).setText(
-                    _fmt_size(self._overlay_sizes.get(name)))
+        """Fill in the two size cells the background du just measured.
+
+        By key, never by a literal index. This writes into an already rendered
+        table, so a wrong index overwrites a neighbouring column instead of
+        failing, and nothing about the result looks wrong.
+        """
+        if not ok:
+            return
+        for row in range(self._table.rowCount()):
+            name = self._table.item(row, COL["name"]).text()
+            for key, values in (("size", self._sizes),
+                                ("overlay", self._overlay_sizes)):
+                item = self._table.item(row, COL[key])
+                text = _fmt_size(values.get(name))
+                item.setText(text)
+                item.setToolTip(text)
 
     # -- profile CRUD ----------------------------------------------------
     def _on_new(self) -> None:
@@ -537,6 +737,48 @@ class SandboxPage(QWidget):
         self._clear_overlay_btn.setEnabled(True)
         self._status.setText(msg if ok else tr("Error: {msg}", msg=msg))
         self.refresh()
+
+    # -- streamed login (Big Picture sign-in over the stream) ------------
+    def _on_stream_login(self) -> None:
+        sc = self._selected()
+        if sc is None:
+            self._status.setText(tr("No profile selected."))
+            return
+        if self._steam_proc is not None:
+            self._status.setText(tr("A Steam login is already running."))
+            return
+        if runtime.status().running:
+            self._status.setText(tr("Stop the running streaming session first; "
+                                    "Steam can only run once."))
+            return
+        body = tr(
+            "The sandbox\n{home}\nboots into Big Picture's Steam sign-in over "
+            "the stream: connect with moonlight and log in with the QR code "
+            "(Steam Mobile App) or the on-screen keyboard.\n\nContinue?",
+            home=sc.home_dir())
+        answer = QMessageBox.question(self, tr("Streamed login"), body)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        session = Session(sc)
+        self._stream_login_btn.setEnabled(False)
+        self._status.setText(tr("Starting login session …"))
+
+        def _launch() -> str:
+            session.login()
+            return "started"
+
+        start_action(self._pool, _launch, f"Streamed login {sc.name}",
+                     self._on_stream_login_started)
+
+    def _on_stream_login_started(self, ok: bool, msg: str) -> None:
+        self._stream_login_btn.setEnabled(True)
+        if not ok:
+            self._status.setText(tr("Login session failed: {msg}", msg=msg))
+            return
+        self._status.setText(tr(
+            "Login session running: connect with moonlight and sign in. "
+            "Stop the session on the Session page when you are done; the "
+            "next regular start provisions the game library."))
 
     # -- bootstrap (first-time Steam login) ------------------------------
     def _on_bootstrap(self) -> None:

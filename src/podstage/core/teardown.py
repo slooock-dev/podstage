@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .. import config
 from . import desktop, runtime, sandbox, udev
-from .doctor import _STREAM_TCP, _STREAM_UDP, CDI_SPEC
+from .doctor import CDI_SPEC, stream_ports
 
 
 @dataclass
@@ -37,14 +37,15 @@ def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str]:
 
 
 def _open_stream_ports() -> list[str]:
-    """podstage's Sunshine ports currently open in firewalld (exact tokens
+    """podstage's moonlight stream ports currently open in firewalld (exact tokens
     only — a user's broad range is their config, not ours)."""
     rc, state = _run(["firewall-cmd", "--state"])
     if rc != 0 or state.strip() != "running":
         return []
     _, out = _run(["firewall-cmd", "--list-ports"])
     toks = set(out.split())
-    ports = [f"{p}/tcp" for p in _STREAM_TCP] + [f"{p}/udp" for p in _STREAM_UDP]
+    tcp, udp = stream_ports()
+    ports = [f"{p}/tcp" for p in tcp] + [f"{p}/udp" for p in udp]
     return [p for p in ports if p in toks]
 
 

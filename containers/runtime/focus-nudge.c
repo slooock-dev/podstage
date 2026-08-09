@@ -149,6 +149,21 @@ static void run_nudges(Display *dpy, Window root, Atom app_atom,
     }
 }
 
+// Only displays whose socket exists in this container's /tmp/.X11-unix are
+// worth an XOpenDisplay. The container runs with --network host, which shares
+// the abstract socket namespace with the host, so Xlib would otherwise reach
+// the HOST's X server on :0 and get rejected once a second ("Authorization
+// required, but no authorization protocol specified" on stderr). The
+// filesystem sockets are not shared, so their presence is what distinguishes
+// our own Xwaylands. Under the moonshine backend that wait lasts until the
+// first client connects, which can be hours.
+static int display_socket_exists(int n)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/tmp/.X11-unix/X%d", n);
+    return access(path, F_OK) == 0;
+}
+
 // gamescope's WM runs on the Xwayland display whose root carries its atoms; as
 // a sibling process we have no DISPLAY, so probe the sockets it created.
 static Display *open_gamescope_display(Atom *out_atom, Window *out_root,
@@ -157,6 +172,8 @@ static Display *open_gamescope_display(Atom *out_atom, Window *out_root,
     for (int elapsed = 0;; elapsed++) {
         for (int i = 0; i < 10; i++) {
             char name[8];
+            if (!display_socket_exists(i))
+                continue;
             snprintf(name, sizeof(name), ":%d", i);
             Display *dpy = XOpenDisplay(name);
             if (dpy == NULL)

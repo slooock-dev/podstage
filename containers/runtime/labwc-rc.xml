@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!-- labwc config for the streaming session (baked at /etc/xdg/labwc/rc.xml;
+     a sandbox HOME with its own ~/.config/labwc would override it).
+     The stream shows exactly one main window, gamescope, and it stays
+     undecorated. Steam's own X11 windows (the login/setup path without
+     gamescope) already disable decorations via Motif hints; no rule needed.
+     Note for future rules: labwc matches "identifier" against the XWayland
+     WM_CLASS *instance* (Steam's main window is "steamwebhelper", not
+     "steam"), verified live via SIGHUP reconfigure. -->
+<labwc_config>
+  <core>
+    <gap>0</gap>
+  </core>
+  <focus>
+    <followMouse>no</followMouse>
+  </focus>
+  <windowRules>
+    <windowRule identifier="gamescope" serverDecoration="no"/>
+  </windowRules>
+</labwc_config>

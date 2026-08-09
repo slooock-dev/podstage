@@ -1,8 +1,11 @@
 """podstage command-line interface.
 
-Milestone 1 ships ``doctor`` (environment validation). ``session`` and
-``provision`` are declared but stubbed until their milestones land — they print
-a clear "not yet implemented" notice so the surface is discoverable.
+Everything the GUI does is reachable here too: ``doctor`` validates the
+machine, ``setup``/``uninstall`` cover the one-time host steps, ``runtime``
+builds and drives the container directly (by HOME dir), ``session`` manages
+the client profiles (add/setup/start/stop/pair/remove), plus ``provision``,
+``experimental``, ``config`` and ``desktop`` for the smaller knobs. Only the
+first Steam login opens a window; the rest runs headless.
 """
 
 import argparse
@@ -12,7 +15,7 @@ from pathlib import Path
 
 from . import __version__, config
 from .config import AppConfig, SessionConfig
-from .core import doctor, provisioner, runtime, sunshine_api
+from .core import backends, doctor, moonshine_api, provisioner, runtime, sunshine_api
 from .core.session import Session
 
 # ANSI colours; disabled when stdout is not a TTY.
@@ -27,11 +30,13 @@ _STATUS_COLOR = {
     doctor.Status.OK: "32",     # green
     doctor.Status.WARN: "33",   # yellow
     doctor.Status.FAIL: "31",   # red
+    doctor.Status.INFO: "90",   # grey: neither good nor bad
 }
 _STATUS_GLYPH = {
     doctor.Status.OK: "✔",    # ✔
     doctor.Status.WARN: "▲",  # ▲
     doctor.Status.FAIL: "✖",  # ✖
+    doctor.Status.INFO: "○",  # ○
 }
 
 
@@ -128,7 +133,8 @@ def cmd_session_list(_args: argparse.Namespace) -> int:
             res = "{}x{}@{}".format(*sc.dimensions())
         state = Session(sc).status()
         library = "whole library" if not sc.app_ids else ",".join(map(str, sc.app_ids))
-        print(f"  {sc.name:10} {state:8} {res:16}  {library}  port={sc.sunshine_port_base}")
+        print(f"  {sc.name:10} {state:8} {res:16}  {library}  "
+              f"port={sc.sunshine_port_base}  backend={sc.backend}")
     return 0
 
 
@@ -140,6 +146,7 @@ def cmd_session_add(args: argparse.Namespace) -> int:
         config.validate_client_name(args.name)
         if args.resolution != "ask":
             config.parse_dimensions(args.resolution)  # raises on garbage
+        backends.get(args.backend)  # raises on an unknown backend
     except ValueError as e:
         print(e, file=sys.stderr)
         return 1
@@ -161,9 +168,18 @@ def cmd_session_add(args: argparse.Namespace) -> int:
         print(f"invalid --apps value {args.apps!r}; expected comma-separated "
               "Steam AppIDs", file=sys.stderr)
         return 1
+    mounts = args.mount or []
+    try:
+        for m in mounts:
+            config.parse_extra_mount(m)  # raises on relative paths/garbage
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return 1
     cfg.upsert(SessionConfig(name=args.name, resolution=args.resolution,
                              dynamic_resolution=not args.fixed_resolution,
-                             sunshine_port_base=port, app_ids=app_ids))
+                             backend=args.backend,
+                             sunshine_port_base=port, app_ids=app_ids,
+                             extra_mounts=mounts))
     cfg.save()
     if args.resolution == "ask":
         res_note = "chosen at start (dynamic resolution off)"
@@ -171,8 +187,14 @@ def cmd_session_add(args: argparse.Namespace) -> int:
         res_note = args.resolution
     else:
         res_note = f"client-driven, fallback {args.resolution}"
-    print(f"Session '{args.name}' created (resolution={res_note}, port={port}).")
-    print(f"Next: podstage session setup {args.name}   (first Steam login)")
+    print(f"Session '{args.name}' created (resolution={res_note}, port={port}, "
+          f"backend={args.backend}).")
+    spec = backends.get(args.backend)
+    if spec.vulkan_video:
+        print(f"  {spec.label} encodes with Vulkan Video (NVIDIA RTX, AMD "
+              "RDNA2+ or Intel Arc); check with: podstage doctor")
+        print(f"  Build its image once: podstage runtime build --backend {spec.name}")
+    print(f"Next: podstage session login {args.name}   (streamed first Steam login)")
     return 0
 
 
@@ -251,34 +273,80 @@ def cmd_session_start(args: argparse.Namespace) -> int:
         print(f"start failed: {e}", file=sys.stderr)
         return 1
     if not args.attach:
-        port = s.cfg.sunshine_port_base
         print(f"Session '{args.name}' started (container podstage-runtime).")
-        print(f"  Pair once at https://localhost:{port + 1}  (Sunshine web UI)")
-        print(f"  or: podstage session pair {args.name} <PIN>  (PIN shown by Moonlight)")
+        for line in _pair_hints(s.cfg):
+            print(line)
         print("  Logs: journalctl -f CONTAINER_NAME=podstage-runtime")
     return 0
 
 
+def _pair_hints(sc: SessionConfig) -> list[str]:
+    """How to pair with this profile's backend. Only sunshine has a web UI."""
+    spec = backends.get_or_default(sc.backend)
+    web = spec.web_port(sc.sunshine_port_base)
+    # The name carries the backend, so a profile's two backends are two hosts
+    # in the client with two pairings; say which one to pick.
+    lines = [f"  moonlight lists it as: {spec.advertised_name(sc.name)}"]
+    if web is not None:
+        lines.append(f"  Pair once at https://localhost:{web}  (sunshine web UI)")
+        lines.append(f"  or: podstage session pair {sc.name} <PIN>  (PIN shown by moonlight)")
+    else:
+        lines.append(f"  Pair once: podstage session pair {sc.name} <PIN>  "
+                     "(PIN shown by moonlight)")
+    return lines
+
+
+def cmd_session_login(args: argparse.Namespace) -> int:
+    """Streamed Steam login: boot the sandbox into Big Picture's sign-in
+    over the stream (QR code or on-screen keyboard), no window on the host.
+    Works for a completely fresh sandbox (Steam bootstraps in-container)."""
+    s = _resolve_session(args.name)
+    if s is None:
+        return 1
+    try:
+        s.login(resolution=args.resolution)
+    except (RuntimeError, ValueError) as e:
+        print(f"login start failed: {e}", file=sys.stderr)
+        return 1
+    print(f"Login session for '{args.name}' started (container podstage-runtime).")
+    print("  Connect with moonlight; Big Picture shows the Steam sign-in")
+    print("  (QR code via the Steam Mobile App, or the on-screen keyboard).")
+    for line in _pair_hints(s.cfg):
+        print(line)
+    print(f"  Afterwards: podstage session stop {args.name}  (the next regular "
+          "start provisions the library)")
+    return 0
+
+
 def cmd_session_pair(args: argparse.Namespace) -> int:
-    """Complete a Moonlight pairing (verified against the sandbox pairing
-    state; see sunshine_api.pair_verified)."""
+    """Complete a moonlight pairing, verified against the sandbox pairing
+    state on both backends (see the pair_verified helpers). moonshine records
+    no client names, so --device is sunshine-only there."""
     s = _resolve_session(args.name)
     if s is None:
         return 1
     device = args.device or args.name
+    base = s.cfg.sunshine_port_base
+    moonshine = s.cfg.backend == backends.MOONSHINE.name
     try:
-        ok = sunshine_api.pair_verified(args.pin, device, s.home,
-                                        web_port=s.cfg.sunshine_port_base + 1)
-    except sunshine_api.SunshineApiError as e:
+        if moonshine:
+            ok = moonshine_api.pair_verified(args.pin, s.home, port=base)
+        else:
+            ok = sunshine_api.pair_verified(args.pin, device, s.home,
+                                            web_port=base + 1)
+    except (sunshine_api.SunshineApiError, moonshine_api.MoonshineApiError) as e:
         print(f"pair failed: {e} (is the session running?)", file=sys.stderr)
         return 1
     if not ok:
         print("PIN submitted, but no new pairing appeared; wrong/expired PIN, "
-              "or a stale pairing attempt swallowed it (Sunshine answers the "
-              "oldest one). Restart pairing in Moonlight and retry; if it "
+              "or a stale pairing attempt swallowed it (the server answers the "
+              "oldest one). Restart pairing in moonlight and retry; if it "
               "keeps failing, restart the session.", file=sys.stderr)
         return 1
-    print(f"Paired '{device}' with session '{args.name}'.")
+    if moonshine:
+        print(f"Paired with session '{args.name}'.")
+    else:
+        print(f"Paired '{device}' with session '{args.name}'.")
     return 0
 
 
@@ -323,15 +391,16 @@ def cmd_experimental(args: argparse.Namespace) -> int:
 
 
 def cmd_config(args: argparse.Namespace) -> int:
-    """Get or set app settings headlessly (currently: mouse-keyboard). Same
-    store as the GUI's Setup page; applies at the next session start."""
+    """Get or set app settings headlessly. Same store as the GUI's Setup
+    page; applies at the next session start."""
+    attr = args.key.replace("-", "_")  # mouse-keyboard | perf-metrics
     cfg = _load_or_seed_config()
     if args.value is None:
-        print("on" if cfg.mouse_keyboard else "off")
+        print("on" if getattr(cfg, attr) else "off")
         return 0
-    cfg.mouse_keyboard = args.value == "on"
+    setattr(cfg, attr, args.value == "on")
     cfg.save()
-    print(f"mouse-keyboard {args.value} (applies at the next session start)")
+    print(f"{args.key} {args.value} (applies at the next session start)")
     return 0
 
 
@@ -373,8 +442,9 @@ def cmd_runtime_start(args: argparse.Namespace) -> int:
         mode=args.mode,
         app=args.app or "",
         attach=args.attach,
-        image=os.environ.get("PS_IMAGE", runtime.DEFAULT_IMAGE),
-        sunshine_port=int(os.environ.get("PS_SUNSHINE_PORT", runtime.DEFAULT_SUNSHINE_PORT)),
+        backend=args.backend,
+        image=os.environ.get("PS_IMAGE", ""),
+        stream_port=int(os.environ.get("PS_SUNSHINE_PORT", runtime.DEFAULT_STREAM_PORT)),
         provision=not args.no_provision,
         client=args.client or "",
     )
@@ -392,11 +462,12 @@ def cmd_runtime_start(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_runtime_build(_args: argparse.Namespace) -> int:
-    """Build the runtime image with the source-hash label doctor checks."""
+def cmd_runtime_build(args: argparse.Namespace) -> int:
+    """Build a backend's image with the source-hash label doctor checks."""
     try:
-        print(runtime.build_image(quiet=False))
-    except RuntimeError as e:
+        backends.get(args.backend)  # raises on an unknown backend
+        print(runtime.build_image(backend=args.backend, quiet=False))
+    except (RuntimeError, ValueError) as e:
         print(f"build failed: {e}", file=sys.stderr)
         return 1
     return 0
@@ -514,10 +585,14 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("--no-provision", action="store_true",
                     help="skip game/library provisioning (HOME not bootstrapped yet)")
     rs.add_argument("--client", help="profile name to record as the session owner")
+    rs.add_argument("--backend", default=backends.DEFAULT, choices=backends.names(),
+                    help=f"streaming backend (default: {backends.DEFAULT})")
     rs.set_defaults(func=cmd_runtime_start)
-    rt_sub.add_parser(
-        "build", help="(re)build the runtime image from containers/runtime/"
-    ).set_defaults(func=cmd_runtime_build)
+    rb = rt_sub.add_parser(
+        "build", help="(re)build a backend's image from its containers/ dir")
+    rb.add_argument("--backend", default=backends.DEFAULT, choices=backends.names(),
+                    help=f"which image to build (default: {backends.DEFAULT})")
+    rb.set_defaults(func=cmd_runtime_build)
     rt_sub.add_parser("stop", help="stop the runtime container").set_defaults(func=cmd_runtime_stop)
     rt_sub.add_parser("status", help="show runtime container status").set_defaults(func=cmd_runtime_status)
 
@@ -531,7 +606,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     cf = sub.add_parser("config",
                         help="get/set app settings (Setup-page equivalent)")
-    cf.add_argument("key", choices=["mouse-keyboard"])
+    cf.add_argument("key", choices=["mouse-keyboard", "perf-metrics"])
     cf.add_argument("value", nargs="?", choices=["on", "off"],
                     help="omit to print the current state")
     cf.set_defaults(func=cmd_config)
@@ -556,6 +631,7 @@ def build_parser() -> argparse.ArgumentParser:
         "add": cmd_session_add,
         "remove": cmd_session_remove,
         "setup": cmd_session_setup,
+        "login": cmd_session_login,
         "start": cmd_session_start,
         "stop": cmd_session_stop,
         "status": cmd_session_status,
@@ -575,20 +651,32 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--mode", default="pipeline",
                             choices=["pipeline", "desktop", "steam", "probe", "shell"],
                             help="container mode (default: pipeline)")
+        if action == "login":
+            sp.add_argument("--resolution", metavar="WxH@R",
+                            help="resolution (required for a 'pick at startup' profile)")
         if action == "pair":
-            sp.add_argument("pin", help="4-digit PIN shown by Moonlight")
+            sp.add_argument("pin", help="4-digit PIN shown by moonlight")
             sp.add_argument("--device",
-                            help="client name recorded by Sunshine (default: profile name)")
+                            help="client name recorded by sunshine (default: profile name)")
         if action == "add":
             sp.add_argument("--resolution", default="1080p60", metavar="PRESET|WxH@R|ask",
                             help="pre-connect canvas + fallback size (default: 1080p60)")
             sp.add_argument("--port", type=int,
-                            help="Sunshine base port (default: first free block)")
+                            help="moonlight base port (default: first free block)")
+            sp.add_argument("--backend", default=backends.DEFAULT,
+                            choices=backends.names(),
+                            help="streaming backend (default: "
+                                 f"{backends.DEFAULT}; moonshine needs a GPU "
+                                 "with Vulkan video encode)")
             sp.add_argument("--apps", metavar="ID[,ID…]",
                             help="share only these Steam AppIDs (default: whole library)")
             sp.add_argument("--fixed-resolution", action="store_true",
                             help="always render at the profile resolution instead "
                                  "of the first client's")
+            sp.add_argument("--mount", action="append", metavar="PATH[:rw]",
+                            help="mount an extra host dir into the session "
+                                 "(non-Steam games/launchers; default read-only "
+                                 "overlay, ':rw' for a writable bind); repeatable")
         if action == "remove":
             sp.add_argument("--data", action="store_true",
                             help="also delete the sandbox HOME (Steam login, saves) and overlays")

@@ -29,36 +29,67 @@ from PyQt6.QtWidgets import (
 )
 
 from ... import __version__, config
-from ...core import desktop, doctor, elevate, runtime, teardown, udev, update
+from ...core import (
+    backends,
+    desktop,
+    doctor,
+    elevate,
+    runtime,
+    teardown,
+    udev,
+    update,
+)
 from ..i18n import tr
 from ..widgets import ElideLabel, card
 from ..workers import start_action
 
 _GLYPH = {doctor.Status.OK: ("●", "ok"),
           doctor.Status.WARN: ("▲", "warn"),
-          doctor.Status.FAIL: ("✖", "fail")}
+          doctor.Status.FAIL: ("✖", "fail"),
+          doctor.Status.INFO: ("○", "info")}
 
 # Labels/tooltips for config.EXPERIMENTAL_FEATURES — one entry per key, the
 # card build fails loudly on a missing one (gui-smoke catches it).
 _EXPERIMENTAL_LABELS = {
     "hdr": lambda: tr("HDR stream"),
-    "perf_metrics": lambda: tr("Performance metrics (FPS)"),
+    "gamepad_ds5": lambda: tr("DualSense pad (gyro)"),
+}
+# Optional visible line under a checkbox, for what the tooltip should not be
+# the only place for. Unlike the two dicts above, a missing key is fine: no
+# entry means the feature needs no qualifier beyond its label.
+_EXPERIMENTAL_HINTS = {
+    "gamepad_ds5": lambda: tr("sunshine only. For PlayStation controllers."),
 }
 _EXPERIMENTAL_DETAILS = {
     "hdr": lambda: tr(
-        "gamescope advertises an HDR output and games see DXVK_HDR. "
-        "Unverified end to end."),
-    "perf_metrics": lambda: tr(
-        "A probe in the container asks gamescope for the presented frametime of "
-        "the running game and shows FPS on the Session page. Works on any GPU "
-        "vendor; needs a gamescope with the perf query (3.16+)."),
+        "gamescope --hdr-enabled + DXVK_HDR, on moonshine also its own "
+        "compositor. Whether the stream carries HDR is unverified."),
+    "gamepad_ds5": lambda: tr(
+        "sunshine emulates a DualSense instead of the Xbox pad: gyro and "
+        "matching glyphs. Needed for such a client, since sunshine picks "
+        "that pad by itself and fails without /dev/uhid. Steam Deck: needs "
+        "Steam Input off for moonlight (no trackpad-mouse then). Mounts "
+        "the host /dev."),
 }
 
 
-def _build_image() -> str:
+def _build_image(backend: str = backends.DEFAULT) -> str:
     # runtime.build_image stamps the source hash label doctor compares against.
-    runtime.build_image()
+    # Deliberately in-process rather than through the generic shell fix runner:
+    # that one shells out to `podstage`, which is not on PATH for the GUI's
+    # interpreter, and caps the run at 10 minutes, which a from-scratch
+    # moonshine build (it compiles the server and its Rust dependency graph)
+    # would blow through.
+    runtime.build_image(backend=backend)
     return tr("Image built.")
+
+
+def _group_label(group: str) -> str:
+    if group == doctor.GROUP_HOST:
+        return tr("Host")
+    if group == doctor.GROUP_STREAMING:
+        return tr("Streaming")
+    return tr("{name} backend", name=backends.get_or_default(group).label)
 
 
 def _install_udev_rules() -> str:
@@ -120,6 +151,11 @@ class SetupPage(QWidget):
         self._results: list[doctor.CheckResult] = []
         self._update_info: update.UpdateInfo | None = None
         self._build()
+        # Re-check when a profile changes, so editing a sandbox on the other
+        # page (a different backend, a different port) is reflected here
+        # instead of showing a stale verdict until the next Re-check.
+        self._config_signature = doctor.config_signature(ctx.config)
+        ctx.config_changed.connect(self._on_config_changed)
         self.run_checks()
 
     # -- layout ----------------------------------------------------------
@@ -217,8 +253,25 @@ class SetupPage(QWidget):
                            "Applies at the next session start."))
         mkhint.setProperty("muted", True)
         mkhint.setWordWrap(True)
+        # Its own line, not a tail on the sentence above: the switch gates the
+        # virtual mouse/keyboard sunshine creates, while moonshine feeds the
+        # client's input straight into its compositor seat and has nothing to
+        # switch off. A setting that silently does nothing on one backend has
+        # to say so where it is read, not only in the docs.
+        mkbackend = QLabel(tr("sunshine only."))
+        mkbackend.setProperty("muted", True)
+        mkbackend.setWordWrap(True)
         slay.addWidget(self._mouse_kb)
         slay.addWidget(mkhint)
+        slay.addWidget(mkbackend)
+        self._perf = QCheckBox(tr("Performance metrics (FPS)"))
+        self._perf.setToolTip(tr(
+            "A probe in the container asks gamescope for the presented frametime of "
+            "the running game and shows FPS on the Session page. Works on any GPU "
+            "vendor; needs a gamescope with the perf query (3.16+)."))
+        self._perf.setChecked(self._ctx.config.perf_metrics)
+        self._perf.toggled.connect(self._on_perf_toggled)
+        slay.addWidget(self._perf)
         root.addWidget(sframe)
 
         eframe, elay = card(tr("Experimental features"))
@@ -235,6 +288,12 @@ class SetupPage(QWidget):
             box.toggled.connect(
                 lambda on, k=key: self._on_experimental_toggled(k, on))
             elay.addWidget(box)
+            if key in _EXPERIMENTAL_HINTS:
+                hint = QLabel(_EXPERIMENTAL_HINTS[key]())
+                hint.setProperty("muted", True)
+                hint.setWordWrap(True)
+                hint.setContentsMargins(22, 0, 0, 6)  # under the box label
+                elay.addWidget(hint)
         root.addWidget(eframe)
 
         lframe, llay = card(tr("Language"))
@@ -304,6 +363,20 @@ class SetupPage(QWidget):
         root.addStretch(1)
 
     # -- checks ----------------------------------------------------------
+    def _on_config_changed(self) -> None:
+        """Re-check only when a config change can actually change a result.
+
+        This page saves on every toggle it owns (language, preview behaviour,
+        mouse & keyboard), and the session page saves on every quality
+        dropdown. Re-running the checks on each of those would fire a
+        container probe per keystroke-ish event for no gain, so compare the
+        few fields the checks read instead."""
+        signature = doctor.config_signature(self._ctx.config)
+        if signature == self._config_signature:
+            return
+        self._config_signature = signature
+        self.run_checks()
+
     def run_checks(self) -> None:
         if self._busy:
             return
@@ -338,15 +411,31 @@ class SetupPage(QWidget):
             self._headline.setText(tr("Ready, {warns} warning(s).", warns=warns))
         else:
             self._headline.setText(tr("All set ✓"))
-        for r in self._results:
-            self._checks_box.addWidget(self._check_row(r))
+        # Grouped, but still one list on one page: the headline above counts
+        # across every group, so a failure can never hide behind a heading the
+        # way it would behind a tab. Every backend gets a group whether a
+        # profile uses it or not; being unused only lowers the severity to
+        # INFO, so the row states its gap without turning the summary red
+        # (doctor.run_all).
+        for group, rows in doctor.by_group(self._results):
+            self._checks_box.addWidget(self._group_heading(_group_label(group)))
+            for r in rows:
+                self._checks_box.addWidget(self._check_row(r))
 
         self._homeroot_label.setText(str(config.SESSIONS_HOME_ROOT))
+
+    def _group_heading(self, text: str) -> QWidget:
+        label = QLabel(text)
+        label.setProperty("groupTitle", True)
+        label.setContentsMargins(0, 6, 0, 0)
+        return label
 
     def _check_row(self, r: doctor.CheckResult) -> QWidget:
         row = QWidget()
         h = QHBoxLayout(row)
-        h.setContentsMargins(0, 0, 0, 0)
+        # Indented under its group heading, so the grouping reads as structure
+        # and not as an unrelated label dropped between rows.
+        h.setContentsMargins(10, 0, 0, 0)
         h.setSpacing(8)
         glyph_text, status = _GLYPH[r.status]
         glyph = QLabel(glyph_text)
@@ -367,9 +456,19 @@ class SetupPage(QWidget):
     def _fix_button(self, r: doctor.CheckResult) -> QPushButton | None:
         if r.status is doctor.Status.OK:
             return None
-        if r.name == "image":
+        if r.name in ("image", "moonshine image"):
+            # Also at INFO (an unused backend's image): building is
+            # preparation, not repair, and that image is the one you build
+            # before switching a profile to it. doctor omits the fix string
+            # there so `podstage setup` stays quiet about it.
+            backend = (backends.MOONSHINE.name if r.name.startswith("moonshine")
+                       else backends.SUNSHINE.name)
             btn = QPushButton(tr("Build image"))
-            btn.clicked.connect(lambda: self._start("Image-Build", _build_image))
+            btn.clicked.connect(
+                lambda: self._start("Image-Build",
+                                    lambda: _build_image(backend)))
+        elif r.status is doctor.Status.INFO:
+            return None  # a path this install does not take, nothing to press
         elif r.name == "udev rules":
             # The generated per-user OWNER rule must be staged first — the
             # generic fix runner can't do that, so this button wraps
@@ -405,6 +504,10 @@ class SetupPage(QWidget):
 
     def _on_mouse_kb_toggled(self, enabled: bool) -> None:
         self._ctx.config.mouse_keyboard = enabled
+        self._ctx.save()
+
+    def _on_perf_toggled(self, enabled: bool) -> None:
+        self._ctx.config.perf_metrics = enabled
         self._ctx.save()
 
     def _on_experimental_toggled(self, key: str, enabled: bool) -> None:

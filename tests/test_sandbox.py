@@ -154,3 +154,35 @@ def test_clear_overlays_reports_missing_podman(tmp_path: Path, monkeypatch):
             sandbox.clear_overlays(home)
     finally:
         work.chmod(0o755)
+
+
+# -- moonshine pairing state -------------------------------------------------
+
+def _moonshine_state(home, body):
+    d = home / ".local/share/moonshine"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "state.toml").write_text(body)
+
+
+def test_moonshine_pairings_come_from_its_own_state_file(tmp_path):
+    _moonshine_state(tmp_path, 'unique_id = "u"\n'
+                               'clients = ["0123456789ABCDEF"]\n'
+                               'paired_certs = ["cert-a"]\n')
+    # moonshine records no client NAMES, so the list reads as ids.
+    assert sandbox.paired_clients(tmp_path, "moonshine") == ["0123456789ABCDEF"]
+    assert sandbox.paired_device_ids(tmp_path, "moonshine") == {"cert-a"}
+    # The sunshine state file is a different one and stays empty here.
+    assert sandbox.paired_clients(tmp_path) == []
+
+
+def test_moonshine_state_missing_or_broken_is_empty(tmp_path):
+    assert sandbox.paired_clients(tmp_path, "moonshine") == []
+    _moonshine_state(tmp_path, "this is not toml {{{")
+    assert sandbox.paired_device_ids(tmp_path, "moonshine") == set()
+
+
+def test_inspect_reads_the_profiles_backend(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SESSIONS_HOME_ROOT", tmp_path)
+    _moonshine_state(tmp_path / "tv", 'clients = ["ABC"]\npaired_certs = ["c"]\n')
+    cfg = config.SessionConfig(name="tv", backend="moonshine")
+    assert sandbox.inspect(cfg).paired == ["ABC"]

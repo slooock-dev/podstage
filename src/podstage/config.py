@@ -1,11 +1,9 @@
 """Configuration model and on-disk paths for podstage.
 
 Config lives under ``$XDG_CONFIG_HOME/podstage`` (default ``~/.config/podstage``).
-Per-session runtime state (isolated Steam HOMEs, generated Sunshine app entries)
-lives under ``$XDG_DATA_HOME/podstage`` (default ``~/.local/share/podstage``).
-
-The model is intentionally small in v0.1 — it grows with the session manager
-(milestone 4). ``doctor`` (milestone 1) does not require any of it to exist.
+Runtime state (overlay storage, web credentials, container state) lives under
+``$XDG_DATA_HOME/podstage``; the sandbox HOMEs under ``SESSIONS_HOME_ROOT``.
+``doctor`` does not require any of it to exist.
 """
 
 import hashlib
@@ -17,6 +15,10 @@ import shutil
 import tomllib
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
+
+# Safe at module level: core.backends is a pure registry and imports nothing
+# from podstage (core.runtime imports THIS module, not the other way round).
+from .core import backends
 
 
 def _xdg(env: str, default: Path) -> Path:
@@ -73,6 +75,29 @@ def overlay_root(home_dir: Path) -> Path:
     return DATA_DIR / "overlays" / slug
 
 
+# moonshine's own default for stream.video.fec_percentage, read from its
+# source at the pinned commit (moonshine-core/src/session/stream/video/mod.rs,
+# `impl Default for VideoStreamConfig`). Only ever *shown*: the profile stores
+# -1 for "leave moonshine's default alone", so an upstream change carries
+# through instead of being frozen here.
+MOONSHINE_FEC_DEFAULT = 20
+
+
+def parse_extra_mount(entry: str) -> tuple[Path, bool]:
+    """``(path, writable)`` for one ``extra_mounts`` entry.
+
+    ``"/abs/path"`` mounts as a read-only overlay, ``"/abs/path:rw"`` as a
+    plain writable bind. Raises ``ValueError`` for a relative path.
+    """
+    writable = entry.endswith(":rw")
+    path_s = entry[:-3] if writable else entry
+    p = Path(path_s).expanduser()
+    if not p.is_absolute():
+        raise ValueError(
+            f"extra mount must be an absolute path (got {entry!r})")
+    return p, writable
+
+
 def overlay_dirs(home_dir: Path, library_path: Path) -> tuple[Path, Path]:
     """(upperdir, workdir) for one shared library's overlay mount. upper and
     work must be siblings on the same filesystem and work must start empty."""
@@ -80,13 +105,13 @@ def overlay_dirs(home_dir: Path, library_path: Path) -> tuple[Path, Path]:
     root = overlay_root(home_dir) / f"{library_path.parent.name}-{slug}"
     return root / "upper", root / "work"
 
-# Sunshine web-UI login. Generated once per install — there is deliberately no
+# sunshine web-UI login. Generated once per install — there is deliberately no
 # fixed default ("podstage/podstage" was a LAN-reachable known credential).
 WEB_CREDENTIALS_FILE = DATA_DIR / "runtime" / "web_credentials.json"
 
 
 def sunshine_web_credentials() -> tuple[str, str]:
-    """(user, password) for the Sunshine web UI, creating them on first use.
+    """(user, password) for the sunshine web UI, creating them on first use.
 
     The GUI, CLI and container start all read the same file, so pairing keeps
     working across restarts. An explicit PS_WEB_USER/PS_WEB_PASS in the
@@ -110,7 +135,12 @@ def sunshine_web_credentials() -> tuple[str, str]:
 # labels live in ui/pages/setup_page.py. Add/remove features HERE.
 EXPERIMENTAL_FEATURES: dict[str, str] = {
     "hdr": "PS_HDR",                         # gamescope HDR output + DXVK_HDR
-    "perf_metrics": "PS_PERF_METRICS",       # in-container FPS probe (gamescope)
+    # SUNSHINE ONLY (session.py drops it for moonshine, which drives its own
+    # gamepads): sunshine emulates a DualSense instead of the default Xbox
+    # pad. Wanted whenever the client streams with a PlayStation controller,
+    # because sunshine's `gamepad = auto` picks a DualSense for such a client
+    # anyway and fails without /dev/uhid. Mounts the host /dev.
+    "gamepad_ds5": "PS_GAMEPAD_DS5",
 }
 
 
@@ -156,10 +186,9 @@ class SessionConfig:
     resolution:
       * a preset key ("deck", "1080p60", …) or "WxH@R", or
       * "ask" → chosen when you start the session.
-      With dynamic_resolution (default) the session renders at the FIRST
-      client's resolution (locked until restart) and the profile resolution
-      is only the pre-connect canvas; without it, the session renders at the
-      profile resolution.
+      With dynamic_resolution (default) the session renders at the connecting
+      client's resolution and the profile resolution is only the pre-connect
+      canvas; without it, the session renders at the profile resolution.
     app_ids:
       * empty (default) → the *whole* installed library is shared into the sandbox
         (games are picked inside Big Picture), or
@@ -170,25 +199,62 @@ class SessionConfig:
 
     name: str
     resolution: str = "deck"
-    # Render at the first client's resolution (PS_DYNAMIC_RES). Off = fixed
-    # profile resolution.
+    # Render at the connecting client's resolution (PS_DYNAMIC_RES). Off =
+    # fixed profile resolution. sunshine locks the first client's mode until
+    # the session restarts; moonshine rebuilds compositor and gamescope per
+    # session, so there it follows every reconnect (backends.res_locked).
     dynamic_resolution: bool = True
     app_ids: list[int] = field(default_factory=list)
+    # Streaming backend: "sunshine" (default) or "moonshine". See
+    # core/backends.py; moonshine needs a GPU with a Vulkan video-encode
+    # queue and has no live config API.
+    backend: str = "sunshine"
+    # moonlight base port; the rest of the port block derives from it. The
+    # key keeps its historical name so existing config.toml files keep their
+    # ports (an unknown key would silently fall back to the default).
     sunshine_port_base: int = 47989
     home: str = ""
     # Extra sunshine.conf lines (key → value), e.g. {"nvenc_preset": "1"}.
     # Injected via PS_SUNSHINE_EXTRA on every start — the durable counterpart
     # to live changes through the web API (which die with the container).
+    # sunshine backend only; moonshine has its own two settings below.
     sunshine_extra: dict[str, str] = field(default_factory=dict)
+    # moonshine backend only. Both keys were verified against the server:
+    # it ignores unknown keys silently but rejects a wrong type, so a type
+    # error proves the key is really read.
+    #
+    # Forward error correction in percent (stream.video.fec_percentage).
+    # -1 keeps moonshine's own default, which is deliberate: the value is not
+    # readable from the outside, and 0 is a legitimate setting of its own
+    # ("no FEC", fine on a wired LAN) rather than a stand-in for "unset".
+    moonshine_fec_percent: int = -1
+    # XKB layout of the streamed session (compositor.keyboard). Empty keeps
+    # moonshine's default, which is "us". The sunshine pipeline has no
+    # equivalent setting.
+    moonshine_keyboard_layout: str = ""
+    moonshine_keyboard_variant: str = ""
     # Seconds between in-container preview-thumbnail captures; 0 disables the
     # preview. Applied at container start via PS_THUMBNAIL(_INTERVAL).
     preview_interval_s: int = 10
+    # Extra host directories mounted into the session (non-Steam games or
+    # launchers, started from Big Picture via non-Steam shortcuts). Entries
+    # are "/abs/path" (read-only overlay like the shared Steam libraries;
+    # the sandbox's writes land in per-sandbox overlay storage) or
+    # "/abs/path:rw" (plain writable bind, for launchers that update
+    # themselves in place). Container path = host path, so shortcut paths
+    # keep working.
+    extra_mounts: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         # "ask" is an explicit resolution choice at start; the dynamic
         # override would make that choice meaningless.
         if self.resolution == "ask":
             self.dynamic_resolution = False
+        # Same policy as AppConfig.load's unknown keys: a profile written by a
+        # newer podstage (or hand-edited) must not crash the app at startup.
+        # CLI and GUI validate their own input up front via backends.get().
+        if self.backend not in backends.BACKENDS:
+            self.backend = backends.DEFAULT
 
     def is_ask(self) -> bool:
         """True for an "ask" profile (resolution chosen at start, not fixed)."""
@@ -237,6 +303,9 @@ class AppConfig:
     # Stream the client's mouse AND keyboard into the session
     # (PS_MOUSE_INPUT). Off for controller-only setups (default).
     mouse_keyboard: bool = False
+    # Game FPS from the compositor on the Session page (PS_PERF_METRICS).
+    # Read-only probe, vendor-neutral; stable since 0.2.2, on by default.
+    perf_metrics: bool = True
     # Enabled experimental features (keys from EXPERIMENTAL_FEATURES),
     # toggled on the Setup page, applied at the next session start.
     experimental: dict[str, bool] = field(default_factory=dict)
@@ -270,6 +339,11 @@ class AppConfig:
                    mouse_keyboard=bool(data.get(
                        "mouse_keyboard",
                        data.get("experimental", {}).get("mouse_input", False))),
+                   # perf_metrics graduated in 0.3 (default on; an old config
+                   # that had the experimental key enabled stays on too)
+                   perf_metrics=bool(data.get(
+                       "perf_metrics",
+                       data.get("experimental", {}).get("perf_metrics", True))),
                    experimental=experimental)
 
     @classmethod
@@ -279,7 +353,11 @@ class AppConfig:
         cfg = cls.load(path)
         if not cfg.sessions:
             cfg = cls(sessions=[
-                SessionConfig(name="sandbox_steam", resolution="1080p60",
+                # No underscore: the name reaches the announced mDNS service
+                # name, and one there makes moonlight-qt drop the session
+                # without a word (see backends.safe_name). safe_name catches it
+                # anyway, but a seed that needs rewriting is a poor default.
+                SessionConfig(name="sandbox-steam", resolution="1080p60",
                               sunshine_port_base=47989),
             ])
             cfg.save(path)
@@ -306,6 +384,8 @@ class AppConfig:
             data["preview_keep_last"] = False
         if self.mouse_keyboard:
             data["mouse_keyboard"] = True
+        if not self.perf_metrics:
+            data["perf_metrics"] = False
         enabled = {k: True for k, v in self.experimental.items() if v}
         if enabled:
             data["experimental"] = enabled

@@ -127,7 +127,7 @@ class MainWindow(QMainWindow):
         h.addWidget(self._stack, 1)
 
         self.setCentralWidget(central)
-        self.setStyleSheet(theme.QSS)
+        self.setStyleSheet(theme.qss())
         self._nav.setCurrentRow(0)
 
     def _on_nav(self, row: int) -> None:
@@ -149,6 +149,21 @@ class MainWindow(QMainWindow):
             self._global_state.setText(tr("○ stopped"))
             self._global_state.setProperty("state", "stopped")
         theme.repolish(self._global_state)
+
+    def mousePressEvent(self, event) -> None:
+        """Clicking empty space drops the focus from whatever field holds it.
+
+        Qt keeps the caret in a line edit or spin box until another focusable
+        widget takes over, so a field stayed visibly active after clicking
+        away. Widgets that do not accept mouse presses (labels, card
+        backgrounds) let the event bubble up to here, which is exactly the
+        "clicked on nothing" case. Values are persisted on editingFinished,
+        so this also commits a typed value instead of leaving it hanging.
+        """
+        focused = self.focusWidget()
+        if focused is not None:
+            focused.clearFocus()
+        super().mousePressEvent(event)
 
     # -- lifecycle -------------------------------------------------------
     def closeEvent(self, event) -> None:

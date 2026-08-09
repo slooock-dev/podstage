@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from podstage import config
-from podstage.core import runtime, udev
+from podstage.core import backends, runtime, udev
 
 LIBS = [Path("/tmp/lib-a/steamapps"), Path("/tmp/lib-b/steamapps")]
 
@@ -42,7 +42,7 @@ def test_run_args_rootless_input_flags():
 
 def test_rootless_hotplug_env():
     env = runtime.container_env(_opts(), LIBS)
-    assert env["PS_FAKE_UDEV"] == "1"                 # cage via seat-shim monitor
+    assert env["PS_FAKE_UDEV"] == "1"                 # compositor via seat-shim monitor
     assert env["SDL_JOYSTICK_DISABLE_UDEV"] == "1"    # Steam/SDL inotify fallback
 
 
@@ -168,6 +168,98 @@ def test_shared_libraries_mounted_as_overlay():
         assert str(upper).startswith(str(config.DATA_DIR))
 
 
+def test_extra_mounts_overlay_and_rw():
+    home = Path("/tmp/home-x")
+    flags = runtime.container_flags(
+        LIBS, home, vendor="nvidia",
+        extra_mounts=["/srv/gog-games", "/srv/heroic:rw"])
+    upper, work = config.overlay_dirs(home, Path("/srv/gog-games"))
+    assert f"/srv/gog-games:/srv/gog-games:O,upperdir={upper},workdir={work}" in flags
+    assert "/srv/heroic:/srv/heroic" in flags          # plain writable bind
+    assert "/srv/heroic:/srv/heroic:O" not in " ".join(flags)
+
+
+def test_extra_mount_parsing():
+    import pytest
+
+    assert config.parse_extra_mount("/srv/games") == (Path("/srv/games"), False)
+    assert config.parse_extra_mount("/srv/heroic:rw") == (Path("/srv/heroic"), True)
+    with pytest.raises(ValueError, match="absolute"):
+        config.parse_extra_mount("games:rw")
+    with pytest.raises(ValueError, match="absolute"):
+        config.parse_extra_mount("relative/path")
+
+
+def test_start_rejects_missing_extra_mount(tmp_path, monkeypatch):
+    import pytest
+
+    monkeypatch.setattr(runtime, "status",
+                        lambda: runtime.RuntimeStatus(running=False))
+    monkeypatch.setattr(runtime, "image_exists", lambda image: True)
+    monkeypatch.setattr(runtime, "image_is_stale",
+                        lambda image=None, backend=None: False)
+    monkeypatch.setattr(runtime, "shared_library_paths",
+                        lambda home, provision=True, app_ids=None: [])
+    opts = runtime.RuntimeOptions(home_dir=tmp_path / "home", provision=False,
+                                  extra_mounts=[str(tmp_path / "missing")])
+    with pytest.raises(RuntimeError, match="extra mount source missing"):
+        runtime.start(opts)
+
+
+def test_full_dev_mount_for_ds5():
+    home = Path("/tmp/home-x")
+    flags = runtime.container_flags(LIBS, home, vendor="nvidia")
+    assert "/dev/input:/dev/input" in flags and "--device" in flags
+    assert "/dev:/dev" not in flags
+    ds5 = runtime.container_flags(LIBS, home, vendor="nvidia", full_dev=True)
+    assert "/dev:/dev" in ds5
+    assert "/dev/input:/dev/input" not in ds5   # covered by the full bind
+    assert "/dev/uinput" not in ds5
+
+
+def test_only_moonshine_swaps_the_seccomp_profile(monkeypatch):
+    """moonshine panics on its first cached DMA-BUF import without kcmp(2), and
+    --no-health-check skips its own startup probe. CAP_SYS_PTRACE would unblock
+    the syscall too but lands in the ambient set, which bubblewrap refuses and
+    every Steam start goes through bubblewrap."""
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "nvidia")
+    ms = " ".join(runtime.podman_run_args(_ms(), library_paths=LIBS))
+    assert f"--security-opt seccomp={runtime.SECCOMP_PROFILE}" in ms
+    assert "--cap-add" not in ms
+    assert "seccomp=" not in " ".join(runtime.podman_run_args(_opts(), library_paths=LIBS))
+
+
+def test_allow_kcmp_ungates_exactly_one_syscall():
+    """The default names kcmp twice, in a capability-gated allow and in an
+    EPERM catch-all. Neither may keep it, a rule left without names is
+    invalid, and nothing else may move."""
+    profile = {"defaultAction": "SCMP_ACT_ERRNO", "syscalls": [
+        {"names": ["kcmp", "process_madvise"], "action": "SCMP_ACT_ALLOW",
+         "includes": {"caps": ["CAP_SYS_PTRACE"]}},
+        {"names": ["kcmp"], "action": "SCMP_ACT_ERRNO"},
+        {"names": ["read", "write"], "action": "SCMP_ACT_ALLOW"},
+    ]}
+    out = runtime.allow_kcmp(profile)
+    assert out["defaultAction"] == "SCMP_ACT_ERRNO"
+    assert {"names": ["kcmp"], "action": "SCMP_ACT_ALLOW"} in out["syscalls"]
+    assert [r for r in out["syscalls"] if "kcmp" in r["names"]] == [
+        {"names": ["kcmp"], "action": "SCMP_ACT_ALLOW"}]
+    assert {"names": ["process_madvise"], "action": "SCMP_ACT_ALLOW",
+            "includes": {"caps": ["CAP_SYS_PTRACE"]}} in out["syscalls"]
+    assert {"names": ["read", "write"], "action": "SCMP_ACT_ALLOW"} in out["syscalls"]
+    assert profile["syscalls"][1]["names"] == ["kcmp"]   # input untouched
+
+
+def test_ds5_env_switches_run_args(tmp_path, monkeypatch):
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "amd")
+    opts = runtime.RuntimeOptions(home_dir=tmp_path,
+                                  env={"PS_GAMEPAD_DS5": "enabled"})
+    args = runtime.podman_run_args(opts, library_paths=[])
+    joined = " ".join(args)
+    assert "/dev:/dev" in joined
+    assert "PS_GAMEPAD_DS5=enabled" in joined
+
+
 def test_overlay_dirs_distinct_per_library_and_sandbox():
     home = Path("/tmp/home-x")
     uppers = {config.overlay_dirs(home, lib)[0] for lib in LIBS}
@@ -207,6 +299,21 @@ def test_runtime_src_hash_tracks_content(tmp_path, monkeypatch):
     (src / "entrypoint.sh").write_text("#!/bin/sh\n")
     h3 = runtime.runtime_src_hash()
     assert h1 and h2 and h3 and len({h1, h2, h3}) == 3
+
+
+def test_runtime_src_hash_ignores_documentation(tmp_path, monkeypatch):
+    """A README under containers/ is not part of any image. Hashing it made a
+    typo fix report both images stale, and the moonshine image is compiled
+    from source, so that is an expensive answer to a cheap change."""
+    src = _fake_src(tmp_path, monkeypatch)
+    before = runtime.runtime_src_hash()
+    (src / "README.md").write_text("# how this image works\n")
+    assert runtime.runtime_src_hash() == before
+    (src / "README.md").write_text("# how this image works, corrected\n")
+    assert runtime.runtime_src_hash() == before
+    # Anything the build reads still counts, including a comment in it.
+    (src / "Containerfile").write_text("FROM x\n# a comment\n")
+    assert runtime.runtime_src_hash() != before
 
 
 def test_runtime_src_hash_none_without_checkout(tmp_path, monkeypatch):
@@ -257,3 +364,340 @@ def test_perf_share_dir_is_mounted_from_the_host_tmpfs(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "RUNTIME_SHARE_DIR", tmp_path / "share")
     flags = runtime.container_flags([], tmp_path / "home", vendor="amd")
     assert "-v" in flags and f"{tmp_path / 'share'}:/run/podstage" in flags
+
+
+def test_kill_pid_checks_process_identity():
+    import subprocess
+
+    from podstage.core.runtime import _kill_pid
+
+    victim = subprocess.Popen(["sleep", "30"])
+    try:
+        # /proc/<pid>/cmdline is empty between fork and exec — wait until the
+        # child has actually become `sleep` or the guard (correctly) no-ops.
+        import time
+        from pathlib import Path
+        for _ in range(100):
+            if b"sleep" in Path(f"/proc/{victim.pid}/cmdline").read_bytes():
+                break
+            time.sleep(0.05)
+        # Recycled-pid guard: cmdline does not match → must NOT be killed.
+        _kill_pid(victim.pid)
+        assert victim.poll() is None
+        # Matching expectation → killed.
+        _kill_pid(victim.pid, expect="sleep")
+        victim.wait(timeout=10)
+        assert victim.returncode is not None
+    finally:
+        victim.kill()
+        victim.wait(timeout=10)
+
+
+# -- backend branching -------------------------------------------------------
+
+def _ms(**kw):
+    return _opts(backend="moonshine", **kw)
+
+
+def test_moonshine_run_args_pick_its_own_image_and_bind_all_of_dev(monkeypatch):
+    """inputtino creates gamepads through /dev/uhid and Steam Input needs the
+    hidraw node appearing with them, which cannot be pre-mounted."""
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "nvidia")
+    args = runtime.podman_run_args(_ms(), library_paths=LIBS)
+    joined = " ".join(args)
+    assert args[-1] == backends.MOONSHINE.image
+    assert "/dev:/dev" in joined
+    assert "/dev/input:/dev/input" not in joined
+    # The GPU wiring and the sandbox HOME are identical to the sunshine path.
+    assert "/dev/nvidia-modeset" in joined
+    assert "-v /tmp/home-x:/home/player" in joined
+
+
+def test_explicit_image_still_overrides_the_backends_default():
+    opts = _ms(image="podstage-moonshine:dev")
+    assert runtime.podman_run_args(opts, library_paths=[])[-1] == "podstage-moonshine:dev"
+
+
+def test_moonshine_env_drops_everything_sunshine_specific():
+    env = runtime.container_env(_ms(resolution="1280x800@60"), LIBS)
+    assert env["PS_MOONSHINE_PORT"] == str(runtime.DEFAULT_STREAM_PORT)
+    assert "PS_SUNSHINE_PORT" not in env
+    # No web UI, no encoder pick, no faked udev monitor, no seat-shim.
+    for key in ("PS_CSRF_ORIGINS", "PS_ENCODER", "PS_FAKE_UDEV", "PS_WEB_USER",
+                "PS_WEB_PASS", "PS_MOUSE_INPUT", "PS_SHOW_CURSOR",
+                "PS_NATIVE_TOUCH"):
+        assert key not in env, key
+    # What both backends share: Steam, the nested gamescope, the compat mounts.
+    assert env["PS_RESOLUTION"] == "1280x800@60"
+    assert env["PS_STEAM_FLAGS"] == "-gamepadui"
+    assert env["DISABLE_GAMESCOPE_WSI"] == "1"
+    assert env["SDL_JOYSTICK_DISABLE_UDEV"] == "1"
+    assert env["STEAM_COMPAT_MOUNTS"] == "/tmp/lib-a/steamapps:/tmp/lib-b/steamapps"
+
+
+def test_sunshine_env_is_unchanged_by_the_abstraction():
+    env = runtime.container_env(_opts(), LIBS, vendor="nvidia")
+    assert env["PS_SUNSHINE_PORT"] == str(runtime.DEFAULT_STREAM_PORT)
+    assert env["PS_FAKE_UDEV"] == "1"
+    assert env["PS_ENCODER"] == "nvenc"
+    assert env["PS_CSRF_ORIGINS"]
+    assert "PS_MOONSHINE_PORT" not in env
+
+
+def test_moonshine_forwards_its_own_knobs():
+    env = runtime.container_env(
+        _ms(env={"PS_MOONSHINE_NAME": "tv", "PS_HDR": "enabled"}), LIBS)
+    assert env["PS_MOONSHINE_NAME"] == "tv"
+    assert env["PS_HDR"] == "enabled"
+
+
+def test_backends_share_everything_that_is_not_backend_specific(monkeypatch):
+    """Guard against a backend branch quietly dropping a general feature.
+
+    Extra mounts, the shared Steam libraries, the sandbox HOME, the boot-into
+    a-game AppID and the preview/dynamic-resolution/perf switches are
+    properties of the sandbox, not of the streaming server, so both backends
+    must carry them identically. Only the image, the port variable and the
+    /dev breadth may differ.
+
+    The switches go through the environment, NOT through RuntimeOptions.env:
+    an explicit override lands whatever the forward table says, so passing
+    them there would test nothing about the table.
+    """
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "nvidia")
+    forwarded = {"PS_THUMBNAIL_INTERVAL": "25", "PS_DYNAMIC_RES": "disabled",
+                 "PS_PERF_METRICS": "enabled", "PS_HDR": "enabled",
+                 "PS_FOCUS_NUDGE": "disabled", "PS_TOUCH_CLICK_MODE": "4"}
+    for key, val in forwarded.items():
+        monkeypatch.setenv(key, val)
+    shared = {"app": "620",
+              "extra_mounts": ["/srv/gog-games", "/srv/heroic:rw"]}
+    for opts in (_opts(**shared), _ms(**shared)):
+        joined = " ".join(runtime.podman_run_args(opts, library_paths=LIBS))
+        upper, work = config.overlay_dirs(opts.home_dir, Path("/srv/gog-games"))
+        assert f"/srv/gog-games:/srv/gog-games:O,upperdir={upper},workdir={work}" in joined
+        assert "-v /srv/heroic:/srv/heroic " in joined + " "   # writable bind
+        assert "-v /tmp/home-x:/home/player" in joined
+        env = runtime.container_env(opts, LIBS)
+        assert env["PS_APP"] == "620"
+        assert env["STEAM_COMPAT_MOUNTS"] == "/tmp/lib-a/steamapps:/tmp/lib-b/steamapps"
+        for key, val in forwarded.items():
+            assert env.get(key) == val, (opts.backend, key)
+
+
+def test_the_advertised_name_carries_the_backend():
+    """Both backends are separate servers with separate pairings, so a client
+    must be able to tell a profile's two sessions apart. Before this, sunshine
+    announced the constant "podstage" for every profile while moonshine
+    announced the bare profile name."""
+    assert backends.SUNSHINE.advertised_name("deck") == "deck-sunshine"
+    assert backends.MOONSHINE.advertised_name("deck") == "deck-moonshine"
+    assert backends.SUNSHINE.advertised_name() == "podstage-sunshine"
+    for opts, key, want in ((_opts(client="deck"), "PS_SUNSHINE_NAME", "deck-sunshine"),
+                            (_ms(client="deck"), "PS_MOONSHINE_NAME", "deck-moonshine")):
+        assert runtime.container_env(opts, LIBS, vendor="nvidia")[key] == want
+
+
+def test_the_advertised_name_never_carries_an_underscore():
+    """An underscore in the announced name makes moonlight-qt list no host at
+    all. It receives PTR, SRV, TXT and A in one packet within 0.1 s, caches
+    them, and then drops the service without a word in any log. Measured A/B/A
+    against one running server with the host list emptied per run:
+    "podstagelan" listed after 10 s, "podstage_lan" never, "podstagelan2"
+    after 10 s. A profile name plausibly carries one ("sandbox_steam"), so the
+    separator alone cannot save us."""
+    for name in ("deck", "sandbox_steam", "a_b", "Wohnzimmer (TV)"):
+        for spec in (backends.SUNSHINE, backends.MOONSHINE):
+            announced = spec.advertised_name(name)
+            assert "_" not in announced, announced
+            assert "(" not in announced and ")" not in announced, announced
+            assert " " not in announced, announced
+    assert backends.SUNSHINE.advertised_name("sandbox_steam") == "sandbox-steam-sunshine"
+    assert backends.MOONSHINE.advertised_name("Wohnzimmer (TV)") == "Wohnzimmer-TV-moonshine"
+    # Non-ASCII letters are not punctuation and must survive.
+    assert backends.MOONSHINE.advertised_name("Süd") == "Süd-moonshine"
+    # A name that is nothing but replaced characters still has to yield one.
+    assert backends.safe_name("_ ()") == "podstage"
+
+
+def test_the_advertised_name_can_still_be_pinned(monkeypatch):
+    monkeypatch.setenv("PS_MOONSHINE_NAME", "living room")
+    env = runtime.container_env(_ms(client="deck"), LIBS, vendor="nvidia")
+    assert env["PS_MOONSHINE_NAME"] == "living room"
+
+
+def test_web_port_only_exists_for_sunshine():
+    assert _opts(stream_port=48989).web_port == 48990
+    assert _ms(stream_port=48989).web_port is None
+
+
+def test_start_skips_the_host_publisher_for_moonshine(tmp_path, monkeypatch):
+    """moonshine carries its own mDNS responder; running avahi-publish-service
+    next to it would advertise the same service twice."""
+    started: list = []
+    monkeypatch.setattr(runtime, "status", lambda: runtime.RuntimeStatus(running=False))
+    monkeypatch.setattr(runtime, "image_exists", lambda image: True)
+    monkeypatch.setattr(runtime, "image_is_stale",
+                        lambda image=None, backend=None: False)
+    monkeypatch.setattr(runtime, "shared_library_paths",
+                        lambda home, provision=True, app_ids=None: [])
+    monkeypatch.setattr(runtime, "start_publisher",
+                        lambda *a, **kw: started.append((a, kw)) or (4242, 4243))
+    monkeypatch.setattr(runtime, "save_state", lambda *a: None)
+    monkeypatch.setattr(runtime, "_run", lambda argv, timeout=15: (0, ""))
+    monkeypatch.setattr(config, "RUNTIME_SHARE_DIR", tmp_path / "share")
+
+    runtime.start(_ms(home_dir=tmp_path / "home", provision=False))
+    assert started == []
+    runtime.start(_opts(home_dir=tmp_path / "home", provision=False,
+                        client="deck"))
+    # The name a client lists it as carries the backend, so a profile's two
+    # backends never show up as the same host (with different pairings).
+    assert started == [(("deck-sunshine",),
+                        {"port": runtime.DEFAULT_STREAM_PORT})]
+
+
+def test_publisher_points_the_service_at_its_own_host_name(monkeypatch):
+    """avahi would otherwise answer with the machine's own name, which on the
+    box running podstage also carries 127.0.0.1 and a scope-less link-local
+    IPv6. A moonlight client on that same machine then lists no host at all,
+    silently. Measured A/B/A with one running session: machine name only, not
+    listed; plus a name carrying only the LAN IPv4, listed after 10 s; machine
+    name only again, not listed."""
+    calls: list[list[str]] = []
+
+    class _P:
+        def __init__(self, argv, **kw):
+            calls.append(argv)
+            self.pid = 100 + len(calls)
+
+    monkeypatch.setattr(runtime.shutil, "which", lambda exe: f"/usr/bin/{exe}")
+    monkeypatch.setattr(runtime.subprocess, "Popen", _P)
+    monkeypatch.setattr(runtime, "lan_ips", lambda: ["192.168.1.5", "10.0.0.9"])
+
+    service_pid, host_pid = runtime.start_publisher("deck-sunshine", port=47989)
+    assert (service_pid, host_pid) == (102, 101)
+    assert calls[0] == ["avahi-publish-address", "-R",
+                        runtime.STREAM_HOSTNAME, "192.168.1.5"]
+    assert calls[1] == ["avahi-publish-service", "-H", runtime.STREAM_HOSTNAME,
+                        "deck-sunshine", "_nvstream._tcp", "47989"]
+
+
+def test_publisher_falls_back_without_a_lan_address(monkeypatch):
+    """No routable address to announce: publish under the machine's own name
+    rather than not at all. Remote clients are unaffected by the difference."""
+    calls: list[list[str]] = []
+
+    class _P:
+        def __init__(self, argv, **kw):
+            calls.append(argv)
+            self.pid = 7
+
+    monkeypatch.setattr(runtime.shutil, "which", lambda exe: f"/usr/bin/{exe}")
+    monkeypatch.setattr(runtime.subprocess, "Popen", _P)
+    monkeypatch.setattr(runtime, "lan_ips", list)
+
+    assert runtime.start_publisher("deck-sunshine", port=47989) == (7, None)
+    assert calls == [["avahi-publish-service", "deck-sunshine",
+                      "_nvstream._tcp", "47989"]]
+
+
+def test_killing_a_publisher_leaves_no_zombie():
+    """The GUI outlives many sessions, and a killed child stays a zombie until
+    someone waits for it. Uses a real child, because the whole point is the
+    process table: mocking the kill would test nothing.
+
+    Deliberately does NOT touch ``proc`` after the kill, since any poll() or
+    wait() would reap it and hide exactly the defect under test.
+    """
+    import subprocess
+    import time as _time
+
+    import pytest
+
+    proc = subprocess.Popen(["sleep", "60"], start_new_session=True)
+
+    def state() -> str:
+        with open(f"/proc/{proc.pid}/stat") as fh:
+            return fh.read().split(") ", 1)[1][0]
+
+    assert state() in "RS", "child should be alive before the kill"
+    # expect="" skips the cmdline guard, which would not match "sleep".
+    runtime._kill_pid(proc.pid, expect="")
+
+    deadline = _time.monotonic() + 2
+    while _time.monotonic() < deadline:
+        try:
+            st = state()
+        except FileNotFoundError:
+            return               # reaped and gone from the table: the goal
+        if st == "Z":
+            pytest.fail("publisher was killed but left as a zombie")
+        _time.sleep(0.02)
+    pytest.fail("child never terminated")
+
+
+def test_start_refuses_an_unbuilt_backend_image(tmp_path, monkeypatch):
+    import pytest
+
+    monkeypatch.setattr(runtime, "status", lambda: runtime.RuntimeStatus(running=False))
+    monkeypatch.setattr(runtime, "image_exists", lambda image: False)
+    with pytest.raises(RuntimeError, match="runtime build --backend moonshine"):
+        runtime.start(_ms(home_dir=tmp_path / "home", provision=False))
+
+
+def test_src_hash_is_per_backend(tmp_path, monkeypatch):
+    """Each image hashes its own containers/<x>/, so touching one does not
+    mark the other stale."""
+    for sub in ("runtime", "moonshine"):
+        d = tmp_path / "containers" / sub
+        d.mkdir(parents=True)
+        (d / "Containerfile").write_text(f"FROM {sub}\n")
+    monkeypatch.setattr(udev, "REPO_ROOT", tmp_path)
+    sun = runtime.runtime_src_hash("sunshine")
+    moon = runtime.runtime_src_hash("moonshine")
+    assert sun and moon and sun != moon
+    (tmp_path / "containers/moonshine/Containerfile").write_text("FROM changed\n")
+    assert runtime.runtime_src_hash("sunshine") == sun
+    assert runtime.runtime_src_hash("moonshine") != moon
+
+
+def test_derived_src_hash_covers_the_base_sources(tmp_path, monkeypatch):
+    """A moonshine image layered on changed runtime sources must not keep
+    claiming it is current: podman builds FROM whatever the tag points at."""
+    for sub in ("runtime", "moonshine"):
+        d = tmp_path / "containers" / sub
+        d.mkdir(parents=True)
+        (d / "Containerfile").write_text(f"FROM {sub}\n")
+    monkeypatch.setattr(udev, "REPO_ROOT", tmp_path)
+    before = runtime.runtime_src_hash("moonshine")
+    (tmp_path / "containers/runtime/entrypoint.sh").write_text("#!/bin/sh\n")
+    assert runtime.runtime_src_hash("moonshine") != before
+    # ...while the base itself is unaffected by its dependant.
+    base = runtime.runtime_src_hash("sunshine")
+    (tmp_path / "containers/moonshine/app.sh").write_text("#!/bin/sh\n")
+    assert runtime.runtime_src_hash("sunshine") == base
+
+
+def test_build_brings_up_a_stale_base_first(tmp_path, monkeypatch):
+    """Building on a stale base would stamp a label the image cannot honour."""
+    for sub in ("runtime", "moonshine"):
+        d = tmp_path / "containers" / sub
+        d.mkdir(parents=True)
+        (d / "Containerfile").write_text(f"FROM {sub}\n")
+    monkeypatch.setattr(udev, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(runtime, "image_exists", lambda image: True)
+    monkeypatch.setattr(runtime, "image_is_stale",
+                        lambda image="", backend=None: backend == "sunshine")
+    built: list[str] = []
+    monkeypatch.setattr(runtime.subprocess, "run",
+                        lambda cmd, **kw: built.append(cmd[cmd.index("-t") + 1])
+                        or _Ok())
+    runtime.build_image(backend="moonshine")
+    assert built == [backends.SUNSHINE.image, backends.MOONSHINE.image]
+
+
+class _Ok:
+    returncode = 0
+    stdout = ""
+    stderr = ""

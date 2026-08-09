@@ -11,13 +11,18 @@ import json
 import shlex
 import shutil
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
-from . import elevate, provisioner
+from . import backends, elevate, provisioner
 
 SUNSHINE_STATE = ".config/podstage-sunshine/state.json"
+# moonshine persists `unique_id`, `clients` (moonlight's fixed 16-char ids)
+# and `paired_certs`. It stores no client NAMES, so the paired list reads as
+# ids on that backend.
+MOONSHINE_STATE = ".local/share/moonshine/state.toml"
 LOGINUSERS = ".local/share/Steam/config/loginusers.vdf"
 
 
@@ -32,9 +37,23 @@ class SandboxInfo:
     size_bytes: int | None = None  # filled separately — du can take seconds
 
 
-def paired_clients(home: Path) -> list[str]:
-    """Names of Moonlight clients paired to this sandbox's Sunshine (from the
-    persisted state.json; the file appears with the first pairing)."""
+def _moonshine_state(home: Path) -> dict:
+    try:
+        return tomllib.loads((home / MOONSHINE_STATE).read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+
+
+def paired_clients(home: Path, backend: str = backends.DEFAULT) -> list[str]:
+    """moonlight clients paired to this sandbox (the state file appears with
+    the first pairing).
+
+    sunshine records device names; moonshine only records client ids, so that
+    backend's list is ids.
+    """
+    if backend == backends.MOONSHINE.name:
+        clients = _moonshine_state(home).get("clients", [])
+        return [str(c) for c in clients if c]
     try:
         data = json.loads((home / SUNSHINE_STATE).read_text())
     except (OSError, json.JSONDecodeError):
@@ -45,10 +64,14 @@ def paired_clients(home: Path) -> list[str]:
             and str(d.get("enabled", "true")).lower() != "false"]
 
 
-def paired_device_ids(home: Path) -> set[str]:
+def paired_device_ids(home: Path, backend: str = backends.DEFAULT) -> set[str]:
     """Stable ids of the paired devices. A pairing mints a fresh uuid/cert
-    even when the name already exists, so this detects a re-pairing that
-    paired_clients() (names only) would miss."""
+    even when the client is already known, so this detects a re-pairing that
+    paired_clients() would miss, which is what the pair_verified helpers in
+    sunshine_api/moonshine_api watch."""
+    if backend == backends.MOONSHINE.name:
+        state = _moonshine_state(home)
+        return {str(c) for c in state.get("paired_certs", []) if c}
     try:
         data = json.loads((home / SUNSHINE_STATE).read_text())
     except (OSError, json.JSONDecodeError):
@@ -80,7 +103,7 @@ def inspect(cfg: config.SessionConfig) -> SandboxInfo:
         exists=home.is_dir(),
         bootstrapped=is_bootstrapped(home),
         logged_in=steam_logged_in(home),
-        paired=paired_clients(home),
+        paired=paired_clients(home, cfg.backend),
     )
 
 
