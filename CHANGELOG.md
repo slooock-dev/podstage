@@ -4,6 +4,16 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-10
+
+### Changed
+
+- **Breaking: sandbox lifecycle moved to `podstage sandbox`.**
+  `session add/remove/list/login/setup/clear-overlay` are now
+  `sandbox add/remove/list/login/setup/clear-overlay`, matching the GUI's
+  Sandboxes/Session split. `podstage session` keeps start/stop/status/pair.
+  No aliases; scripts using the old verbs must be updated.
+
 ## [0.4.0] - 2026-08-10
 
 Needs an image rebuild for both backends (`podstage runtime build`, then

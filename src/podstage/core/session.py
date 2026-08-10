@@ -278,12 +278,12 @@ class Session:
         """
         if not self.is_bootstrapped():
             raise RuntimeError(
-                f"Session '{self.cfg.name}' not set up — run 'podstage session setup {self.cfg.name}' first"
+                f"Session '{self.cfg.name}' not set up — run 'podstage sandbox setup {self.cfg.name}' first"
             )
         if not sandbox.steam_logged_in(self.home):
             raise RuntimeError(
                 f"Session '{self.cfg.name}' has no Steam login yet: run "
-                f"'podstage session setup {self.cfg.name}' (or the GUI's Steam "
+                f"'podstage sandbox setup {self.cfg.name}' (or the GUI's Steam "
                 f"login) and log in first"
             )
         if self.sandbox_steam_running():

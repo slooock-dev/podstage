@@ -46,7 +46,7 @@ Examples:
 ```
 
 `homes/deck` is an isolated, already-logged-in Steam sandbox HOME as created by
-the GUI's Steam-login bootstrap (or `podstage session setup`).
+the GUI's Steam-login bootstrap (or `podstage sandbox setup`).
 
 Dynamic resolution is the default (`PS_DYNAMIC_RES=disabled` opts out, set
 per profile by the host GUI/CLI): the

@@ -103,7 +103,7 @@ class Backend:
                   it and panics on the first cache hit without it.
                   core/runtime.py answers this with a derived profile, not with
                   CAP_SYS_PTRACE (see there)
-    summary       one line for `podstage session list` / the GUI
+    summary       one line for `podstage sandbox list` / the GUI
     """
 
     name: str

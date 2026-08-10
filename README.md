@@ -170,7 +170,7 @@ this needs the mouse & keyboard input switch, moonshine always streams the
 keyboard.
 
 ```bash
-podstage session add tv --backend moonshine
+podstage sandbox add tv --backend moonshine
 podstage runtime build --backend moonshine     # once, builds from source
 podstage doctor                                # checks this GPU can encode
 ```
@@ -234,17 +234,17 @@ podstage runtime build
 ```bash
 podstage doctor                              # what is missing
 podstage setup                               # prints the (sudo) setup commands
-podstage session add deck --resolution 1280x800@60
-podstage session login deck                  # first Steam login, over the stream
+podstage sandbox add deck
+podstage sandbox login deck                  # first Steam login, over the stream
 podstage session start deck
 podstage session pair deck 1234              # PIN from moonlight
 ```
 
 Everything the GUI does is a command, the first Steam login included:
-`session login` boots a fresh sandbox into Big Picture's sign-in over the
+`sandbox login` boots a fresh sandbox into Big Picture's sign-in over the
 stream (QR code via the Steam Mobile App, or the on-screen keyboard), and Steam
 bootstraps entirely in-container. The one step that still wants a desktop is
-`session setup`, which opens the sandbox's Steam visibly on the host for
+`sandbox setup`, which opens the sandbox's Steam visibly on the host for
 settings Big Picture does not expose.
 
 ## Managing a session
@@ -276,12 +276,13 @@ podstage setup                     # print guided (sudo) setup commands
 podstage uninstall [--keep-sandboxes] [--all] [--dry-run]
 podstage runtime build [--backend sunshine|moonshine]
 podstage runtime start|stop|status # drive the container directly (by HOME dir)
-podstage session list
-podstage session add <name> [--resolution R] [--port N] [--backend B] [--apps ID,…] [--fixed-resolution] [--mount PATH[:rw]]…
-podstage session login <name>      # streamed first login (Big Picture sign-in)
-podstage session setup|start|stop|status <name>   # start: --resolution, --app
+podstage sandbox list
+podstage sandbox add <name> [--resolution R] [--port N] [--backend B] [--apps ID,…] [--fixed-resolution] [--mount PATH[:rw]]…
+podstage sandbox login <name>      # streamed first login (Big Picture sign-in)
+podstage sandbox setup <name>      # visible desktop login on the host
+podstage sandbox remove <name> [--data] | clear-overlay <name>
+podstage session start|stop|status <name>   # start: --resolution, --app
 podstage session pair <name> <PIN>
-podstage session remove <name> [--data] | clear-overlay <name>
 podstage experimental [enable|disable <feature>]
 podstage config mouse-keyboard|perf-metrics [on|off]
 podstage desktop [menu|autostart [on|off]]

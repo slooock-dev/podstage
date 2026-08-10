@@ -6,7 +6,7 @@ path and GameStream server in one process. Built `FROM podstage-runtime`, so
 the base, the CDI GPU injection, the rootless `player` user, Steam and
 gamescope are identical to the sunshine backend.
 
-Pick it per profile (`podstage session add --backend moonshine`, or the GUI's
+Pick it per profile (`podstage sandbox add --backend moonshine`, or the GUI's
 profile dialog). The sunshine backend stays the default.
 
 ## What changes against the sunshine backend

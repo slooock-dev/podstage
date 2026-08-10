@@ -116,13 +116,13 @@ def _resolve_session(name: str) -> Session | None:
     cfg = _load_or_seed_config()
     sc = cfg.get(name)
     if sc is None:
-        print(f"No session '{name}'. Known: "
+        print(f"No sandbox '{name}'. Known: "
               f"{', '.join(s.name for s in cfg.sessions)}", file=sys.stderr)
         return None
     return Session(sc, app_config=cfg)
 
 
-def cmd_session_list(_args: argparse.Namespace) -> int:
+def cmd_sandbox_list(_args: argparse.Namespace) -> int:
     cfg = _load_or_seed_config()
     for sc in cfg.sessions:
         if sc.dynamic_resolution:
@@ -138,7 +138,7 @@ def cmd_session_list(_args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_session_add(args: argparse.Namespace) -> int:
+def cmd_sandbox_add(args: argparse.Namespace) -> int:
     """Create a client profile headlessly (CLI counterpart of the Sandboxes
     page dialog)."""
     cfg = _load_or_seed_config()
@@ -151,7 +151,7 @@ def cmd_session_add(args: argparse.Namespace) -> int:
         print(e, file=sys.stderr)
         return 1
     if cfg.get(args.name) is not None:
-        print(f"session '{args.name}' already exists", file=sys.stderr)
+        print(f"sandbox '{args.name}' already exists", file=sys.stderr)
         return 1
     used = {s.sunshine_port_base for s in cfg.sessions}
     port = args.port
@@ -187,24 +187,24 @@ def cmd_session_add(args: argparse.Namespace) -> int:
         res_note = args.resolution
     else:
         res_note = f"client-driven, fallback {args.resolution}"
-    print(f"Session '{args.name}' created (resolution={res_note}, port={port}, "
+    print(f"Sandbox '{args.name}' created (resolution={res_note}, port={port}, "
           f"backend={args.backend}).")
     spec = backends.get(args.backend)
     if spec.vulkan_video:
         print(f"  {spec.label} encodes with Vulkan Video (NVIDIA RTX, AMD "
               "RDNA2+ or Intel Arc); check with: podstage doctor")
         print(f"  Build its image once: podstage runtime build --backend {spec.name}")
-    print(f"Next: podstage session login {args.name}   (streamed first Steam login)")
+    print(f"Next: podstage sandbox login {args.name}   (streamed first Steam login)")
     return 0
 
 
-def cmd_session_remove(args: argparse.Namespace) -> int:
+def cmd_sandbox_remove(args: argparse.Namespace) -> int:
     from .core import sandbox
 
     cfg = _load_or_seed_config()
     sc = cfg.get(args.name)
     if sc is None:
-        print(f"No session '{args.name}'.", file=sys.stderr)
+        print(f"No sandbox '{args.name}'.", file=sys.stderr)
         return 1
     st = runtime.status()
     # Also block on a running container without profile attribution (started
@@ -227,18 +227,18 @@ def cmd_session_remove(args: argparse.Namespace) -> int:
             return 1
     cfg.remove(args.name)
     cfg.save()
-    print(f"Session '{args.name}' removed" + (" (including data)." if args.data else
+    print(f"Sandbox '{args.name}' removed" + (" (including data)." if args.data else
                                               " (sandbox HOME kept)."))
     return 0
 
 
-def cmd_session_clear_overlay(args: argparse.Namespace) -> int:
+def cmd_sandbox_clear_overlay(args: argparse.Namespace) -> int:
     from .core import sandbox
 
     cfg = _load_or_seed_config()
     sc = cfg.get(args.name)
     if sc is None:
-        print(f"No session '{args.name}'.", file=sys.stderr)
+        print(f"No sandbox '{args.name}'.", file=sys.stderr)
         return 1
     st = runtime.status()
     # Also block on a running container without profile attribution (started
@@ -257,7 +257,7 @@ def cmd_session_clear_overlay(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_session_setup(args: argparse.Namespace) -> int:
+def cmd_sandbox_setup(args: argparse.Namespace) -> int:
     s = _resolve_session(args.name)
     return s.setup() if s else 1
 
@@ -296,7 +296,7 @@ def _pair_hints(sc: SessionConfig) -> list[str]:
     return lines
 
 
-def cmd_session_login(args: argparse.Namespace) -> int:
+def cmd_sandbox_login(args: argparse.Namespace) -> int:
     """Streamed Steam login: boot the sandbox into Big Picture's sign-in
     over the stream (QR code or on-screen keyboard), no window on the host.
     Works for a completely fresh sandbox (Steam bootstraps in-container)."""
@@ -624,40 +624,22 @@ def build_parser() -> argparse.ArgumentParser:
     prov.add_argument("session")
     prov.set_defaults(func=cmd_provision)
 
-    sess = sub.add_parser("session", help="manage streaming sessions")
-    sess_sub = sess.add_subparsers(dest="action", required=True)
-    sess_sub.add_parser("list").set_defaults(func=cmd_session_list)
-    handlers = {
-        "add": cmd_session_add,
-        "remove": cmd_session_remove,
-        "setup": cmd_session_setup,
-        "login": cmd_session_login,
-        "start": cmd_session_start,
-        "stop": cmd_session_stop,
-        "status": cmd_session_status,
-        "pair": cmd_session_pair,
-        "clear-overlay": cmd_session_clear_overlay,
+    sbx = sub.add_parser("sandbox", help="manage sandboxes (isolated Steam profiles)")
+    sbx_sub = sbx.add_subparsers(dest="action", required=True)
+    sbx_sub.add_parser("list").set_defaults(func=cmd_sandbox_list)
+    sandbox_handlers = {
+        "add": cmd_sandbox_add,
+        "remove": cmd_sandbox_remove,
+        "setup": cmd_sandbox_setup,
+        "login": cmd_sandbox_login,
+        "clear-overlay": cmd_sandbox_clear_overlay,
     }
-    for action, handler in handlers.items():
-        sp = sess_sub.add_parser(action)
+    for action, handler in sandbox_handlers.items():
+        sp = sbx_sub.add_parser(action)
         sp.add_argument("name")
-        if action == "start":
-            sp.add_argument("--resolution", metavar="WxH@R",
-                            help="resolution (required for a 'pick at startup' profile)")
-            sp.add_argument("--app", metavar="APPID",
-                            help="Steam AppID — boot straight into the game")
-            sp.add_argument("--attach", action="store_true",
-                            help="stay attached in the foreground instead of detaching")
-            sp.add_argument("--mode", default="pipeline",
-                            choices=["pipeline", "desktop", "steam", "probe", "shell"],
-                            help="container mode (default: pipeline)")
         if action == "login":
             sp.add_argument("--resolution", metavar="WxH@R",
                             help="resolution (required for a 'pick at startup' profile)")
-        if action == "pair":
-            sp.add_argument("pin", help="4-digit PIN shown by moonlight")
-            sp.add_argument("--device",
-                            help="client name recorded by sunshine (default: profile name)")
         if action == "add":
             sp.add_argument("--resolution", default="1080p60", metavar="PRESET|WxH@R|ask",
                             help="pre-connect canvas + fallback size (default: 1080p60)")
@@ -682,6 +664,33 @@ def build_parser() -> argparse.ArgumentParser:
                             help="also delete the sandbox HOME (Steam login, saves) and overlays")
             sp.add_argument("--yes", action="store_true",
                             help="skip the confirmation prompt (with --data)")
+        sp.set_defaults(func=handler)
+
+    sess = sub.add_parser("session", help="manage the running streaming session")
+    sess_sub = sess.add_subparsers(dest="action", required=True)
+    session_handlers = {
+        "start": cmd_session_start,
+        "stop": cmd_session_stop,
+        "status": cmd_session_status,
+        "pair": cmd_session_pair,
+    }
+    for action, handler in session_handlers.items():
+        sp = sess_sub.add_parser(action)
+        sp.add_argument("name")
+        if action == "start":
+            sp.add_argument("--resolution", metavar="WxH@R",
+                            help="resolution (required for a 'pick at startup' profile)")
+            sp.add_argument("--app", metavar="APPID",
+                            help="Steam AppID — boot straight into the game")
+            sp.add_argument("--attach", action="store_true",
+                            help="stay attached in the foreground instead of detaching")
+            sp.add_argument("--mode", default="pipeline",
+                            choices=["pipeline", "desktop", "steam", "probe", "shell"],
+                            help="container mode (default: pipeline)")
+        if action == "pair":
+            sp.add_argument("pin", help="4-digit PIN shown by moonlight")
+            sp.add_argument("--device",
+                            help="client name recorded by sunshine (default: profile name)")
         sp.set_defaults(func=handler)
 
     return p
