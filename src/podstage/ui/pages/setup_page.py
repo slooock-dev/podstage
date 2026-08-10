@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -275,16 +276,29 @@ class SetupPage(QWidget):
         slay.addWidget(self._perf)
         self._guide_hold = QCheckBox(tr("Hold Select to press Guide"))
         self._guide_hold.setToolTip(tr(
-            "Hold the controller's Select/Back button for 2 s to press the "
-            "Guide/Xbox button, which opens the Steam menu (e.g. to quit a "
-            "game). For clients that cannot send Guide themselves: on a "
-            "Steam Deck the local Steam consumes the button."))
+            "Hold the controller's Select/Back button for the set time to "
+            "press the Guide/Xbox button, which opens the Steam menu (e.g. "
+            "to quit a game). For clients that cannot send Guide themselves: "
+            "on a Steam Deck the local Steam consumes the button."))
         self._guide_hold.setChecked(self._ctx.config.guide_hold_ms > 0)
         self._guide_hold.toggled.connect(self._on_guide_hold_toggled)
+        # 0 in config means off; the spinbox never shows 0 so re-enabling
+        # restores the last hold time instead of an invalid value.
+        self._guide_hold_ms = QSpinBox()
+        self._guide_hold_ms.setRange(200, 10000)
+        self._guide_hold_ms.setSingleStep(100)
+        self._guide_hold_ms.setSuffix(" ms")
+        self._guide_hold_ms.setValue(self._ctx.config.guide_hold_ms or 2000)
+        self._guide_hold_ms.setEnabled(self._guide_hold.isChecked())
+        self._guide_hold_ms.valueChanged.connect(self._on_guide_hold_ms_changed)
+        ghrow = QHBoxLayout()
+        ghrow.addWidget(self._guide_hold)
+        ghrow.addWidget(self._guide_hold_ms)
+        ghrow.addStretch(1)
         ghhint = QLabel(tr("Applies at the next session start."))
         ghhint.setProperty("muted", True)
         ghhint.setWordWrap(True)
-        slay.addWidget(self._guide_hold)
+        slay.addLayout(ghrow)
         slay.addWidget(ghhint)
         root.addWidget(sframe)
 
@@ -525,10 +539,17 @@ class SetupPage(QWidget):
         self._ctx.save()
 
     def _on_guide_hold_toggled(self, enabled: bool) -> None:
-        # The checkbox flips default/off; a hand-tuned ms value in
-        # config.toml is lost on the next toggle here, by design.
-        self._ctx.config.guide_hold_ms = 2000 if enabled else 0
+        self._guide_hold_ms.setEnabled(enabled)
+        self._ctx.config.guide_hold_ms = (
+            self._guide_hold_ms.value() if enabled else 0)
         self._ctx.save()
+
+    def _on_guide_hold_ms_changed(self, value: int) -> None:
+        # Only while enabled: the disabled spinbox keeps its value as the
+        # restore point, config stays 0.
+        if self._guide_hold.isChecked():
+            self._ctx.config.guide_hold_ms = value
+            self._ctx.save()
 
     def _on_experimental_toggled(self, key: str, enabled: bool) -> None:
         self._ctx.config.experimental[key] = enabled

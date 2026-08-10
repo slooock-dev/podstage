@@ -451,14 +451,14 @@ TEXTS: dict[str, str] = {
         "laufenden Spiels und zeigt FPS auf der Session-Seite. Läuft mit jedem "
         "GPU-Hersteller; braucht ein gamescope mit Perf-Query (3.16+).",
     "Hold Select to press Guide": "Select halten drückt Guide",
-    "Hold the controller's Select/Back button for 2 s to press the "
-    "Guide/Xbox button, which opens the Steam menu (e.g. to quit a "
-    "game). For clients that cannot send Guide themselves: on a "
-    "Steam Deck the local Steam consumes the button.":
-        "Select/Back am Controller 2 s halten drückt den Guide/Xbox-Button, "
-        "der das Steam-Menü öffnet (z.B. um ein Spiel zu beenden). Für "
-        "Clients, die selbst kein Guide senden können: am Steam Deck "
-        "konsumiert das lokale Steam die Taste.",
+    "Hold the controller's Select/Back button for the set time to "
+    "press the Guide/Xbox button, which opens the Steam menu (e.g. "
+    "to quit a game). For clients that cannot send Guide themselves: "
+    "on a Steam Deck the local Steam consumes the button.":
+        "Select/Back am Controller für die eingestellte Zeit halten drückt "
+        "den Guide/Xbox-Button, der das Steam-Menü öffnet (z.B. um ein Spiel "
+        "zu beenden). Für Clients, die selbst kein Guide senden können: am "
+        "Steam Deck konsumiert das lokale Steam die Taste.",
     "Applies at the next session start.":
         "Gilt ab dem nächsten Session-Start.",
     "Mouse && keyboard input": "Maus- && Tastatur-Eingabe",

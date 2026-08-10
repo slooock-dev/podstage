@@ -4,6 +4,26 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-08-10
+
+Needs a moonshine image rebuild (`podstage runtime build --backend
+moonshine`); the sunshine backend is unchanged.
+
+### Added
+
+- **The Guide hold time is adjustable** (200-10000 ms) next to the Setup-page
+  switch; off stores 0 and re-enabling restores the last value. A hand-set
+  `guide_hold_ms` in config.toml now shows up in the GUI instead of being
+  overwritten by the toggle.
+
+### Fixed
+
+- **Focus nudge and FPS probe survive reconnects on the moonshine backend.**
+  gamescope dies with every stream session there, taking both helpers with it,
+  so from the second connection on Big Picture navigation stayed broken after
+  game exits and the FPS row stayed empty. The entrypoint now supervises both
+  and re-asserts `mangoapp_use_output_timing` per gamescope.
+
 ## [0.5.0] - 2026-08-10
 
 ### Changed

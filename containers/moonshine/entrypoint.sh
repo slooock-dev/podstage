@@ -218,8 +218,15 @@ export PS_RESOLUTION
 # Big Picture sometimes takes controller input while focusing nothing after a
 # game exits; the watchdog drops the X input focus and hands it straight back.
 # moonshine's own reevaluate_focus does not remove the need (Deck-confirmed).
+# Supervised: it exits with gamescope's Xwayland on every stream end, and
+# without the restart every later session silently runs without it.
 if [ "${PS_FOCUS_NUDGE:-}" != disabled ]; then
-    podstage-focus-nudge &
+    (
+        while :; do
+            podstage-focus-nudge
+            sleep 1
+        done
+    ) &
 fi
 
 # The name of gamescope's control socket, newest first. A gamescope that dies
@@ -345,14 +352,22 @@ if [ "${PS_PERF_METRICS:-}" = enabled ]; then
     else
         export PS_PERF_FILE="${PS_PERF_FILE:-$HOME/.cache/podstage/perf.json}"
     fi
-    rm -f "$PS_PERF_FILE"   # stale = from a previous session
+    rm -f "$PS_PERF_FILE"   # stale = from a previous container run
+    # Supervised like the focus nudge: the probe exits with gamescope on every
+    # stream end, and each new gamescope needs mangoapp_use_output_timing 0
+    # re-asserted or it answers no perf query. gamescopectl is also the
+    # liveness gate: gamescope leaves its socket file behind, and the probe
+    # run against the dead one would log a line every second.
     (
-        wait_gamescope_socket || { log "(warning) perf probe: no gamescope socket, no FPS"; exit 0; }
-        # gamescope only answers a perf query while mangoapp_use_output_timing
-        # is 0; its 3.16 default of 1 skips the event entirely.
-        gamescopectl mangoapp_use_output_timing 0 >/dev/null 2>&1 || \
-            log "(warning) perf probe: gamescopectl failed, FPS may stay empty"
-        exec podstage-perf-probe
+        while :; do
+            wait_gamescope_socket || { log "(warning) perf probe: no gamescope socket, no FPS"; exit 0; }
+            if ! gamescopectl mangoapp_use_output_timing 0 >/dev/null 2>&1; then
+                sleep 1
+                continue
+            fi
+            podstage-perf-probe
+            sleep 1
+        done
     ) &
 fi
 
