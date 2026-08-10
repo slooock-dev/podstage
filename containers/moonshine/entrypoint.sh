@@ -144,6 +144,17 @@ layout = \"$PS_MOONSHINE_KB_LAYOUT\""
 variant = \"$PS_MOONSHINE_KB_VARIANT\""
 fi
 
+# Hold Select/Back to press Guide (Steam menu): moonshine's own hold-to-Home
+# remap. Back is withheld while held, a short tap still sends Back, and the
+# activation fires a short rumble pulse (moonshine defaults). suppress_home
+# stays off so a client that sends a real Guide keeps the direct path.
+GUIDE_BLOCK=""
+if [ "${PS_GUIDE_HOLD_MS:-2000}" -gt 0 ] 2>/dev/null; then
+    GUIDE_BLOCK="
+[stream.control.gamepad.home_button]
+hold_ms = ${PS_GUIDE_HOLD_MS:-2000}"
+fi
+
 if [ "${PS_MOONSHINE_KEEP_CONFIG:-0}" != 1 ]; then
     # inhibit_sleep is off because there is no logind in a rootless container;
     # the host is awake anyway while a session runs.
@@ -172,6 +183,7 @@ $FEC_LINE
 
 [stream.control]
 port = $PORT_CONTROL
+$GUIDE_BLOCK
 
 [stream.audio]
 port = $PORT_AUDIO
@@ -188,7 +200,8 @@ stderr = "file:$XDG_RUNTIME_DIR/app.log"
 launch_timeout_secs = 5
 EOF
     log "settings: fec=${PS_MOONSHINE_FEC:-default}" \
-        "keyboard=${PS_MOONSHINE_KB_LAYOUT:-default}${PS_MOONSHINE_KB_VARIANT:+,$PS_MOONSHINE_KB_VARIANT}"
+        "keyboard=${PS_MOONSHINE_KB_LAYOUT:-default}${PS_MOONSHINE_KB_VARIANT:+,$PS_MOONSHINE_KB_VARIANT}" \
+        "guide_hold=${PS_GUIDE_HOLD_MS:-2000}ms"
     log "wrote $CONF (http=$PORT_HTTP https=$PORT_HTTPS rtsp=$PORT_RTSP" \
         "video=$PORT_VIDEO control=$PORT_CONTROL audio=$PORT_AUDIO hdr=$HDR)"
 fi

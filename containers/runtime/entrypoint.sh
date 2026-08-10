@@ -269,6 +269,15 @@ CONF
     if [ "${PS_GAMEPAD_DS5:-}" = enabled ]; then
         echo "gamepad = ds5" >> "$SUN_CONF_DIR/sunshine.conf"
     fi
+    # Hold Select/Back for PS_GUIDE_HOLD_MS to press Guide (opens the Steam
+    # menu). For clients that cannot send Guide themselves: on a Steam Deck
+    # the local Steam consumes the button. 0 disables. Kept above
+    # PS_SUNSHINE_EXTRA so a profile's own back_button_timeout lands later
+    # in the file.
+    if [ "${PS_GUIDE_HOLD_MS:-2000}" -gt 0 ] 2>/dev/null; then
+        echo "back_button_timeout = ${PS_GUIDE_HOLD_MS:-2000}" \
+            >> "$SUN_CONF_DIR/sunshine.conf"
+    fi
     # Profile quality settings: ';'-separated "key = value" pairs appended
     # verbatim (e.g. PS_SUNSHINE_EXTRA="nvenc_preset = 4;nvenc_twopass = full_res").
     if [ -n "${PS_SUNSHINE_EXTRA:-}" ]; then

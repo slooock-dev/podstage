@@ -319,3 +319,15 @@ def test_moonshine_settings_default_to_upstreams_own():
     sc = SessionConfig(name="tv")
     assert sc.moonshine_fec_percent == -1        # -1: do not write the key
     assert sc.moonshine_keyboard_layout == ""    # empty: moonshine's "us"
+
+
+def test_guide_hold_defaults_and_roundtrip(tmp_path: Path):
+    path = tmp_path / "config.toml"
+    # No file and no key both mean the default (on, 2000 ms).
+    assert AppConfig.load(path).guide_hold_ms == 2000
+    AppConfig().save(path)
+    assert "guide_hold_ms" not in path.read_text()  # default not persisted
+    assert AppConfig.load(path).guide_hold_ms == 2000
+    # 0 (= off) is a real value: persisted, loaded back, not defaulted away.
+    AppConfig(guide_hold_ms=0).save(path)
+    assert AppConfig.load(path).guide_hold_ms == 0

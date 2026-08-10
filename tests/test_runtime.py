@@ -467,7 +467,8 @@ def test_backends_share_everything_that_is_not_backend_specific(monkeypatch):
     monkeypatch.setattr(runtime, "gpu_vendor", lambda: "nvidia")
     forwarded = {"PS_THUMBNAIL_INTERVAL": "25", "PS_DYNAMIC_RES": "disabled",
                  "PS_PERF_METRICS": "enabled", "PS_HDR": "enabled",
-                 "PS_FOCUS_NUDGE": "disabled", "PS_TOUCH_CLICK_MODE": "4"}
+                 "PS_FOCUS_NUDGE": "disabled", "PS_TOUCH_CLICK_MODE": "4",
+                 "PS_GUIDE_HOLD_MS": "1500"}
     for key, val in forwarded.items():
         monkeypatch.setenv(key, val)
     shared = {"app": "620",

@@ -4,6 +4,20 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-10
+
+Needs an image rebuild for both backends (`podstage runtime build`, then
+`podstage runtime build --backend moonshine`).
+
+### Added
+
+- **Hold Select/Back for 2 s to press the Guide button** (Steam menu, e.g.
+  to quit a game), on both backends: sunshine's `back_button_timeout` and
+  moonshine's built-in `home_button.hold_ms`, wired through
+  `PS_GUIDE_HOLD_MS` from a Setup-page switch (default on, 0 = off). Steam
+  Deck clients cannot send Guide themselves; the local Steam consumes the
+  button.
+
 ## [0.3.1] - 2026-08-10
 
 Needs a moonshine image rebuild (`podstage runtime build --backend

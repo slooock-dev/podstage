@@ -109,6 +109,10 @@ _COMMON_ENV: dict[str, str | None] = {
     # enabled, so this is forwarded only to opt out (=disabled). sunshine locks
     # the mode at the first client, moonshine re-sizes on every reconnect.
     "PS_DYNAMIC_RES": None,
+    # Hold Select/Back this long (ms) to press Guide; both entrypoints
+    # default to 2000, 0 disables (sunshine: back_button_timeout, moonshine:
+    # home_button.hold_ms). session.py always sets it from AppConfig.
+    "PS_GUIDE_HOLD_MS": None,
     # Experimental feature (config.EXPERIMENTAL_FEATURES), "enabled".
     "PS_HDR": None,
 }

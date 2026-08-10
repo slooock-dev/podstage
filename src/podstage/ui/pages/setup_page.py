@@ -229,8 +229,9 @@ class SetupPage(QWidget):
         self._close_steam = QCheckBox(tr("Close the desktop Steam when a session starts"))
         self._close_steam.setChecked(self._ctx.config.close_desktop_steam)
         self._close_steam.toggled.connect(self._on_close_steam_toggled)
-        cshint = QLabel(tr("Off doesn't close the desktop Steam when a session "
-                           "starts."))
+        cshint = QLabel(tr("Off keeps the desktop Steam running; disable its "
+                           "\"Guide Button Focuses Steam\", or the session's "
+                           "Guide presses open its Big Picture."))
         cshint.setProperty("muted", True)
         cshint.setWordWrap(True)
         slay.addWidget(self._close_steam)
@@ -272,6 +273,19 @@ class SetupPage(QWidget):
         self._perf.setChecked(self._ctx.config.perf_metrics)
         self._perf.toggled.connect(self._on_perf_toggled)
         slay.addWidget(self._perf)
+        self._guide_hold = QCheckBox(tr("Hold Select to press Guide"))
+        self._guide_hold.setToolTip(tr(
+            "Hold the controller's Select/Back button for 2 s to press the "
+            "Guide/Xbox button, which opens the Steam menu (e.g. to quit a "
+            "game). For clients that cannot send Guide themselves: on a "
+            "Steam Deck the local Steam consumes the button."))
+        self._guide_hold.setChecked(self._ctx.config.guide_hold_ms > 0)
+        self._guide_hold.toggled.connect(self._on_guide_hold_toggled)
+        ghhint = QLabel(tr("Applies at the next session start."))
+        ghhint.setProperty("muted", True)
+        ghhint.setWordWrap(True)
+        slay.addWidget(self._guide_hold)
+        slay.addWidget(ghhint)
         root.addWidget(sframe)
 
         eframe, elay = card(tr("Experimental features"))
@@ -508,6 +522,12 @@ class SetupPage(QWidget):
 
     def _on_perf_toggled(self, enabled: bool) -> None:
         self._ctx.config.perf_metrics = enabled
+        self._ctx.save()
+
+    def _on_guide_hold_toggled(self, enabled: bool) -> None:
+        # The checkbox flips default/off; a hand-tuned ms value in
+        # config.toml is lost on the next toggle here, by design.
+        self._ctx.config.guide_hold_ms = 2000 if enabled else 0
         self._ctx.save()
 
     def _on_experimental_toggled(self, key: str, enabled: bool) -> None:

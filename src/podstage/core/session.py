@@ -154,6 +154,9 @@ class Session:
         # sizes the nested gamescope per session from MOONSHINE_CLIENT_*.
         env["PS_DYNAMIC_RES"] = ("enabled" if self.cfg.dynamic_resolution
                                  else "disabled")
+        # Hold Select/Back to press Guide (Steam menu): both backends read
+        # it, each through its own config key (see runtime._COMMON_ENV).
+        env["PS_GUIDE_HOLD_MS"] = str(self.app_config().guide_hold_ms)
         # Settings that only exist on the labwc + sunshine pipeline. Setting
         # them for moonshine would be dead env, and silently pretending they
         # apply is worse than the honest gap (see containers/moonshine/).

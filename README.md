@@ -159,9 +159,15 @@ device. Its container runs under a seccomp profile derived from podman's own,
 with one syscall ungated for moonshine's DMA-BUF import cache (see
 [`containers/moonshine/README.md`](containers/moonshine/README.md)).
 
-Neither is strictly better: sunshine reaches every machine, moonshine is the
-simpler path where the GPU allows it. Neither is forked or patched; both are
-upstream projects the runtime bundles and drives.
+On both backends, holding the controller's Select/Back button for two seconds
+presses the Guide button (the Steam menu, e.g. to quit a game): sunshine's
+`back_button_timeout` and moonshine's `home_button.hold_ms`, wired to one
+Setup-page switch. Steam Deck clients need this, the Deck's local Steam
+consumes the physical Steam button. A desktop Steam left running sees the
+emulated pad too; disable "Guide Button Focuses Steam" there. For text entry
+the Deck's own on-screen keyboard (Steam+X) types into the stream; on sunshine
+this needs the mouse & keyboard input switch, moonshine always streams the
+keyboard.
 
 ```bash
 podstage session add tv --backend moonshine

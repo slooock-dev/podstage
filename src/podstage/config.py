@@ -306,6 +306,11 @@ class AppConfig:
     # Game FPS from the compositor on the Session page (PS_PERF_METRICS).
     # Read-only probe, vendor-neutral; stable since 0.2.2, on by default.
     perf_metrics: bool = True
+    # Hold Select/Back this long (ms) to press the Guide button (Steam
+    # menu); 0 disables. Both backends read it (sunshine back_button_timeout,
+    # moonshine home_button.hold_ms). Needed by clients that cannot send
+    # Guide themselves: on a Steam Deck the local Steam consumes the button.
+    guide_hold_ms: int = 2000
     # Enabled experimental features (keys from EXPERIMENTAL_FEATURES),
     # toggled on the Setup page, applied at the next session start.
     experimental: dict[str, bool] = field(default_factory=dict)
@@ -344,6 +349,7 @@ class AppConfig:
                    perf_metrics=bool(data.get(
                        "perf_metrics",
                        data.get("experimental", {}).get("perf_metrics", True))),
+                   guide_hold_ms=int(data.get("guide_hold_ms", 2000)),
                    experimental=experimental)
 
     @classmethod
@@ -386,6 +392,8 @@ class AppConfig:
             data["mouse_keyboard"] = True
         if not self.perf_metrics:
             data["perf_metrics"] = False
+        if self.guide_hold_ms != 2000:
+            data["guide_hold_ms"] = self.guide_hold_ms
         enabled = {k: True for k, v in self.experimental.items() if v}
         if enabled:
             data["experimental"] = enabled

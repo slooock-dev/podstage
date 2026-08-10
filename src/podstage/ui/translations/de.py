@@ -387,8 +387,11 @@ TEXTS: dict[str, str] = {
     "Streaming": "Streaming",
     "Close the desktop Steam when a session starts":
         "Desktop-Steam beim Start einer Session schließen",
-    "Off doesn't close the desktop Steam when a session starts.":
-        "Aus schließt das Desktop-Steam beim Start einer Session nicht.",
+    "Off keeps the desktop Steam running; disable its \"Guide Button "
+    "Focuses Steam\", or the session's Guide presses open its Big Picture.":
+        "Aus lässt das Desktop-Steam laufen; dort \"Guide Button Focuses "
+        "Steam\" deaktivieren, sonst öffnen die Guide-Drücke der Session "
+        "dessen Big Picture.",
     "Language": "Sprache",
     "Automatic (system)": "Automatisch (System)",
     "Applies after restarting the GUI.": "Wirkt nach einem Neustart der GUI.",
@@ -447,6 +450,17 @@ TEXTS: dict[str, str] = {
         "Eine Sonde im Container fragt gamescope nach der Bildzeit des "
         "laufenden Spiels und zeigt FPS auf der Session-Seite. Läuft mit jedem "
         "GPU-Hersteller; braucht ein gamescope mit Perf-Query (3.16+).",
+    "Hold Select to press Guide": "Select halten drückt Guide",
+    "Hold the controller's Select/Back button for 2 s to press the "
+    "Guide/Xbox button, which opens the Steam menu (e.g. to quit a "
+    "game). For clients that cannot send Guide themselves: on a "
+    "Steam Deck the local Steam consumes the button.":
+        "Select/Back am Controller 2 s halten drückt den Guide/Xbox-Button, "
+        "der das Steam-Menü öffnet (z.B. um ein Spiel zu beenden). Für "
+        "Clients, die selbst kein Guide senden können: am Steam Deck "
+        "konsumiert das lokale Steam die Taste.",
+    "Applies at the next session start.":
+        "Gilt ab dem nächsten Session-Start.",
     "Mouse && keyboard input": "Maus- && Tastatur-Eingabe",
     "Streams the client's mouse and keyboard into the session; games can "
     "lock the pointer for mouse look.":

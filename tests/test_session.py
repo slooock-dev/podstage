@@ -146,6 +146,15 @@ def test_options_forward_perf_metrics():
     assert "PS_PERF_METRICS" not in off
 
 
+def test_options_forward_guide_hold():
+    sc = SessionConfig(name="deck")
+    on = Session(sc, app_config=AppConfig())._options().env
+    assert on["PS_GUIDE_HOLD_MS"] == "2000"
+    # 0 must arrive as "0" (explicit off), not fall back to the default.
+    off = Session(sc, app_config=AppConfig(guide_hold_ms=0))._options().env
+    assert off["PS_GUIDE_HOLD_MS"] == "0"
+
+
 # -- backend wiring ----------------------------------------------------------
 
 def _moonshine(name="tv", **kw):
