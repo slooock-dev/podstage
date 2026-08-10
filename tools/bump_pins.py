@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Show, and with --apply write, updates for the version pins in
-containers/runtime/Containerfile: the Arch base-image digest and the
-sunshine release (tag + asset sha256).
+"""Show, and with --apply write, updates for the version pins in the
+Containerfiles: the Arch base-image digest and the sunshine release
+(tag + asset sha256) in containers/runtime/, the moonshine commit in
+containers/moonshine/. WLROOTS_VERSION stays manual: the frame-pacing
+patch must be rebased onto a new wlroots first.
 
-Stdlib only. After --apply: `podstage runtime build`, `podstage doctor`,
-then stream once against a real client before committing.
+Stdlib only. After --apply: `podstage runtime build` (both backends if the
+moonshine pin moved), `podstage doctor`, then stream once against a real
+client before committing.
 """
 
 import hashlib
@@ -15,6 +18,7 @@ import urllib.request
 from pathlib import Path
 
 CONTAINERFILE = Path(__file__).resolve().parents[1] / "containers/runtime/Containerfile"
+MS_CONTAINERFILE = Path(__file__).resolve().parents[1] / "containers/moonshine/Containerfile"
 UA = {"User-Agent": "podstage-bump-pins"}
 
 
@@ -55,25 +59,34 @@ def sunshine_latest() -> tuple[str, str]:
     raise SystemExit(f"sunshine {tag}: asset {name} not found")
 
 
+def moonshine_latest() -> str:
+    return json.loads(fetch(
+        "https://api.github.com/repos/hgaiser/moonshine/commits/HEAD"))["sha"]
+
+
 def main() -> int:
     apply = "--apply" in sys.argv
     text = CONTAINERFILE.read_text()
+    ms_text = MS_CONTAINERFILE.read_text()
     pins = {
         "base": re.search(r"archlinux:latest@(sha256:[0-9a-f]+)", text).group(1),
         "sunshine": re.search(r"SUNSHINE_VERSION=(\S+)", text).group(1),
         "sunshine_sha": re.search(r"SUNSHINE_SHA256=([0-9a-f]+)", text).group(1),
+        "moonshine": re.search(r"MOONSHINE_VERSION=([0-9a-f]+)", ms_text).group(1),
     }
     new_base = arch_digest()
     sun_tag, sun_sha = sunshine_latest()
+    ms_sha = moonshine_latest()
 
     rows = [
         ("base image", pins["base"][:19], new_base[:19], pins["base"] != new_base),
         ("sunshine", pins["sunshine"], sun_tag, pins["sunshine"] != sun_tag),
+        ("moonshine", pins["moonshine"][:12], ms_sha[:12], pins["moonshine"] != ms_sha),
     ]
     for name, cur, new, changed in rows:
         print(f"{name:12} {cur:22} -> {new:22} {'UPDATE' if changed else 'current'}")
     if not apply:
-        print("\nDry run; --apply writes the Containerfile.")
+        print("\nDry run; --apply writes the Containerfiles.")
         return 0
 
     text = text.replace(pins["base"], new_base)
@@ -82,8 +95,12 @@ def main() -> int:
     text = text.replace(f"SUNSHINE_SHA256={pins['sunshine_sha']}",
                         f"SUNSHINE_SHA256={sun_sha}")
     CONTAINERFILE.write_text(text)
-    print("\nContainerfile updated. Next: podstage runtime build && podstage doctor, "
-          "then stream once before committing.")
+    ms_text = ms_text.replace(f"MOONSHINE_VERSION={pins['moonshine']}",
+                              f"MOONSHINE_VERSION={ms_sha}")
+    MS_CONTAINERFILE.write_text(ms_text)
+    print("\nContainerfiles updated. Next: podstage runtime build (both backends "
+          "if moonshine moved) && podstage doctor, then stream once before "
+          "committing.")
     return 0
 
 
