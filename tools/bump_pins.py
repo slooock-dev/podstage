@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Show, and with --apply write, updates for the version pins in the
 Containerfiles: the Arch base-image digest and the sunshine release
-(tag + asset sha256) in containers/runtime/, the moonshine commit in
+(tag + asset sha256) in containers/runtime/, the moonshine release tag in
 containers/moonshine/. WLROOTS_VERSION stays manual: the frame-pacing
 patch must be rebased onto a new wlroots first.
 
@@ -60,8 +60,7 @@ def sunshine_latest() -> tuple[str, str]:
 
 
 def moonshine_latest() -> str:
-    return json.loads(fetch(
-        "https://api.github.com/repos/hgaiser/moonshine/commits/HEAD"))["sha"]
+    return gh_latest("hgaiser/moonshine")["tag_name"]
 
 
 def main() -> int:
@@ -72,16 +71,16 @@ def main() -> int:
         "base": re.search(r"archlinux:latest@(sha256:[0-9a-f]+)", text).group(1),
         "sunshine": re.search(r"SUNSHINE_VERSION=(\S+)", text).group(1),
         "sunshine_sha": re.search(r"SUNSHINE_SHA256=([0-9a-f]+)", text).group(1),
-        "moonshine": re.search(r"MOONSHINE_VERSION=([0-9a-f]+)", ms_text).group(1),
+        "moonshine": re.search(r"MOONSHINE_VERSION=(\S+)", ms_text).group(1),
     }
     new_base = arch_digest()
     sun_tag, sun_sha = sunshine_latest()
-    ms_sha = moonshine_latest()
+    ms_tag = moonshine_latest()
 
     rows = [
         ("base image", pins["base"][:19], new_base[:19], pins["base"] != new_base),
         ("sunshine", pins["sunshine"], sun_tag, pins["sunshine"] != sun_tag),
-        ("moonshine", pins["moonshine"][:12], ms_sha[:12], pins["moonshine"] != ms_sha),
+        ("moonshine", pins["moonshine"], ms_tag, pins["moonshine"] != ms_tag),
     ]
     for name, cur, new, changed in rows:
         print(f"{name:12} {cur:22} -> {new:22} {'UPDATE' if changed else 'current'}")
@@ -96,7 +95,7 @@ def main() -> int:
                         f"SUNSHINE_SHA256={sun_sha}")
     CONTAINERFILE.write_text(text)
     ms_text = ms_text.replace(f"MOONSHINE_VERSION={pins['moonshine']}",
-                              f"MOONSHINE_VERSION={ms_sha}")
+                              f"MOONSHINE_VERSION={ms_tag}")
     MS_CONTAINERFILE.write_text(ms_text)
     print("\nContainerfiles updated. Next: podstage runtime build (both backends "
           "if moonshine moved) && podstage doctor, then stream once before "

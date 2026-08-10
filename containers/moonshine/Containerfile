@@ -45,8 +45,8 @@ RUN pacman -Syu --noconfirm && \
 # Everything in one layer: the release target dir is >5 GB and only the
 # artifacts are worth keeping.
 #
-# Pinned to a commit, not to the v0.13.5 release: that release's CLI is just
-# `moonshine <config>`, while this commit adds the `healthcheck` subcommand and
+# Pinned to the release tag (tools/bump_pins.py tracks the latest). Needs at
+# least v0.15.0: its CLI adds the `healthcheck` subcommand and
 # `--no-health-check`. `--no-health-check` is what the pipeline mode needs (the
 # full check aborts on the missing logind); the `healthcheck` subcommand is a
 # manual diagnostic via PS_MODE=healthcheck, reporting render node, EGL, Vulkan
@@ -58,10 +58,10 @@ RUN pacman -Syu --noconfirm && \
 # moonshine-bench drives the compositor and encode pipeline WITHOUT a Moonlight
 # client, the only way to get encode numbers out of a headless machine, and
 # the instrument behind the throughput table in the README.
-# v0.15.0. Below 749a663a the Vulkan import cache trusts the raw fd number and
+# Below 749a663a the Vulkan import cache trusts the raw fd number and
 # re-encodes stale frames; from there on it validates with kcmp(2), which the
 # session has to allow (core/backends.py, needs_kcmp).
-ARG MOONSHINE_VERSION=77db826d8cab24b80e9e468b566f9c90d65a76e7
+ARG MOONSHINE_VERSION=v0.15.0
 # CARGO_HOME stays inside the RUN rather than an ENV: an ENV would survive into
 # the final image, and there is no way to unset one afterwards (setting it
 # empty leaves an empty value behind, which is worse than not having it).
