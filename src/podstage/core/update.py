@@ -22,7 +22,6 @@ class UpdateInfo:
     latest: str            # latest release tag without the leading "v"
     is_newer: bool
     url: str               # release page of the latest version
-    notes: str             # release body (markdown)
     mentions_image_rebuild: bool
 
 
@@ -58,6 +57,5 @@ def check_latest(timeout: float = 8.0) -> UpdateInfo:
         latest=tag.lstrip("v"),
         is_newer=parse_version(tag) > parse_version(__version__),
         url=str(data.get("html_url") or RELEASES_URL),
-        notes=notes,
         mentions_image_rebuild=_mentions_image_rebuild(notes),
     )

@@ -103,7 +103,6 @@ class Backend:
                   it and panics on the first cache hit without it.
                   core/runtime.py answers this with a derived profile, not with
                   CAP_SYS_PTRACE (see there)
-    summary       one line for `podstage sandbox list` / the GUI
     """
 
     name: str
@@ -120,7 +119,6 @@ class Backend:
     full_dev: bool
     vulkan_video: bool
     needs_kcmp: bool
-    summary: str
 
     def web_port(self, base: int) -> int | None:
         return None if self.web_port_off is None else base + self.web_port_off
@@ -158,7 +156,6 @@ SUNSHINE = Backend(
     full_dev=False,          # /dev/uinput + /dev/input suffice
     vulkan_video=False,
     needs_kcmp=False,
-    summary="labwc + gamescope + sunshine (NVENC/VAAPI), works on every supported GPU",
 )
 
 MOONSHINE = Backend(
@@ -178,7 +175,6 @@ MOONSHINE = Backend(
     full_dev=True,           # inputtino: /dev/uhid + the hidraw node
     vulkan_video=True,
     needs_kcmp=True,         # kcmp(2) for the DMA-BUF import cache
-    summary="moonshine's own compositor + Vulkan Video, needs NVIDIA RTX, AMD RDNA2+ or Intel Arc",
 )
 
 BACKENDS: dict[str, Backend] = {b.name: b for b in (SUNSHINE, MOONSHINE)}

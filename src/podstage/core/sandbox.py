@@ -31,7 +31,6 @@ class SandboxInfo:
     name: str
     home: Path
     exists: bool
-    bootstrapped: bool
     logged_in: bool
     paired: list[str]
     size_bytes: int | None = None  # filled separately — du can take seconds
@@ -101,7 +100,6 @@ def inspect(cfg: config.SessionConfig) -> SandboxInfo:
         name=cfg.name,
         home=home,
         exists=home.is_dir(),
-        bootstrapped=is_bootstrapped(home),
         logged_in=steam_logged_in(home),
         paired=paired_clients(home, cfg.backend),
     )
