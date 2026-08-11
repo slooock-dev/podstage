@@ -28,12 +28,9 @@ LOGINUSERS = ".local/share/Steam/config/loginusers.vdf"
 
 @dataclass
 class SandboxInfo:
-    name: str
-    home: Path
     exists: bool
     logged_in: bool
     paired: list[str]
-    size_bytes: int | None = None  # filled separately — du can take seconds
 
 
 def _moonshine_state(home: Path) -> dict:
@@ -97,8 +94,6 @@ def steam_logged_in(home: Path) -> bool:
 def inspect(cfg: config.SessionConfig) -> SandboxInfo:
     home = cfg.home_dir()
     return SandboxInfo(
-        name=cfg.name,
-        home=home,
         exists=home.is_dir(),
         logged_in=steam_logged_in(home),
         paired=paired_clients(home, cfg.backend),

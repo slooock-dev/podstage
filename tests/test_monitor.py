@@ -66,7 +66,7 @@ def test_game_perf_reads_probe_sample(tmp_path):
         "samples": 59, "fps": 59.4}))
     perf = monitor.game_perf(tmp_path / "perf.json")
     assert perf is not None
-    assert perf.app_id == 620 and perf.samples == 59 and perf.fps == 59.4
+    assert perf.samples == 59 and perf.fps == 59.4
 
 
 def test_game_perf_idle_window_is_not_an_error(tmp_path):
@@ -74,7 +74,7 @@ def test_game_perf_idle_window_is_not_an_error(tmp_path):
     _write_perf(tmp_path, json.dumps({"schema": 1, "app_id": 769, "samples": 0}))
     perf = monitor.game_perf(tmp_path / "perf.json")
     assert perf is not None
-    assert perf.samples == 0 and perf.fps is None and perf.app_id == 769
+    assert perf.samples == 0 and perf.fps is None
 
 
 def test_game_perf_stale_file_is_dropped(tmp_path):
@@ -95,7 +95,7 @@ def test_game_perf_ignores_nonsense_values(tmp_path):
     _write_perf(tmp_path, json.dumps({"app_id": 0, "samples": 3, "fps": 0}))
     perf = monitor.game_perf(tmp_path / "perf.json")
     assert perf is not None
-    assert perf.app_id is None and perf.fps is None
+    assert perf.fps is None
 
 
 # -- host CPU / RAM ---------------------------------------------------------

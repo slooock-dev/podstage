@@ -303,7 +303,6 @@ class GamePerf:
     """One perf-probe window. ``samples == 0`` is a real answer: the probe is
     alive and nothing presented a frame (paused game, static menu)."""
 
-    app_id: int | None = None
     samples: int = 0
     fps: float | None = None
 
@@ -321,11 +320,9 @@ def game_perf(path: Path = PERF_FILE) -> GamePerf | None:
         return None
     if not isinstance(data, dict):
         return None
-    app_id = data.get("app_id")
     samples = data.get("samples")
     fps = data.get("fps")
     return GamePerf(
-        app_id=app_id if isinstance(app_id, int) and app_id > 0 else None,
         samples=samples if isinstance(samples, int) and samples > 0 else 0,
         fps=float(fps) if isinstance(fps, (int, float)) and fps > 0 else None,
     )

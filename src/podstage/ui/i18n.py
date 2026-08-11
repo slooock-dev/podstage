@@ -69,10 +69,6 @@ def set_language(override: str | None = None) -> str:
     return _active
 
 
-def current() -> str:
-    return _active
-
-
 def tr(text: str, /, **kwargs: object) -> str:
     """Translate ``text`` into the active language, then ``str.format`` it.
 

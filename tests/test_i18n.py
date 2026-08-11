@@ -85,7 +85,9 @@ def test_unknown_language_falls_back_to_english(monkeypatch):
 def test_set_language_and_current(monkeypatch):
     _clear_locale(monkeypatch)
     assert i18n.set_language("de") == "de"
-    assert i18n.current() == "de"
+    assert i18n.tr("Preview") == "Vorschau"
+    assert i18n.set_language("en") == "en"
+    assert i18n.tr("Preview") == "Preview"
 
 
 # -- translation lookup -----------------------------------------------------
