@@ -40,10 +40,6 @@ from ..i18n import tr
 from ..widgets import card
 from ..workers import start_action
 
-# Columns of the sandbox table, declared in one place: key, label, whether the
-# column takes the leftover width, and whether its value is right-aligned.
-# Only Name and Pairings vary in length, everything else is a short fixed
-# token, so those two take the leftover width and the rest is sized to fit.
 # Labels are callables so tr() still sees literals (the i18n catalog test
 # scans for them) while resolving after the language is set.
 #

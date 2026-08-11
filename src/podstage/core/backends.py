@@ -47,19 +47,10 @@ def ports(base: int) -> dict[str, int]:
     return {name: base + off for name, off in PORT_OFFSETS.items()}
 
 
-# An underscore in the announced name makes moonlight-qt drop the session, and
-# it does so silently at every layer: the service is announced correctly, the
-# client queries, receives PTR, SRV, TXT and A in one packet within 0.1 s,
-# caches them, and lists no host. Nothing on either side logs a word, so the
-# session simply looks absent. moonlight-android is NOT affected, it resolves
-# the SRV explicitly, so a phone that finds the session proves nothing about
-# the desktop clients.
-#
-# A profile name plausibly carries an underscore ("sandbox_steam"), so a safe
-# separator is not enough, the whole name has to pass through here. The kept
-# set is deliberately narrow: the failure mode is invisible and a plainer
-# label costs nothing. `isalnum` keeps non-ASCII letters, so "Wohnzimmer-Süd"
-# survives. Established by A/B/A measurement, see the commit that added this.
+# Moonlight-qt drops a session whose mDNS name contains an underscore,
+# without logging anything; moonlight-android accepts it, so a phone
+# test proves nothing. safe_name keeps only alphanumerics (unicode
+# letters included) and "-".
 _NAME_KEEP = "-"
 
 
@@ -98,11 +89,8 @@ class Backend:
                   /dev/hidraw* node appearing with them, which cannot be
                   pre-mounted)
     vulkan_video  requires a Vulkan video-encode queue on the GPU
-    needs_kcmp    needs kcmp(2), which podman's default seccomp profile blocks;
-                  moonshine validates every cached Vulkan DMA-BUF import with
-                  it and panics on the first cache hit without it.
-                  core/runtime.py answers this with a derived profile, not with
-                  CAP_SYS_PTRACE (see there)
+    needs_kcmp    moonshine imports frames via kcmp; see SECCOMP_PROFILE in
+                  core/runtime.py
     """
 
     name: str

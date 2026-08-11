@@ -255,11 +255,8 @@ class SetupPage(QWidget):
                            "Applies at the next session start."))
         mkhint.setProperty("muted", True)
         mkhint.setWordWrap(True)
-        # Its own line, not a tail on the sentence above: the switch gates the
-        # virtual mouse/keyboard sunshine creates, while moonshine feeds the
-        # client's input straight into its compositor seat and has nothing to
-        # switch off. A setting that silently does nothing on one backend has
-        # to say so where it is read, not only in the docs.
+        # sunshine-only: gates the virtual mouse/keyboard sunshine creates.
+        # moonshine has no equivalent; the switch silently does nothing there.
         mkbackend = QLabel(tr("sunshine only."))
         mkbackend.setProperty("muted", True)
         mkbackend.setWordWrap(True)
@@ -439,12 +436,8 @@ class SetupPage(QWidget):
             self._headline.setText(tr("Ready, {warns} warning(s).", warns=warns))
         else:
             self._headline.setText(tr("All set ✓"))
-        # Grouped, but still one list on one page: the headline above counts
-        # across every group, so a failure can never hide behind a heading the
-        # way it would behind a tab. Every backend gets a group whether a
-        # profile uses it or not; being unused only lowers the severity to
-        # INFO, so the row states its gap without turning the summary red
-        # (doctor.run_all).
+        # Grouped display, but still one flat list: the headline above counts
+        # across every group.
         for group, rows in doctor.by_group(self._results):
             self._checks_box.addWidget(self._group_heading(_group_label(group)))
             for r in rows:
@@ -461,8 +454,7 @@ class SetupPage(QWidget):
     def _check_row(self, r: doctor.CheckResult) -> QWidget:
         row = QWidget()
         h = QHBoxLayout(row)
-        # Indented under its group heading, so the grouping reads as structure
-        # and not as an unrelated label dropped between rows.
+        # Indented under its group heading so the grouping reads as structure.
         h.setContentsMargins(10, 0, 0, 0)
         h.setSpacing(8)
         glyph_text, status = _GLYPH[r.status]
@@ -485,10 +477,7 @@ class SetupPage(QWidget):
         if r.status is doctor.Status.OK:
             return None
         if r.name in ("image", "moonshine image"):
-            # Also at INFO (an unused backend's image): building is
-            # preparation, not repair, and that image is the one you build
-            # before switching a profile to it. doctor omits the fix string
-            # there so `podstage setup` stays quiet about it.
+            # Shown even at INFO: building an unused backend's image is preparation, not repair.
             backend = (backends.MOONSHINE.name if r.name.startswith("moonshine")
                        else backends.SUNSHINE.name)
             btn = QPushButton(tr("Build image"))

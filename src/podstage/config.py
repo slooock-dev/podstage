@@ -36,12 +36,11 @@ CONFIG_FILE = CONFIG_DIR / "config.toml"
 RUNTIME_SHARE_DIR = _xdg("XDG_RUNTIME_DIR", DATA_DIR / "runtime") / "podstage"
 
 # Streaming Steam instances get their own $HOME so a second Steam can run
-# concurrently with the desktop one (Steam is single-instance per HOME). These
-# sandboxes hold a logged-in Steam and grow to gigabytes, so by default they
-# live in a `homes/` next to the podstage source (the repo root for a source
-# checkout, matching .gitignore's /homes/) — NOT directly in $HOME. Override
-# per install via config.toml's `sessions_home_root`; move an existing set with
-# set_sessions_home_root().
+# concurrently with the desktop one (Steam is single-instance per HOME).
+# These sandboxes hold a logged-in Steam and grow to gigabytes, so by
+# default they live in a `homes/` next to the podstage source (matching
+# .gitignore's /homes/), not directly in $HOME. Override per install via
+# config.toml's `sessions_home_root`.
 def _default_sessions_home_root() -> Path:
     repo_root = Path(__file__).resolve().parents[2]
     if (repo_root / "pyproject.toml").exists():
@@ -105,8 +104,7 @@ def overlay_dirs(home_dir: Path, library_path: Path) -> tuple[Path, Path]:
     root = overlay_root(home_dir) / f"{library_path.parent.name}-{slug}"
     return root / "upper", root / "work"
 
-# sunshine web-UI login. Generated once per install — there is deliberately no
-# fixed default ("podstage/podstage" was a LAN-reachable known credential).
+# Generated per install; a fixed default would be a known LAN-reachable credential.
 WEB_CREDENTIALS_FILE = DATA_DIR / "runtime" / "web_credentials.json"
 
 
@@ -219,9 +217,7 @@ class SessionConfig:
     # to live changes through the web API (which die with the container).
     # sunshine backend only; moonshine has its own two settings below.
     sunshine_extra: dict[str, str] = field(default_factory=dict)
-    # moonshine backend only. Both keys were verified against the server:
-    # it ignores unknown keys silently but rejects a wrong type, so a type
-    # error proves the key is really read.
+    # moonshine ignores unknown config keys silently.
     #
     # Forward error correction in percent (stream.video.fec_percentage).
     # -1 keeps moonshine's own default, which is deliberate: the value is not
@@ -340,12 +336,10 @@ class AppConfig:
                    sessions_home_root=data.get("sessions_home_root", ""),
                    close_desktop_steam=data.get("close_desktop_steam", True),
                    preview_keep_last=data.get("preview_keep_last", True),
-                   # mouse_input was experimental before it graduated
+                   # Legacy experimental keys: still honoured when loading older configs.
                    mouse_keyboard=bool(data.get(
                        "mouse_keyboard",
                        data.get("experimental", {}).get("mouse_input", False))),
-                   # perf_metrics graduated in 0.3 (default on; an old config
-                   # that had the experimental key enabled stays on too)
                    perf_metrics=bool(data.get(
                        "perf_metrics",
                        data.get("experimental", {}).get("perf_metrics", True))),

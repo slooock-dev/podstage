@@ -16,11 +16,8 @@ Everything here is readable as the plain user (the container is rootless):
     Compositor-side, so it is the one performance number that reads the same on
     NVIDIA, AMD and Intel.
 
-There is deliberately NO connected-client detection: sunshine's media path is
-unconnected UDP (no socket peer to read), and every heuristic tried around
-that (conntrack remnants, send-queue sampling, NVENC attribution) flickered —
-complexity without real value. The NVENC session count in the GPU stats is
-the honest "something is encoding" signal.
+No connected-client detection: the stream is unconnected UDP, there is no
+socket peer. The NVENC session count is the only honest signal.
 """
 
 import json
@@ -222,12 +219,6 @@ def _intel_gpu_stats() -> GpuStats | None:
 
 
 # -- host CPU / RAM ---------------------------------------------------------
-#
-# Whole machine, not the session's cgroup. Two reasons. It answers the question
-# the panel is there for, namely whether this box still has room to encode and
-# stream, and the desktop's own load counts towards that. And it needs nothing
-# from the container, so it works on both backends: locating the cgroup means
-# finding the session compositor, and moonshine runs none.
 
 def _proc_stat_cpu() -> tuple[int, int] | None:
     """``(busy, total)`` jiffies from the aggregate ``cpu`` line."""

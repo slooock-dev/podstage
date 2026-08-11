@@ -35,10 +35,8 @@ class Status(str, Enum):
     OK = "OK"
     WARN = "WARN"
     FAIL = "FAIL"
-    # Neither good nor bad: a fact about a path this install does not take,
-    # such as a backend no profile uses. Reported so the choice can be made
-    # informed, but never counted as a blocker or a warning, and never
-    # dressed up in green when what it states is "this cannot run here".
+    # A fact about a path this install does not take; see run_all() for how
+    # severity is decided.
     INFO = "INFO"
 
 
@@ -142,11 +140,8 @@ def check_image() -> CheckResult:
 
 # -- moonshine backend ------------------------------------------------------
 #
-# Every backend is checked on every run, whether a profile uses it or not, so
-# the Setup page answers "can this machine do moonshine at all" BEFORE anyone
-# picks it. What the profiles use only decides severity: a prerequisite the
-# install does not need yet is stated, not flagged, so an unused backend can
-# never turn `podstage doctor` red.
+# Every backend is checked regardless of what the profiles use; unused only
+# lowers severity, see run_all().
 
 MOONSHINE_BUILD_FIX = "podstage runtime build --backend moonshine"
 
@@ -572,10 +567,8 @@ def check_sunshine_conflict() -> CheckResult:
     return CheckResult("sunshine-conflict", Status.OK, "no always-on sunshine service")
 
 
-# (check, group), in the order they are meant to be worked through: the host
-# has to be right before any backend can stream. The group belongs to the
-# check, not to a single outcome, so it is stamped onto the result in
-# run_all() rather than repeated at every CheckResult call site.
+# (check, group) pairs, in host-first order; group is stamped onto the
+# result in run_all() rather than repeated at every CheckResult call site.
 ALL_CHECKS: list[tuple[Callable[[], CheckResult], str]] = [
     (check_podman, GROUP_HOST),
     (check_cdi, GROUP_HOST),

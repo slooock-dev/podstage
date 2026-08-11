@@ -16,10 +16,6 @@ Language selection, highest priority first:
 2. the ``PS_LANG`` environment variable
 3. the system locale (``LC_ALL`` / ``LC_MESSAGES`` / ``LANG`` / ``LANGUAGE``)
 4. English
-
-Runtime language switching is intentionally not supported — the GUI reads the
-choice once at startup and applies a new one on the next launch. That keeps
-:func:`tr` a trivial dict lookup and avoids re-translating a live widget tree.
 """
 
 import os

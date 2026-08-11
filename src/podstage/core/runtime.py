@@ -18,8 +18,7 @@ which holds everything that differs; the profile picks one):
 
 The container is ROOTLESS (``--userns=keep-id`` — it runs as this user, no
 sudo, no root store). The kernel delivers no udev uevents into a rootless user
-namespace, which historically forced a rootful container for input hotplug.
-Three mechanisms make input work rootless instead:
+namespace. Three mechanisms make input work rootless instead:
 
   * labwc/libinput hotplug — the seat-shim fakes the udev monitor via inotify
     on the bind-mounted /dev/input (``PS_FAKE_UDEV=1``); device *enumeration*
@@ -392,9 +391,8 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
     # GE-/CachyOS-Proton pop a BLOCKING Zenity box ("Creating swapchain for
     # non-Gamescope swapchain. Hooking has failed somewhere!") when the
     # gamescope WSI-bypass layer fails to hook inside our nested gamescope —
-    # headless nobody can click it, so the launch hangs. (Valve Proton doesn't
-    # ship that check, hence it "just works".) Neither backend uses the
-    # bypass, so disable the layer. It inherits down gamescope → Steam →
+    # headless nobody can click it, so the launch hangs. Neither backend uses
+    # the bypass, so disable the layer. It inherits down gamescope → Steam →
     # pressure-vessel → game. PS_GAMESCOPE_WSI=enabled re-enables it.
     if opts.env.get("PS_GAMESCOPE_WSI", os.environ.get("PS_GAMESCOPE_WSI")) != "enabled":
         env["DISABLE_GAMESCOPE_WSI"] = "1"
@@ -568,8 +566,7 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     vendor = vendor or gpu_vendor()
     if vendor in MESA_VENDORS:
         # AMD/Intel: plain DRI nodes; Mesa Vulkan (RADV/ANV) + VAAPI userspace
-        # is baked into the image (no host-version coupling like NVIDIA). AMD
-        # is validated on a Rembrandt iGPU; Intel on an Arc B580.
+        # is baked into the image (no host-version coupling like NVIDIA).
         args = [
             "--device", "/dev/dri",
             "--security-opt", "label=disable",
@@ -619,12 +616,9 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     ]
     if vendor not in MESA_VENDORS:
         args += nvidia_lib32_mounts()
-    # Shared host libraries are overlay mounts (:O): read-only lowerdir =
-    # host library, per-sandbox upperdir (config.overlay_dirs) for writes.
-    # Resolves the old rw-vs-ro dilemma: :ro killed every pending update
-    # with "Disk write failure" (Steam won't launch an app with one
-    # pending), rw let the sandbox write into host game files. The
-    # provisioner purges an app's upper once the host manifest catches up.
+    # :ro breaks pending updates ("Disk write failure"); plain rw lets the
+    # sandbox write into host game files. The overlay gives Steam a
+    # writable view while the host library stays untouched.
     for p in library_paths:
         upper, work = config.overlay_dirs(home_dir, p)
         args += ["-v", f"{p}:{p}:O,upperdir={upper},workdir={work}"]
@@ -654,12 +648,8 @@ def runtime_src_dir(backend: str = backends.DEFAULT) -> Path:
     return udev.REPO_ROOT / backends.get(backend).src_subdir
 
 
-# Documentation under containers/ is not part of an image. Hashing it made a
-# typo fix in a README report both images as stale, and rebuilding moonshine
-# means compiling it from source, so the cheap change had the expensive
-# consequence. Everything the build actually reads (Containerfiles, scripts,
-# seat-shim.c, configs) still counts, and the rule is deliberately crude: a
-# suffix, not a guess at which lines of a file matter.
+# Docs are not image inputs: a README edit must not flag the image
+# stale (moonshine rebuilds from source on a stale hash).
 _SRC_HASH_SKIP_SUFFIXES = (".md",)
 
 
@@ -760,14 +750,9 @@ def build_image(image: str = "", backend: str = backends.DEFAULT, *,
 
 # -- mDNS discovery ---------------------------------------------------------
 
-# Host name the announced service points at, instead of the machine's own.
-# The machine name resolves to every address avahi knows for it, which on the
-# box running podstage includes 127.0.0.1 (from the `lo` announcement) and a
-# scope-less link-local IPv6 that is not reachable at all. A moonlight client
-# on that same machine then lists no host, and as silently as the underscore
-# above. Remote clients never see the difference, they only get the
-# interface-scoped announcement. Established by A/B/A measurement, see the
-# commit that added this.
+# Fixed mDNS instance name. The machine's own hostname resolves to
+# 127.0.0.1 plus an unreachable link-local here; moonlight then lists
+# no host at all, silently.
 STREAM_HOSTNAME = "podstage-stream.local"
 
 
@@ -824,11 +809,8 @@ def _kill_pid(pid: int | None, expect: str = "avahi-publish-service") -> None:
     except (ProcessLookupError, PermissionError):
         return
     # Reap it: in the long-lived GUI the publishers are children of this
-    # process, and a killed child stays a zombie until someone waits for it.
-    # WNOHANG with a short budget rather than a blocking wait, so a process
-    # that ignores the signal cannot freeze the caller. ChildProcessError
-    # means it is not ours (a pid from a state file an earlier run wrote),
-    # which is fine, there is nothing to reap then.
+    # process and stay a zombie until waited for. WNOHANG with a short
+    # budget avoids blocking; ChildProcessError just means it wasn't ours.
     for _ in range(20):
         try:
             if os.waitpid(pid, os.WNOHANG)[0]:
@@ -875,7 +857,7 @@ def clear_state() -> None:
     state = load_state()
     if state:
         _kill_pid(state.get("publisher_pid"))
-        # Missing in state files written before the host publisher existed.
+        # Absent in older state files.
         _kill_pid(state.get("publisher_host_pid"), expect="avahi-publish-address")
     STATE_FILE.unlink(missing_ok=True)
 

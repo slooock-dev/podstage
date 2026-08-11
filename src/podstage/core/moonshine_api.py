@@ -1,17 +1,14 @@
 """Thin client for the moonshine backend's HTTP endpoints.
 
 The counterpart to :mod:`podstage.core.sunshine_api`, and deliberately much
-smaller, because moonshine exposes much less:
-
-===============  ==========================================  ==========================
-                 sunshine                                    moonshine
-===============  ==========================================  ==========================
-pair             ``POST https://…:47990/api/pin``, TLS +     ``POST http://…:<base>/submit-pin``,
-                 basic auth, JSON                            plain HTTP, **no auth**, form body
-no attempt       returns true anyway (hence pair_verified)   ``400 Failed to register PIN.``
-config           ``POST /api/config`` + ``/api/restart``     none (config.toml, needs a restart)
-paired state     state.json in the sandbox HOME              state.toml in the sandbox HOME
-===============  ==========================================  ==========================
+smaller, because moonshine exposes much less: pairing is
+``POST http://…:<base>/submit-pin`` over plain HTTP with no auth and a form
+body (sunshine: TLS + basic auth, JSON, ``…:47990/api/pin``); a failed attempt
+returns ``400 Failed to register PIN.`` where sunshine returns true anyway
+(hence ``pair_verified``); there is no config endpoint, settings live in
+config.toml and need a restart (sunshine applies them live via
+``POST /api/config`` + ``/api/restart``); paired state is state.toml in the
+sandbox HOME, sunshine's is state.json.
 
 There is nothing to authenticate against here: the endpoint sits on the same
 port moonlight talks to and takes anyone's PIN. That is moonshine's model, not

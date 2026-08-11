@@ -35,13 +35,9 @@ def repolish(w: QWidget) -> None:
 
 
 # -- stepper arrows ---------------------------------------------------------
-# Styling a widget through a stylesheet drops Qt's own rendering of its
-# sub-controls, so spin boxes and combos need their arrows supplied here. Qt
-# cannot draw a triangle from a stylesheet: the CSS border trick that works in
-# browsers comes out as a small filled rectangle (verified). So the arrows are
-# painted to real files in the cache dir at startup and the stylesheet points
-# at those, which keeps the theme self-contained without committing binary
-# assets and lets the colour follow the palette above.
+# Qt stylesheets suppress the native sub-control rendering and cannot
+# draw a triangle, so arrow pixmaps are painted to cache files at
+# startup and referenced by path.
 _ARROW_W, _ARROW_H = 9, 5
 
 

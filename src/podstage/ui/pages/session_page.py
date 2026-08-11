@@ -196,11 +196,8 @@ class SessionPage(QWidget):
 
         self._game = InfoRow(tr("Game"))
         self._resolution = InfoRow(tr("Resolution"))
-        # The backend is a per-profile setting, not just a status line, and it
-        # belongs here as well as in the profile dialog: comparing the two is
-        # exactly what this page is for. Editable while stopped; while a
-        # session runs it shows the running backend and locks, since a switch
-        # could not take effect anyway.
+        # Per-profile setting, shown here and in the profile dialog. Editable
+        # while stopped; locked and showing the running backend while running.
         self._backend_row = QWidget()
         brow = QHBoxLayout(self._backend_row)
         brow.setContentsMargins(0, 0, 0, 0)
@@ -329,10 +326,7 @@ class SessionPage(QWidget):
         # -1 is the minimum so it can carry the special text: 0 is a real
         # setting of its own ("no FEC"), not a stand-in for "leave default".
         self._fec.setRange(-1, 100)
-        # Spell the default out, because the value one step below it is 0,
-        # which switches error correction OFF entirely. Without the number the
-        # safe setting and the most harmful one in the box sit next to each
-        # other and read alike.
+        # Spell the default out: the adjacent value (0) turns FEC off entirely.
         self._fec.setSpecialValueText(
             tr("moonshine default ({pct} %)", pct=config.MOONSHINE_FEC_DEFAULT))
         self._fec.setSuffix(" %")
@@ -583,11 +577,6 @@ class SessionPage(QWidget):
         self._game.set(snap.game.name if snap.game else
                        (tr("Big Picture / menu") if snap.running else None))
         self._update_resolution(snap.running)
-        # The row means the streaming backend, not the container state: one
-        # word with two meanings in the same window is worse than no row.
-        # Running: what the container actually runs, box locked, since
-        # switching cannot take effect. Stopped: the profile's choice,
-        # editable.
         sc = self._profile()
         self._set_backend_combo(snap.backend if snap.running
                                 else (sc.backend if sc else backends.DEFAULT))
