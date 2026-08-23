@@ -318,6 +318,19 @@ start_seatd
 export WLR_BACKENDS=headless,libinput
 export WLR_LIBINPUT_NO_DEVICES=1
 
+# Input mirror (gamepad_reconnect experimental feature): /dev/input is a
+# tmpfs, the real nodes sit at /dev/input-real; the mirror keeps the tmpfs
+# populated with symlinks so pad-bounce can fake a pad unplug/replug (see
+# input-mirror.c). Supervised: without it, new devices silently never reach
+# the session.
+if [ -d /dev/input-real ]; then
+    (while true; do
+        podstage-input-mirror /dev/input-real /dev/input 2>&1 | sed 's/^/[input-mirror] /' >&2
+        log "input-mirror exited, restarting"
+        sleep 1
+    done) &
+fi
+
 # Keeper: one silent pointer device for the whole session, so the seat's
 # POINTER capability never drops while Sunshine's virtual devices come and
 # go. Without it, gamescope's input thread releases and recreates its

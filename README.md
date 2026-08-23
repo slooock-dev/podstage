@@ -143,6 +143,7 @@ flowchart TB
 | pairing (podstage does it) | web UI or CLI, TLS + login | CLI only, plain HTTP, no auth |
 | mouse & keyboard | per-install toggle, host layout | always streamed, layout per profile (XKB) |
 | gamepad | Xbox pad; DualSense via the `gamepad_ds5` switch | its own inputtino pad, no switch |
+| mid-game pad reconnect | `gamepad_reconnect` switch (Xbox pad) | not available (hidraw) |
 | render size | first client's mode, locked until restart | the connecting client's mode, per connect |
 | image | `podstage-runtime` (about 3 GB) | `podstage-moonshine` (about 4 GB), built on top of it |
 
@@ -341,9 +342,10 @@ podstage can tighten.
 Everything runs as your user; after the one-time setup, nothing needs root. The
 container is a compatibility sandbox, not a security boundary: it shares your
 network and the real `/dev/uinput`. Your Steam libraries are read-only overlay
-lowerdirs, so a hostile game cannot modify host game files and its writes stay
-in per-sandbox storage. Otherwise treat games with the same trust you would on
-the desktop.
+lowerdirs by default, so a hostile game cannot modify host game files and its
+writes stay in per-sandbox storage; the per-sandbox "write game updates to the
+host library" option trades that protection for persistent updates. Otherwise
+treat games with the same trust you would on the desktop.
 
 The images are built locally, from a digest-pinned base, a sha256-verified
 sunshine package and a pinned moonshine commit.
@@ -374,7 +376,8 @@ sunshine package and a pinned moonshine commit.
 - **A game re-downloads the same update in every session.** Sandbox-side
   updates live in per-sandbox overlay storage
   (`~/.local/share/podstage/overlays/`) and are purged once the host updates
-  the game past the sandbox. Update games on the host.
+  the game past the sandbox. Update games on the host, or enable the
+  sandbox's "write game updates to the host library" option.
 
 ## Portability
 

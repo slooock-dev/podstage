@@ -702,3 +702,100 @@ class _Ok:
     returncode = 0
     stdout = ""
     stderr = ""
+
+
+# -- gamepad reconnect ------------------------------------------------------
+
+def test_gamepad_reconnect_execs_the_bounce_helper(monkeypatch):
+    calls = []
+    monkeypatch.setattr(runtime, "_container_running", lambda: True)
+
+    def fake_run(cmd, timeout=15):
+        calls.append((cmd, timeout))
+        return 0, "pad-bounce: event5 reconnected"
+
+    monkeypatch.setattr(runtime, "_run", fake_run)
+    runtime.gamepad_reconnect(2500)
+    cmd, timeout = calls[0]
+    assert cmd == ["podman", "exec", runtime.CONTAINER_NAME,
+                   "podstage-pad-bounce", "2500"]
+    assert timeout > 2.5  # exec blocks for the hold; the timeout must outlive it
+
+
+def test_gamepad_reconnect_needs_a_running_session(monkeypatch):
+    import pytest
+    monkeypatch.setattr(runtime, "_container_running", lambda: False)
+    with pytest.raises(RuntimeError, match="no streaming session"):
+        runtime.gamepad_reconnect()
+
+
+def test_gamepad_reconnect_surfaces_the_helper_reason(monkeypatch):
+    """pad-bounce reports why it could not bounce (mirror inactive, no pad);
+    that reason must reach the caller instead of a bare exit code."""
+    import pytest
+    monkeypatch.setattr(runtime, "_container_running", lambda: True)
+    monkeypatch.setattr(runtime, "_run",
+                        lambda cmd, timeout=15: (3, "input mirror inactive"))
+    with pytest.raises(RuntimeError, match="input mirror inactive"):
+        runtime.gamepad_reconnect()
+
+
+def test_gamepad_reconnect_points_at_a_stale_image(monkeypatch):
+    """An image from before the helper fails the exec; the error must say how
+    to fix it instead of leaving a bare podman message."""
+    import pytest
+    monkeypatch.setattr(runtime, "_container_running", lambda: True)
+    missing = "exec failed: `podstage-pad-bounce`: executable file not found"
+    monkeypatch.setattr(runtime, "_run",
+                        lambda cmd, timeout=15: (127, missing))
+    with pytest.raises(RuntimeError, match="podstage runtime build"):
+        runtime.gamepad_reconnect()
+
+
+def test_input_mirror_mounts_follow_the_experimental_env(monkeypatch):
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "nvidia")
+    on = " ".join(runtime.podman_run_args(
+        _opts(env={"PS_GAMEPAD_RECONNECT": "enabled"}), library_paths=LIBS))
+    assert "-v /dev/input:/dev/input-real" in on
+    assert "--tmpfs /dev/input:rw,mode=1777" in on
+    assert "-v /dev/input:/dev/input " not in on + " "
+    off = " ".join(runtime.podman_run_args(_opts(), library_paths=LIBS))
+    assert "/dev/input-real" not in off
+    assert "--tmpfs /dev/input" not in off
+
+
+def test_input_mirror_combines_with_full_dev(monkeypatch):
+    """ds5 + reconnect: the full /dev bind stays, /dev/input-real and the
+    tmpfs shadow /dev/input on top."""
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "nvidia")
+    args = " ".join(runtime.podman_run_args(
+        _opts(env={"PS_GAMEPAD_DS5": "enabled",
+                   "PS_GAMEPAD_RECONNECT": "enabled"}), library_paths=LIBS))
+    assert "-v /dev:/dev" in args
+    assert "-v /dev/input:/dev/input-real" in args
+    assert "--tmpfs /dev/input:rw,mode=1777" in args
+
+
+# -- library_rw -------------------------------------------------------------
+
+def test_library_rw_mounts_plain_instead_of_overlay():
+    home = Path("/tmp/home-x")
+    joined = " ".join(runtime.container_flags(LIBS, home, vendor="nvidia",
+                                              library_rw=True))
+    for p in LIBS:
+        assert f"{p}:{p} " in joined + " "
+        assert f"{p}:{p}:O" not in joined
+    # extra_mounts keep their own overlay default independently
+    with_extra = " ".join(runtime.container_flags(
+        LIBS, home, vendor="nvidia", library_rw=True,
+        extra_mounts=["/tmp/extra"]))
+    assert "/tmp/extra:/tmp/extra:O,upperdir=" in with_extra
+
+
+def test_library_rw_flows_from_options(monkeypatch):
+    monkeypatch.setattr(runtime, "gpu_vendor", lambda: "nvidia")
+    rw = " ".join(runtime.podman_run_args(_opts(library_rw=True),
+                                          library_paths=LIBS))
+    default = " ".join(runtime.podman_run_args(_opts(), library_paths=LIBS))
+    assert f"{LIBS[0]}:{LIBS[0]}:O,upperdir=" not in rw
+    assert f"{LIBS[0]}:{LIBS[0]}:O,upperdir=" in default

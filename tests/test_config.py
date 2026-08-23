@@ -331,3 +331,11 @@ def test_guide_hold_defaults_and_roundtrip(tmp_path: Path):
     # 0 (= off) is a real value: persisted, loaded back, not defaulted away.
     AppConfig(guide_hold_ms=0).save(path)
     assert AppConfig.load(path).guide_hold_ms == 0
+
+
+def test_library_rw_default_and_roundtrip(tmp_path: Path):
+    # Default off, also for configs written before the field existed.
+    assert SessionConfig(name="s").library_rw is False
+    path = tmp_path / "config.toml"
+    AppConfig(sessions=[SessionConfig(name="rw", library_rw=True)]).save(path)
+    assert AppConfig.load(path).get("rw").library_rw is True

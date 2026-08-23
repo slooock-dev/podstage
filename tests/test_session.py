@@ -201,12 +201,16 @@ def test_moonshine_options_carry_dynamic_resolution():
 def test_ds5_experimental_does_not_leak_into_moonshine():
     """gamepad_ds5 configures sunshine's emulated pad; inputtino has its own
     gamepad model and would ignore the flag."""
-    app = AppConfig(experimental={"gamepad_ds5": True, "hdr": True})
+    app = AppConfig(experimental={"gamepad_ds5": True, "hdr": True,
+                                  "gamepad_reconnect": True})
     env = Session(_moonshine(), app_config=app)._options().env
     assert "PS_GAMEPAD_DS5" not in env
+    # The input mirror rides on the sunshine device path (hidraw gap).
+    assert "PS_GAMEPAD_RECONNECT" not in env
     assert env["PS_HDR"] == "enabled"          # HDR does carry over
     sun = Session(SessionConfig(name="deck"), app_config=app)._options().env
     assert sun["PS_GAMEPAD_DS5"] == "enabled"
+    assert sun["PS_GAMEPAD_RECONNECT"] == "enabled"
 
 
 def test_moonshine_rejects_the_sunshine_only_modes():

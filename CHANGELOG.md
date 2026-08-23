@@ -4,6 +4,20 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-08-23
+
+Needs an image rebuild for both backends (`podstage runtime build`, then
+`podstage runtime build --backend moonshine`).
+
+### Added
+
+- **Per-sandbox `library_rw` option** (profile dialog, `podstage sandbox add
+  --library-rw`): mounts the shared Steam libraries plain read/write instead
+  of as overlays, so sandbox-side game updates persist to the host library.
+  Default stays overlay.
+- **Gamepad reconnect** (`gamepad_reconnect` experimental feature, Setup-page
+  button, `podstage session gamepad-reconnect`; sunshine only): fakes an
+  unplug/replug of the streamed pads, was relevant for the current Stalker 2 release.
 ## [0.5.1] - 2026-08-10
 
 Needs a moonshine image rebuild (`podstage runtime build --backend

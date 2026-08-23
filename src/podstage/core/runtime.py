@@ -142,6 +142,9 @@ _SUNSHINE_ENV: dict[str, str | None] = {
     # sunshine emulates a DualSense instead of an Xbox pad; moonshine's
     # inputtino has its own gamepad model, so this does not carry over.
     "PS_GAMEPAD_DS5": None,
+    # Experimental (config.EXPERIMENTAL_FEATURES): symlink-mirrored
+    # /dev/input for `session gamepad-reconnect`; drives the mounts below.
+    "PS_GAMEPAD_RECONNECT": None,
 }
 
 # moonshine-backend only (see containers/moonshine/entrypoint.sh).
@@ -194,6 +197,9 @@ class RuntimeOptions:
     # Profile extra_mounts entries ("/path" overlay, "/path:rw" bind); see
     # config.SessionConfig.extra_mounts.
     extra_mounts: list[str] = field(default_factory=list)
+    # Shared libraries plain read/write instead of overlay
+    # (config.SessionConfig.library_rw).
+    library_rw: bool = False
 
     @property
     def spec(self) -> backends.Backend:
@@ -453,7 +459,9 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     args += container_flags(library_paths, opts.home_dir, vendor=vendor,
                             extra_mounts=opts.extra_mounts, full_dev=full_dev,
                             seccomp_profile=(SECCOMP_PROFILE if opts.spec.needs_kcmp
-                                             else None))
+                                             else None),
+                            library_rw=opts.library_rw,
+                            input_mirror=env.get("PS_GAMEPAD_RECONNECT") == "enabled")
     args += ["-v", f"{opts.home_dir}:/home/player"]
     for key, val in env.items():
         args += ["-e", f"{key}={val}"]
@@ -548,7 +556,9 @@ def container_flags(library_paths: list[Path], home_dir: Path,
                     vendor: str | None = None,
                     extra_mounts: list[str] | None = None,
                     full_dev: bool = False,
-                    seccomp_profile: Path | None = None) -> list[str]:
+                    seccomp_profile: Path | None = None,
+                    library_rw: bool = False,
+                    input_mirror: bool = False) -> list[str]:
     """Devices, isolation and mounts of the rootless runtime container.
     Excludes: container name/detach, the client HOME volume, env, image.
 
@@ -562,7 +572,15 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     permissions under keep-id, the same the user has on the host.
 
     ``seccomp_profile`` replaces podman's default for the single syscall
-    moonshine needs, see :func:`ensure_seccomp_profile`."""
+    moonshine needs, see :func:`ensure_seccomp_profile`.
+
+    ``library_rw`` mounts the shared libraries plain read/write instead of as
+    overlays, so sandbox-side game updates persist to the host library.
+
+    ``input_mirror`` (gamepad_reconnect experimental feature) mounts the real
+    /dev/input at /dev/input-real plus a tmpfs at /dev/input, which the
+    entrypoint's mirror daemon fills with symlinks; pad-bounce needs the
+    indirection to fake a gamepad unplug/replug rootless."""
     vendor = vendor or gpu_vendor()
     if vendor in MESA_VENDORS:
         # AMD/Intel: plain DRI nodes; Mesa Vulkan (RADV/ANV) + VAAPI userspace
@@ -600,9 +618,16 @@ def container_flags(library_paths: list[Path], home_dir: Path,
         args += ["--security-opt", f"seccomp={seccomp_profile}"]
     if full_dev:
         args += ["-v", "/dev:/dev"]
+        if input_mirror:
+            args += ["-v", "/dev/input:/dev/input-real"]
     else:
         args += ["--device", "/dev/uinput",
-                 "-v", "/dev/input:/dev/input"]
+                 "-v", "/dev/input:"
+                       + ("/dev/input-real" if input_mirror else "/dev/input")]
+    if input_mirror:
+        # User-writable so the mirror (running as this uid via keep-id) can
+        # create and remove the symlinks.
+        args += ["--tmpfs", "/dev/input:rw,mode=1777"]
     args += [
         # seatd binds /run/seatd.sock unconditionally → /run must be writable;
         # libinput needs /run/udev for device enumeration (the udev DB is
@@ -616,12 +641,15 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     ]
     if vendor not in MESA_VENDORS:
         args += nvidia_lib32_mounts()
-    # :ro breaks pending updates ("Disk write failure"); plain rw lets the
-    # sandbox write into host game files. The overlay gives Steam a
-    # writable view while the host library stays untouched.
+    # :ro breaks pending updates ("Disk write failure"). The default overlay
+    # gives Steam a writable view while the host library stays untouched;
+    # library_rw mounts plain rw so updates persist to the host instead.
     for p in library_paths:
-        upper, work = config.overlay_dirs(home_dir, p)
-        args += ["-v", f"{p}:{p}:O,upperdir={upper},workdir={work}"]
+        if library_rw:
+            args += ["-v", f"{p}:{p}"]
+        else:
+            upper, work = config.overlay_dirs(home_dir, p)
+            args += ["-v", f"{p}:{p}:O,upperdir={upper},workdir={work}"]
     # Profile extra_mounts (non-Steam games/launchers, launched from Big
     # Picture via non-Steam shortcuts): overlay by default like the
     # libraries; ":rw" mounts plain and writable for launchers that update
@@ -923,7 +951,8 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     if missing:
         raise RuntimeError("extra mount source missing: "
                            + ", ".join(str(p) for p in missing))
-    ensure_overlay_dirs(opts.home_dir, library_paths + overlay_extra)
+    ensure_overlay_dirs(opts.home_dir,
+                        ([] if opts.library_rw else library_paths) + overlay_extra)
     # Bind source must exist, or podman creates it root-owned in the tmpfs.
     config.RUNTIME_SHARE_DIR.mkdir(parents=True, exist_ok=True)
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)
@@ -946,6 +975,25 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     except BaseException:
         clear_state()
         raise
+
+
+def gamepad_reconnect(hold_ms: int = 3000) -> None:
+    """Fake an unplug/replug of the connected gamepads in the running
+    container: pad-bounce removes and restores their /dev/input symlinks,
+    which exist only with the input mirror (gamepad_reconnect experimental
+    feature, see containers/runtime/pad-bounce.c). Blocks for the hold.
+    Raises RuntimeError with the reason (no session, mirror inactive, no
+    gamepad, image predating the helper).
+    """
+    if not _container_running():
+        raise RuntimeError("no streaming session is running")
+    rc, out = _run(["podman", "exec", CONTAINER_NAME, "podstage-pad-bounce",
+                    str(hold_ms)], timeout=hold_ms // 1000 + 30)
+    if rc != 0:
+        msg = f"gamepad reconnect failed: {out or f'exit {rc}'}"
+        if "podstage-pad-bounce" in out:  # helper missing → image too old
+            msg += " (the runtime image predates the helper; rebuild with: podstage runtime build)"
+        raise RuntimeError(msg)
 
 
 def stop(timeout: int = 20) -> bool:

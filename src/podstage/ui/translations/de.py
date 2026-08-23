@@ -461,6 +461,27 @@ TEXTS: dict[str, str] = {
         "Steam Deck konsumiert das lokale Steam die Taste.",
     "Applies at the next session start.":
         "Gilt ab dem nächsten Session-Start.",
+    "Reconnect gamepad": "Gamepad neu verbinden",
+    "Write game updates to the host library":
+        "Spiel-Updates in die Host-Library schreiben",
+    "Mounts the shared Steam libraries read/write instead of as "
+    "overlays; updates from the sandbox persist on the host.":
+        "Bindet die geteilten Steam-Libraries read/write statt als Overlay "
+        "ein; Updates aus der Sandbox bleiben auf dem Host erhalten.",
+    "Host library": "Host-Library",
+    "Briefly disconnects and reconnects the streamed pads.":
+        "Trennt die gestreamten Pads kurz und verbindet sie neu.",
+    "Gamepads disconnected and reconnected.":
+        "Gamepads getrennt und neu verbunden.",
+    "reconnecting …": "verbinde neu …",
+    "Gamepad reconnect": "Gamepad-Reconnect",
+    "Routes /dev/input through removable symlinks so the reconnect "
+    "button can fake an unplug/replug of the streamed pads. No effect "
+    "on DualSense/moonshine pads, which Steam reads via hidraw.":
+        "Leitet /dev/input über entfernbare Symlinks, damit der "
+        "Reconnect-Knopf ein Ab- und Anstecken der gestreamten Pads "
+        "vortäuschen kann. Ohne Wirkung auf DualSense-/moonshine-Pads, "
+        "die Steam über hidraw liest.",
     "Mouse && keyboard input": "Maus- && Tastatur-Eingabe",
     "Streams the client's mouse and keyboard into the session; games can "
     "lock the pointer for mouse look.":

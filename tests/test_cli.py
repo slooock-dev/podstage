@@ -24,13 +24,20 @@ def test_session_owns_the_stream_verbs():
     assert p.parse_args(["session", "status", "x"]).func is cli.cmd_session_status
     assert (p.parse_args(["session", "pair", "x", "1234"]).func
             is cli.cmd_session_pair)
+    # Acts on the one running container, so it takes no profile name.
+    gr = p.parse_args(["session", "gamepad-reconnect"])
+    assert gr.func is cli.cmd_session_gamepad_reconnect
+    assert gr.hold_ms == 3000
 
 
 def test_moved_flags_travel_with_their_verbs():
     p = cli.build_parser()
     a = p.parse_args(["sandbox", "add", "x", "--backend", "moonshine",
-                      "--fixed-resolution", "--mount", "/opt/g:rw"])
+                      "--fixed-resolution", "--mount", "/opt/g:rw",
+                      "--library-rw"])
     assert (a.backend, a.fixed_resolution, a.mount) == ("moonshine", True, ["/opt/g:rw"])
+    assert a.library_rw is True
+    assert p.parse_args(["sandbox", "add", "x"]).library_rw is False
     s = p.parse_args(["session", "start", "x", "--mode", "probe"])
     assert s.mode == "probe"
 

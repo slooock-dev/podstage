@@ -181,6 +181,9 @@ class Session:
             # gamepad_ds5 configures SUNSHINE's emulated pad; moonshine's
             # inputtino has its own gamepad model and ignores the flag.
             experimental.pop("PS_GAMEPAD_DS5", None)
+            # The mirror covers only evdev under /dev/input; inputtino's uhid
+            # pads reach Steam via hidraw, a bounce would be a silent no-op.
+            experimental.pop("PS_GAMEPAD_RECONNECT", None)
         env.update(experimental)
         if self.app_config().perf_metrics:
             env["PS_PERF_METRICS"] = "enabled"
@@ -196,6 +199,7 @@ class Session:
             app_ids=self.cfg.app_ids,
             env=env,
             extra_mounts=list(self.cfg.extra_mounts),
+            library_rw=self.cfg.library_rw,
         )
 
     # -- lifecycle -------------------------------------------------------

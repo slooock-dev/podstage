@@ -139,6 +139,10 @@ EXPERIMENTAL_FEATURES: dict[str, str] = {
     # because sunshine's `gamepad = auto` picks a DualSense for such a client
     # anyway and fails without /dev/uhid. Mounts the host /dev.
     "gamepad_ds5": "PS_GAMEPAD_DS5",
+    # SUNSHINE ONLY (session.py drops it for moonshine): routes /dev/input
+    # through removable symlinks (tmpfs + mirror daemon) so `session
+    # gamepad-reconnect` can fake an unplug/replug of the streamed pads.
+    "gamepad_reconnect": "PS_GAMEPAD_RECONNECT",
 }
 
 
@@ -240,6 +244,11 @@ class SessionConfig:
     # themselves in place). Container path = host path, so shortcut paths
     # keep working.
     extra_mounts: list[str] = field(default_factory=list)
+    # Mount the shared host Steam libraries plain read/write instead of as
+    # overlays: game updates from the sandbox persist to the host library.
+    # The sandbox keeps its own manifest copy, so the host Steam sees the new
+    # build only after its own (quick, files already current) update pass.
+    library_rw: bool = False
 
     def __post_init__(self) -> None:
         # "ask" is an explicit resolution choice at start; the dynamic

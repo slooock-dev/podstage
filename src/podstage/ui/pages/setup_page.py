@@ -54,12 +54,14 @@ _GLYPH = {doctor.Status.OK: ("●", "ok"),
 _EXPERIMENTAL_LABELS = {
     "hdr": lambda: tr("HDR stream"),
     "gamepad_ds5": lambda: tr("DualSense pad (gyro)"),
+    "gamepad_reconnect": lambda: tr("Gamepad reconnect"),
 }
 # Optional visible line under a checkbox, for what the tooltip should not be
 # the only place for. Unlike the two dicts above, a missing key is fine: no
 # entry means the feature needs no qualifier beyond its label.
 _EXPERIMENTAL_HINTS = {
     "gamepad_ds5": lambda: tr("sunshine only. For PlayStation controllers."),
+    "gamepad_reconnect": lambda: tr("sunshine only."),
 }
 _EXPERIMENTAL_DETAILS = {
     "hdr": lambda: tr(
@@ -71,6 +73,10 @@ _EXPERIMENTAL_DETAILS = {
         "that pad by itself and fails without /dev/uhid. Steam Deck: needs "
         "Steam Input off for moonlight (no trackpad-mouse then). Mounts "
         "the host /dev."),
+    "gamepad_reconnect": lambda: tr(
+        "Routes /dev/input through removable symlinks so the reconnect "
+        "button can fake an unplug/replug of the streamed pads. No effect "
+        "on DualSense/moonshine pads, which Steam reads via hidraw."),
 }
 
 
@@ -128,6 +134,12 @@ def _uninstall(delete_sandboxes: bool, include_shared: bool) -> str:
         return tr("Removed ({done}) — still present: {names}", done=done,
                   names=", ".join(a.label for a in left))
     return tr("podstage removed — no residues found. ({done})", done=done)
+
+
+def _gamepad_reconnect() -> str:
+    # Blocks for the ~3 s hold; runs on the worker pool like every action.
+    runtime.gamepad_reconnect()
+    return tr("Gamepads disconnected and reconnected.")
 
 
 def _run_fix(fix: str) -> str:
@@ -319,6 +331,23 @@ class SetupPage(QWidget):
                 hint.setWordWrap(True)
                 hint.setContentsMargins(22, 0, 0, 6)  # under the box label
                 elay.addWidget(hint)
+            if key == "gamepad_reconnect":
+                # The feature's action sits under its switch and follows it
+                # live. The label next to the button carries the result; the
+                # shared action status is scrolled out of view here.
+                self._pad_reconnect_btn = QPushButton(tr("Reconnect gamepad"))
+                self._pad_reconnect_btn.setToolTip(tr(
+                    "Briefly disconnects and reconnects the streamed pads."))
+                self._pad_reconnect_btn.clicked.connect(self._on_pad_reconnect)
+                self._pad_reconnect_btn.setEnabled(self._pad_feature_on())
+                self._pad_status = QLabel("")
+                self._pad_status.setProperty("muted", True)
+                self._pad_status.setWordWrap(True)
+                prrow = QHBoxLayout()
+                prrow.setContentsMargins(22, 0, 0, 6)  # under the box label
+                prrow.addWidget(self._pad_reconnect_btn)
+                prrow.addWidget(self._pad_status, 1)
+                elay.addLayout(prrow)
         root.addWidget(eframe)
 
         lframe, llay = card(tr("Language"))
@@ -543,8 +572,23 @@ class SetupPage(QWidget):
     def _on_experimental_toggled(self, key: str, enabled: bool) -> None:
         self._ctx.config.experimental[key] = enabled
         self._ctx.save()
+        if key == "gamepad_reconnect":
+            self._pad_reconnect_btn.setEnabled(enabled)
         self._action_status.setText(
             tr("Experimental features apply from the next session start."))
+
+    def _pad_feature_on(self) -> bool:
+        return bool(self._ctx.config.experimental.get("gamepad_reconnect"))
+
+    def _on_pad_reconnect(self) -> None:
+        self._pad_reconnect_btn.setEnabled(False)
+        self._pad_status.setText(tr("reconnecting …"))
+
+        def _done(ok: bool, msg: str) -> None:
+            self._pad_reconnect_btn.setEnabled(self._pad_feature_on())
+            self._pad_status.setText(msg)
+
+        start_action(self._pool, _gamepad_reconnect, "Gamepad", _done)
 
     def _on_change_home_root(self) -> None:
         chosen = QFileDialog.getExistingDirectory(

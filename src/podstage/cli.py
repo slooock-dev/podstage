@@ -179,7 +179,8 @@ def cmd_sandbox_add(args: argparse.Namespace) -> int:
                              dynamic_resolution=not args.fixed_resolution,
                              backend=args.backend,
                              sunshine_port_base=port, app_ids=app_ids,
-                             extra_mounts=mounts))
+                             extra_mounts=mounts,
+                             library_rw=args.library_rw))
     cfg.save()
     if args.resolution == "ask":
         res_note = "chosen at start (dynamic resolution off)"
@@ -359,6 +360,19 @@ def cmd_session_stop(args: argparse.Namespace) -> int:
     except RuntimeError as e:
         print(f"stop failed: {e}", file=sys.stderr)
         return 1
+    return 0
+
+
+def cmd_session_gamepad_reconnect(args: argparse.Namespace) -> int:
+    """Fake an unplug/replug of the streamed gamepads (gamepad_reconnect
+    experimental feature). Acts on the one running container, so no profile
+    name is needed."""
+    try:
+        runtime.gamepad_reconnect(args.hold_ms)
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    print("Gamepads disconnected and reconnected.")
     return 0
 
 
@@ -659,6 +673,10 @@ def build_parser() -> argparse.ArgumentParser:
                             help="mount an extra host dir into the session "
                                  "(non-Steam games/launchers; default read-only "
                                  "overlay, ':rw' for a writable bind); repeatable")
+            sp.add_argument("--library-rw", action="store_true",
+                            help="mount the shared Steam libraries read/write "
+                                 "instead of as overlays (game updates persist "
+                                 "to the host)")
         if action == "remove":
             sp.add_argument("--data", action="store_true",
                             help="also delete the sandbox HOME (Steam login, saves) and overlays")
@@ -692,6 +710,14 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--device",
                             help="client name recorded by sunshine (default: profile name)")
         sp.set_defaults(func=handler)
+    gr = sess_sub.add_parser(
+        "gamepad-reconnect",
+        help="briefly disconnect and reconnect the streamed gamepads "
+             "(sunshine only; needs the gamepad_reconnect experimental "
+             "feature)")
+    gr.add_argument("--hold-ms", type=int, default=3000,
+                    help="how long the pads stay disconnected (default: 3000)")
+    gr.set_defaults(func=cmd_session_gamepad_reconnect)
 
     return p
 

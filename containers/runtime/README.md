@@ -61,7 +61,9 @@ stream carrying HDR is unverified). `PS_GAMEPAD_DS5=enabled` appends
 `gamepad = ds5` to `sunshine.conf`: inputtino builds a DualSense over
 `/dev/uhid` instead of the X360 pad over uinput, which is why the host binds
 the whole `/dev` for it (the `/dev/hidraw*` node Steam Input needs appears
-only with that pad).
+only with that pad). `PS_GAMEPAD_RECONNECT=enabled` turns /dev/input into a
+symlink mirror so `podstage-pad-bounce` can fake a pad unplug/replug
+(sunshine backend only; hidraw pads, DS5/moonshine, are out of its reach).
 
 `DISABLE_GAMESCOPE_WSI=1` is set for every session: the nested gamescope fails
 the stricter WSI hook that GE and CachyOS Proton check for, and those builds
@@ -144,6 +146,13 @@ undisturbed.
   killing mouse input for the session. The entrypoint therefore starts
   `podstage-keeper`, a silent persistent uinput pointer that keeps the
   capability up (see `keeper.c`).
+- **Gamepad reconnect on demand** (gamepad_reconnect experimental feature).
+  The host runtime mounts the real `/dev/input` at `/dev/input-real` and a
+  tmpfs at `/dev/input`, kept populated with symlinks by
+  `podstage-input-mirror`. `podstage-pad-bounce` (via `podman exec`) removes
+  and restores the gamepads' symlinks, a real unplug/replug to every
+  consumer; the streamed pad itself lives on sunshine's uinput fd and cannot
+  be bounced without dropping the stream (see `pad-bounce.c`).
 - **mDNS discovery.** There is no avahi in the container; discovery is
   announced host-side (open the `mdns` firewall service). Pairing by IP always
   works.

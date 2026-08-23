@@ -7,4 +7,4 @@ sunshine to moonlight clients (e.g. Steam Deck) — without disturbing the host
 desktop (its real monitors, audio, and running apps).
 """
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"

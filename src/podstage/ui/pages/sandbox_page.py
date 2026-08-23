@@ -201,6 +201,13 @@ class ProfileDialog(QDialog):
         mv.addLayout(picker)
         form.addRow(tr("Extra mounts"), mount_box)
 
+        self._library_rw = QCheckBox(tr("Write game updates to the host library"))
+        self._library_rw.setToolTip(tr(
+            "Mounts the shared Steam libraries read/write instead of as "
+            "overlays; updates from the sandbox persist on the host."))
+        self._library_rw.setChecked(existing.library_rw if existing else False)
+        form.addRow(tr("Host library"), self._library_rw)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                                    | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
@@ -405,6 +412,7 @@ class ProfileDialog(QDialog):
             sunshine_extra=dict(base.sunshine_extra),
             preview_interval_s=base.preview_interval_s,
             extra_mounts=mounts,
+            library_rw=self._library_rw.isChecked(),
             moonshine_fec_percent=base.moonshine_fec_percent,
             moonshine_keyboard_layout=self._kb_layout.text().strip(),
             moonshine_keyboard_variant=self._kb_variant.text().strip(),

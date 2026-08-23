@@ -60,12 +60,15 @@ they cannot drift. Change container flags there.
 - **Shared game files, separate prefixes.** The provisioner symlinks
   `steamapps/common/<dir>` from the main library and copies the app manifest,
   but keeps `compatdata/<appid>` per-session.
-- **Host libraries are overlay lowerdirs.** Shared libraries mount as podman
-  overlay volumes: read-only lower = host library, per-sandbox upper/work
-  under `$XDG_DATA_HOME/podstage/overlays/` (`config.overlay_dirs`; not in
-  the HOME volume; writing an active overlay's upper through a second mount
-  is undefined). The provisioner purges an app's upper once the host manifest
-  overtakes the sandbox's, because stale uppers shadow the newer library.
+- **Host libraries are overlay lowerdirs (default).** Shared libraries mount
+  as podman overlay volumes: read-only lower = host library, per-sandbox
+  upper/work under `$XDG_DATA_HOME/podstage/overlays/` (`config.overlay_dirs`;
+  not in the HOME volume; writing an active overlay's upper through a second
+  mount is undefined). The provisioner purges an app's upper once the host
+  manifest overtakes the sandbox's, because stale uppers shadow the newer
+  library. The per-sandbox `library_rw` option mounts the libraries plain
+  read/write instead, so sandbox-side game updates persist to the host; the
+  host manifest lags until the host Steam's next (quick) update pass.
 - **No dedicated runtime user (considered, rejected).** Gaming distros grant
   the desktop user `uinput` anyway (steam-devices uaccess rules), revoking
   ACLs doesn't revoke open fds, and the attacker defended against already
