@@ -97,6 +97,15 @@ def test_du_bytes_tolerates_unreadable_subdirs(tmp_path: Path):
     assert size is not None and size >= 100
 
 
+def test_du_bytes_counts_blocks_not_apparent_size(tmp_path: Path):
+    # Steam preallocates steamapps/downloading as sparse files; counting
+    # apparent size roughly doubles the reported sandbox size.
+    with (tmp_path / "sparse.bin").open("wb") as fh:
+        fh.truncate(64 * 1024 * 1024)
+    size = sandbox._du_bytes(tmp_path)
+    assert size is not None and size < 1024 * 1024
+
+
 def test_clear_overlays_falls_back_to_podman_unshare(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path / "data")
     home = tmp_path / "homes" / "deck"

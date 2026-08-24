@@ -102,7 +102,10 @@ def inspect(cfg: config.SessionConfig) -> SandboxInfo:
 
 def _du_bytes(path: Path) -> int | None:
     try:
-        p = subprocess.run(["du", "-sb", str(path)], capture_output=True,
+        # -sB1 (allocated blocks), not -sb: Steam preallocates
+        # steamapps/downloading as sparse files, whose apparent size roughly
+        # doubles the real footprint.
+        p = subprocess.run(["du", "-sB1", str(path)], capture_output=True,
                            text=True, timeout=120, check=False)
         # du exits nonzero when parts are unreadable (overlay work dirs are
         # owned by the container root's sub-UID) but still prints the total.
@@ -112,8 +115,8 @@ def _du_bytes(path: Path) -> int | None:
 
 
 def size_bytes(home: Path) -> int | None:
-    """Apparent disk usage of the sandbox (blocks). Runs ``du`` — seconds on
-    a populated sandbox, call off the UI thread."""
+    """Disk usage of the sandbox (allocated blocks). Runs ``du`` — seconds
+    on a populated sandbox, call off the UI thread."""
     return _du_bytes(home)
 
 

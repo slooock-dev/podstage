@@ -4,6 +4,14 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-08-24
+
+### Fixed
+
+- **Sandbox size columns report allocated blocks instead of apparent size.**
+  Steam preallocates `steamapps/downloading` as sparse files, which roughly
+  doubled the displayed sandbox size (`du -sb` → `du -sB1`).
+
 ## [0.5.2] - 2026-08-23
 
 Needs an image rebuild for both backends (`podstage runtime build`, then
