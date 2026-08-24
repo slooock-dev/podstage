@@ -97,8 +97,7 @@ how input hotplug works inside the container is in
 
 ## Built on
 
-podstage bundles and drives upstream projects; none of them is forked or
-patched. A few small helpers are its own code.
+podstage bundles and drives upstream projects:
 
 | | Component | Role |
 |---|---|---|
@@ -378,30 +377,6 @@ sunshine package and a pinned moonshine commit.
   (`~/.local/share/podstage/overlays/`) and are purged once the host updates
   the game past the sandbox. Update games on the host, or enable the
   sandbox's "write game updates to the host library" option.
-
-## Portability
-
-podstage is developed on Fedora/Bazzite, and a few host assumptions reflect
-that:
-
-- The 32-bit NVIDIA GL libraries, the Xwayland GLX module and the driver's NGX
-  DLLs (which is what makes DLSS work in the sandbox) are bind-mounted by
-  absolute path. podstage searches the Fedora/Bazzite/Arch and Debian/Ubuntu
-  locations; a distro that stores them elsewhere leaves Steam's 32-bit client
-  UI without hardware GL.
-- CDI GPU injection expects a spec at `/etc/cdi/nvidia.yaml`
-  (`nvidia-ctk cdi generate`).
-- AMD and Intel take `/dev/dri` and VAAPI instead, with ANV Vulkan and the iHD
-  media driver (Broadwell+) baked into the image. The GUI follows: VAAPI
-  encoder controls instead of NVENC ones, GPU load and VRAM from the amdgpu
-  sysfs, or from `intel_gpu_top` on Intel, where VRAM stays unavailable because
-  i915/xe expose no counters. `PS_GPU_VENDOR=intel` forces the path on hybrid
-  machines.
-- Validation differs per vendor: NVIDIA end to end, AMD on one Rembrandt iGPU
-  streamed to a Steam Deck, Intel by a community report on an Arc B580. Intel
-  iGPUs and pre-Broadwell parts are untested.
-
-Patches widening distro and GPU support are very welcome.
 
 ## Uninstall
 
