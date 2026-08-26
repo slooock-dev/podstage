@@ -268,6 +268,28 @@ _VULKANINFO = """
 """
 
 
+def test_vulkaninfo_probe_gets_no_display_access_nvidia(monkeypatch):
+    # vulkaninfo's VK_KHR_display pass wakes disabled monitors through a real
+    # /dev/nvidia-modeset; a /dev/null stand-in keeps the ICD from segfaulting
+    # while enumerating zero displays.
+    monkeypatch.setattr(doctor.runtime, "gpu_vendor", lambda: "nvidia")
+    joined = " ".join(doctor._vulkaninfo_argv())
+    assert "--device /dev/null:/dev/nvidia-modeset" in joined
+    assert "--device /dev/nvidia-modeset" not in joined
+
+
+def test_vulkaninfo_probe_gets_no_display_access_mesa(monkeypatch):
+    # Render nodes only: a card node would let VK_KHR_display probe the DRM
+    # connectors, which wakes disabled monitors.
+    monkeypatch.setattr(doctor.runtime, "gpu_vendor", lambda: "amd")
+    monkeypatch.setattr(doctor.glob, "glob",
+                        lambda p: ["/dev/dri/renderD128", "/dev/dri/renderD129"])
+    joined = " ".join(doctor._vulkaninfo_argv())
+    assert "--device /dev/dri/renderD128" in joined
+    assert "--device /dev/dri/renderD129" in joined
+    assert "--device /dev/dri " not in joined
+
+
 def test_parse_video_encode_reads_queue_and_codecs():
     has_queue, codecs = doctor.parse_video_encode(_VULKANINFO)
     assert has_queue is True

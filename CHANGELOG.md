@@ -4,6 +4,16 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-08-26
+
+### Fixed
+
+- **Doctor's GPU probe no longer wakes disabled monitors.** The vulkaninfo
+  container gets no display access: render nodes instead of all of /dev/dri
+  (Mesa), /dev/null as /dev/nvidia-modeset (NVIDIA; a missing node segfaults
+  the ICD). vulkaninfo's VK_KHR_display pass otherwise probed the host
+  connectors on every doctor run, GUI start and setup recheck included.
+
 ## [0.5.3] - 2026-08-24
 
 ### Fixed

@@ -184,13 +184,18 @@ _VK_CODECS = {"VK_KHR_video_encode_h264": "H.264",
 
 
 def _vulkaninfo_argv() -> list[str]:
-    """A throwaway container running vulkaninfo with the same GPU wiring a
-    real session gets (core/runtime.container_flags)."""
+    """A throwaway container running vulkaninfo with the session's GPU wiring
+    (core/runtime.container_flags) minus display access: vulkaninfo's
+    VK_KHR_display pass otherwise probes the host connectors and briefly wakes
+    disabled monitors on every doctor run. Mesa gets render nodes instead of
+    all of /dev/dri; NVIDIA gets /dev/null as /dev/nvidia-modeset, which the
+    ICD accepts as zero displays where a missing node makes it segfault."""
     if runtime.gpu_vendor() in runtime.MESA_VENDORS:
-        devices = ["--device", "/dev/dri"]
+        devices = [flag for node in sorted(glob.glob("/dev/dri/renderD*"))
+                   for flag in ("--device", node)]
     else:
         devices = ["--device", "nvidia.com/gpu=all",
-                   "--device", "/dev/nvidia-modeset"]
+                   "--device", "/dev/null:/dev/nvidia-modeset"]
     return (["podman", "run", "--rm", "--name", "podstage-vulkan-doctor"]
             + devices
             + ["--security-opt", "label=disable", "--userns=keep-id",
