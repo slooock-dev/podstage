@@ -1,14 +1,14 @@
 # Contributing to podstage
 
 Thanks for your interest! podstage is early and the architecture is still
-solidifying; issues and design discussion are especially welcome.
+solidifying. Issues and design discussion are especially welcome.
 
 podstage is developed with AI coding assistants under human direction. The
 design, the architecture and the concepts behind them are human: what gets
 built, how the pieces fit, which trade-offs are acceptable and what is rejected
 are decisions made by a person, and the assistants implement against them.
-Changes are reviewed, tested and verified on real hardware before they land;
-what could not be verified is marked as such in the CHANGELOG. Contributions
+Changes are reviewed, tested and verified on real hardware before they land.
+What could not be verified is marked as such in the CHANGELOG. Contributions
 are held to the same bar, whatever tooling produced them.
 
 ## Development setup
@@ -56,7 +56,7 @@ they cannot drift. Change container flags there.
 ### Key design decisions
 
 - **Isolated `$HOME` per streaming Steam.** Required to run a second Steam
-  concurrently with the desktop one; also cleanly separates all Steam settings.
+  concurrently with the desktop one. It also separates all Steam settings.
 - **Shared game files, separate prefixes.** The provisioner symlinks
   `steamapps/common/<dir>` from the main library and copies the app manifest,
   but keeps `compatdata/<appid>` per-session.
@@ -67,7 +67,7 @@ they cannot drift. Change container flags there.
   mount is undefined). The provisioner purges an app's upper once the host
   manifest overtakes the sandbox's, because stale uppers shadow the newer
   library. The per-sandbox `library_rw` option mounts the libraries plain
-  read/write instead, so sandbox-side game updates persist to the host; the
+  read/write instead, so sandbox-side game updates persist to the host. The
   host manifest lags until the host Steam's next (quick) update pass.
 - **No dedicated runtime user (considered, rejected).** Gaming distros grant
   the desktop user `uinput` anyway (steam-devices uaccess rules), revoking
@@ -80,14 +80,14 @@ they cannot drift. Change container flags there.
   fallback (`SDL_JOYSTICK_DISABLE_UDEV=1`), and a generated per-user udev
   OWNER rule provides device access. The one-time udev install is the only
   root step.
-- **Currently one session at a time.** That's enough for this project's scope; more isn't needed yet.
+- **Currently one session at a time.** That's enough for this project's scope.
 
 ## The GUI needs a Qt-capable Python
 
 pytest and the CLI/core run under any Python ≥ 3.11, but **the GUI imports
 PyQt6**, which may live in a different interpreter than your system Python (on the
 reference host it is Homebrew's). `./ui.sh` locates a Python with PyQt6 and points
-Qt at its plugin path; override the interpreter with `PS_QT_PYTHON`.
+Qt at its plugin path. `PS_QT_PYTHON` overrides the interpreter.
 
 **Consequence for testing:** `pytest` does **not** import the `ui.*` widget
 modules (no PyQt6 under the system Python), so a syntax error there stays green in
@@ -113,35 +113,41 @@ build step, no binary catalogs. To add or edit a language:
 - Add/extend a catalog in `src/podstage/ui/translations/<code>.py` as a plain
   `{english_source: translation}` dict and register it in `translations/__init__.py`.
 - `tests/test_i18n.py` runs under the system Python and guards catalog integrity
-  (no orphan keys, matching placeholders); keep it green.
+  (no orphan keys, matching placeholders). Keep it green.
 
 Language selection: `config.language` (`auto`/`en`/`de`, set in the Setup panel)
 → `PS_LANG` env → system locale → English.
 
 ## Conventions
 
-- Python ≥ 3.11, standard library first; keep the core dependency-light.
+- Python ≥ 3.11, standard library first. Keep the core dependency-light.
 - Add checks to `core/doctor.py` whenever a new external dependency is introduced.
   Doctor detail strings are English technical diagnostics (shared with the CLI)
   and are intentionally not translated.
 - Experimental features live in exactly one place: the `EXPERIMENTAL_FEATURES`
   registry in `config.py` (key → container env) plus labels/tooltips in
   `ui/pages/setup_page.py` (Setup → *Experimental features*). Add new switches
-  there, drop the entry when a feature stabilizes or dies; no experimental
+  there, drop the entry when a feature stabilizes or dies. No experimental
   toggles anywhere else.
-- Run `pytest` and `ruff check` before opening a PR; touch the GUI → also do the
-  offscreen smoke test above.
+- Run `pytest` and `ruff check` before opening a PR. Touch the GUI → also do
+  the offscreen smoke test above.
+- CI type-checks with a pinned pyright (`npx pyright@1.1.414`, settings in
+  `[tool.pyright]`). Run it against a venv that has PyQt6 from PyPI
+  (`pip install -e '.[ui]'`). A PyQt6 from elsewhere may ship no `.pyi`
+  stubs, and pyright then skips every Qt-typed check and reports a clean run
+  that CI does not agree with. Check with
+  `find <prefix> -name QtWidgets.pyi`.
 - After changing `containers/runtime/`, rebuild the image (Setup → *Build
-  image* or `podstage runtime build`); the next start picks it up directly
+  image* or `podstage runtime build`). The next start picks it up directly
   from your user's image store. `doctor` warns while the image is stale. Each
   backend hashes its own `containers/<x>/`, so the two do not invalidate each
   other, but the moonshine image is layered on the runtime one and needs a
   rebuild after a base change.
 - **`core/backends.py` holds everything that differs between the two
   streaming backends** (image, port env, whether the host publishes mDNS,
-  whether there is a live config API). Add a backend trait there and read it
-  in `core/runtime.py`; do not branch on the backend name at call sites.
+  whether there is a live config API). Add a backend trait there and read it in
+  `core/runtime.py`. Do not branch on the backend name at call sites.
 - **Updating the pinned versions**: `tools/bump_pins.py` compares the
-  Containerfile pins (Arch base digest, sunshine release) against upstream;
+  Containerfile pins (Arch base digest, sunshine release) against upstream.
   `--apply` writes them. Then `podstage runtime build`, `podstage doctor`,
   and one real stream before committing.

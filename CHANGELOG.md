@@ -4,6 +4,55 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-09-21
+
+Needs an image rebuild for both backends (`podstage runtime build`, then
+`podstage runtime build --backend moonshine`).
+
+### Added
+
+- **Doctor reports superseded build images**, cleared by `podstage runtime
+  prune-images` or the Setup button. Untagged plus the `io.podstage.src-hash`
+  label identifies them. Removal needs `-f` (an interrupted build leaves a
+  buildah working container pinning the image) and so refuses while a session
+  runs.
+
+- **Progress for the image build**: bar, current step and elapsed clock on the
+  Setup page, parsed from podman's `STEP n/m` and `--> Using cache`. Steps are
+  weighted by kind and the fraction is monotonic. It stays an estimate: a
+  long single step parks the bar, which is what the clock is for.
+
+### Changed
+
+- **Pinned versions bumped**: sunshine to v2026.914.233613, moonshine to
+  v0.16.1, and the arch base digest. Hence the rebuild.
+
+- **GUI texts shortened.** Tooltips and hint labels explained mechanisms the
+  user does not need in order to decide; the requirements and gotchas stay.
+
+### Fixed
+
+- **Type annotations corrected**, found by pyright: the telemetry meters
+  declared `int` for a percentage every caller computes as a float, and four
+  sites accessed an attribute the checker sees as optional. Runtime behaviour
+  is unchanged; `pyright src/podstage` is clean.
+
+- **Scrolling a page no longer rewrites the setting under the cursor.** Qt
+  lets a spin box or combo consume any wheel event beneath the pointer, and
+  each of these persists on change, so the edit reached config.toml silently.
+  `widgets.SpinBox`/`ComboBox` pass the wheel through only while focused;
+  `setFocusPolicy` does not cover this, it only decides whether the wheel
+  gives focus.
+
+- **Sandbox sizes refresh when a session ends.** They were measured once and
+  cached for the life of the GUI, so a sandbox that shrank during a session
+  kept its old number until a restart.
+
+- **Orphaned download staging is purged at provisioning.** Steam leaves
+  `steamapps/downloading/<appid>` behind on an interrupted commit, tens of GB
+  per game. Dropped when the manifest is gone or reports FullyInstalled with
+  no update bit. An unreadable manifest counts as a live download.
+
 ## [0.5.4] - 2026-08-26
 
 ### Fixed
@@ -311,8 +360,9 @@ changed.
 
 - **The focus watchdog never ran at session start.** It identifies gamescope's X
   display by `GAMESCOPE_FOCUSED_APP`, so the first value it ever sees is already
-  the final one and no switch was left to react to — only game exits were
-  covered. It now nudges on attach when Steam already holds the focus, and every
+  the final one and no switch was left to react to. Only game exits were
+  covered. It now nudges on attach when Steam already holds the focus, and
+  every
   trigger fires a third time after 10 s, since Steam keeps moving its focused
   window while the UI settles.
 - **Both helpers gave up after three minutes** waiting for gamescope. With
@@ -343,8 +393,9 @@ perf probe and the focus watchdog, and the entrypoint starts both.
 
 - **Big Picture lost its gamepad navigation** after a game exited (and
   occasionally right after session start): controller input still arrived but no
-  element could be focused, until pressing B repeatedly opened the side menu. Diagnosed live
-  — gamescope's focus, the X input focus and Steam's own `STEAM_INPUT_FOCUS` all
+  element could be focused, until pressing B repeatedly opened the side menu.
+  Diagnosed live: gamescope's focus, the X input focus and Steam's own
+  `STEAM_INPUT_FOCUS` all
   point at the right window, and a dump before and after the B workaround is
   identical, so the stuck state is inside Steam's UI and invisible from outside.
   Dropping the X input focus and handing it straight back heals it, which a new

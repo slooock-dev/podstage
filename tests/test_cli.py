@@ -1,6 +1,8 @@
 """CLI command structure: sandbox owns the profile lifecycle, session the
 running stream. Parse-only, no handler runs."""
 
+import argparse
+
 import pytest
 
 from podstage import cli
@@ -73,3 +75,40 @@ def test_bare_subcommand_requires_an_action(argv, capsys):
         cli.build_parser().parse_args(argv)
     assert e.value.code == 2
     assert "required: action" in capsys.readouterr().err
+
+
+def test_runtime_owns_prune_images():
+    p = cli.build_parser()
+    assert (p.parse_args(["runtime", "prune-images"]).func
+            is cli.cmd_runtime_prune_images)
+
+
+def test_prune_images_refuses_while_a_session_runs(monkeypatch, capsys):
+    """`podman image rm -f` stops containers using the image. Rebuilding
+    during a session leaves that session's image untagged and labelled, so an
+    unguarded prune would kill the live stream."""
+    from podstage.core import runtime as rt
+
+    monkeypatch.setattr(cli.runtime, "status",
+                        lambda: rt.RuntimeStatus(running=True, client="deck"))
+    called = []
+    monkeypatch.setattr(cli.runtime, "prune_stale_images",
+                        lambda: called.append(1))
+
+    rc = cli.cmd_runtime_prune_images(argparse.Namespace())
+
+    assert rc == 1
+    assert called == []
+    assert "session is running" in capsys.readouterr().err
+
+
+def test_prune_images_runs_when_idle(monkeypatch, capsys):
+    from podstage.core import runtime as rt
+
+    monkeypatch.setattr(cli.runtime, "status",
+                        lambda: rt.RuntimeStatus(running=False, client=None))
+    monkeypatch.setattr(cli.runtime, "prune_stale_images", lambda: (2, 7662782561))
+
+    assert cli.cmd_runtime_prune_images(argparse.Namespace()) == 0
+    out = capsys.readouterr().out
+    assert "2" in out and "7.7 GB" in out

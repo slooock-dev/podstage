@@ -89,8 +89,8 @@ fix is upstream: a fork/exec fallback in `start_transient_service`.
 **`LIBDECOR_PLUGIN_DIR` in `app.sh`.** moonshine implements no
 `zxdg_decoration_manager_v1` while gamescope is linked against libdecor, so
 gamescope decorates itself and Big Picture arrives with a titlebar whose close
-button the client's touchpad can click. `-f -b` fixes the visible frame;
-pointing `LIBDECOR_PLUGIN_DIR` at an empty directory drops the two remaining
+button the client's touchpad can click. `-f -b` fixes the visible frame.
+Pointing `LIBDECOR_PLUGIN_DIR` at an empty directory drops the two remaining
 frame subsurfaces that otherwise hold pointer focus and produce a stuck resize
 cursor. Also upstream-fixable: advertising xdg-decoration and answering
 "server-side" would make libdecor stand down on its own.
@@ -104,7 +104,7 @@ needs a PipeWire daemon this image deliberately does not run, because
 moonshine brings its own PulseAudio server. What does work is
 `gamescopectl screenshot <path>`: gamescope writes its own composited output,
 which is the exact picture moonshine encodes, roughly 150 ms after the
-request. The loop re-resolves the gamescope socket every round on purpose --
+request. The loop re-resolves the gamescope socket every round on purpose:
 gamescope only exists while a client is connected, and comes back with the
 session.
 
@@ -144,5 +144,5 @@ client.
 gamescope for a screenshot takes it out of direct scanout, and moonshine
 rebuilds its colour converter when the format changes under it: 3 rebuilds in
 3 minutes with the loop running, 0 with it stopped. The preview stays on by
-default; set a profile's `preview_interval_s` to 0 to turn it off for sessions
+default. Set a profile's `preview_interval_s` to 0 to turn it off for sessions
 that must not be disturbed.

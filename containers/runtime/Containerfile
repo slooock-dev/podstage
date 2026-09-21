@@ -16,7 +16,7 @@
 # to a host run (where Wolf's smithay-EGL fails, GOW #124).
 
 # Pinned digest: build cache + audit anchor.
-FROM docker.io/library/archlinux:latest@sha256:fe6972d4dc1f660c0c10f4c41b2de8986bab89e7e2955378f8beadb8ebcd7433
+FROM docker.io/library/archlinux:latest@sha256:f3691b4dde62ba4c4b6f0ae2c1fbf28e8c0c8c4b9a35c7e06dc1f70e21aa29f6
 
 # --- multilib (Steam is 32-bit) + base refresh -----------------------------
 RUN printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf && \
@@ -52,8 +52,8 @@ RUN pacman -S --noconfirm --needed \
 # landing in the image. When bumping SUNSHINE_VERSION, take the new hash from
 #   https://api.github.com/repos/LizardByte/Sunshine/releases/tags/<tag>
 # (assets[].digest).
-ARG SUNSHINE_VERSION=v2026.516.143833
-ARG SUNSHINE_SHA256=676539cfb079f81f38e7001b85d72c39cd5bf25abe0956bab4577cb25afc5299
+ARG SUNSHINE_VERSION=v2026.914.233613
+ARG SUNSHINE_SHA256=17eb8c4d823a2693038f40aeeab56943ef0d5d6ace8ac90b3693905b0acbba87
 ARG SUNSHINE_URL=https://github.com/LizardByte/Sunshine/releases/download/${SUNSHINE_VERSION}/sunshine-${SUNSHINE_VERSION#v}-1-x86_64.pkg.tar.zst
 RUN curl -fL "$SUNSHINE_URL" -o /tmp/sunshine.pkg.tar.zst && \
     echo "${SUNSHINE_SHA256}  /tmp/sunshine.pkg.tar.zst" | sha256sum -c - && \

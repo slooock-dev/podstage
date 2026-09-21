@@ -48,14 +48,11 @@ if [ -n "${PS_SUN_DIR:-}" ]; then
             sleep 8   # let the compositor/gamescope come up first
             while :; do
                 rm -f /tmp/thumb.mp4
-                # INT first, because wf-recorder finalizes the file on SIGINT:
-                # a capture that did get a frame ends by itself instead of
-                # being hard killed, and labwc stops logging an error for every
-                # iteration (it reports each SIGKILLed child at ERROR level).
-                # The -k fallback stays essential: on a static output
-                # wlr-screencopy delivers no frame, wf-recorder then sits in
-                # its wayland loop where it may act on no signal at all, and
-                # without the KILL this loop would hang on its first iteration.
+                # INT first: wf-recorder finalizes the file on SIGINT, so a
+                # capture that got a frame ends by itself (labwc logs every
+                # SIGKILLed child at ERROR). The -k fallback is required: on a
+                # static output wlr-screencopy delivers no frame and
+                # wf-recorder may act on no signal at all, hanging this loop.
                 timeout -s INT -k 2 2 wf-recorder -y -f /tmp/thumb.mp4 >/dev/null 2>&1
                 if [ -s /tmp/thumb.mp4 ] &&
                     ffmpeg -y -loglevel error -i /tmp/thumb.mp4 -frames:v 1 \

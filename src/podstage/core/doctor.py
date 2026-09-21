@@ -2,7 +2,7 @@
 
 ``podstage doctor`` checks that everything the container-based streaming
 pipeline needs is present *before* anything tries to stream. Checks carry an
-optional ``fix`` — a ready-made (usually sudo) command line; ``podstage
+optional ``fix``, a ready-made (usually sudo) command line. ``podstage
 setup`` aggregates those into a guided one-shot script. Host-side gamescope/
 labwc/sunshine are NOT checked anymore: they live inside the runtime image.
 """
@@ -35,14 +35,14 @@ class Status(str, Enum):
     OK = "OK"
     WARN = "WARN"
     FAIL = "FAIL"
-    # A fact about a path this install does not take; see run_all() for how
+    # A fact about a path this install does not take. See run_all() for how
     # severity is decided.
     INFO = "INFO"
 
 
 # Check groups, in the order they are meant to be worked through. The host
 # has to be right before any backend can stream, so backend groups come last.
-# Labels are the GUI's business (they get translated there); doctor only says
+# Labels are the GUI's business (they get translated there). Doctor only says
 # which group a check belongs to.
 GROUP_HOST = "host"
 GROUP_STREAMING = "streaming"
@@ -72,14 +72,14 @@ def _run(cmd: list[str], timeout: int = 10) -> tuple[int, str]:
 
 def check_podman() -> CheckResult:
     if not shutil.which("podman"):
-        return CheckResult("podman", Status.FAIL, "not found — the runtime is a podman container")
+        return CheckResult("podman", Status.FAIL, "not found, the runtime is a podman container")
     _, ver = _run(["podman", "--version"])
-    # Overlay volume options (:O with upperdir=) need podman ≥ 4 — older
+    # Overlay volume options (:O with upperdir=) need podman ≥ 4. Older
     # podman silently ignores them.
     m = re.search(r"(\d+)\.(\d+)", ver or "")
     if m and int(m.group(1)) < 4:
         return CheckResult("podman", Status.FAIL,
-                           f"{ver} — overlay volume mounts need podman ≥ 4")
+                           f"{ver}, overlay volume mounts need podman ≥ 4")
     return CheckResult("podman", Status.OK, ver or "present")
 
 
@@ -87,7 +87,7 @@ def configured_backends() -> set[str]:
     """Backends the configured profiles actually use. Empty/unreadable config
     → the default, since that is what a first session will run.
 
-    Every backend is CHECKED regardless (see run_all); this only decides how
+    Every backend is CHECKED regardless (see run_all). This only decides how
     severely a missing prerequisite is reported.
     """
     try:
@@ -103,9 +103,8 @@ def config_signature(cfg: "config.AppConfig") -> tuple:
     a config change can change any result.
 
     The GUI re-runs the checks on this and nothing else: the Setup page saves
-    on every toggle it owns (language, preview behaviour, mouse & keyboard),
-    and re-running a container probe on each of those would be a storm for no
-    gain.
+    on every toggle it owns, and a container probe per toggle is a storm for
+    no gain.
     """
     return (
         tuple(sorted((s.name, s.backend, s.sunshine_port_base)
@@ -127,7 +126,7 @@ def check_image() -> CheckResult:
             fix="podstage runtime build",
         )
     _, img_id = _run(["podman", "image", "inspect", "--format", "{{.Id}}", runtime.DEFAULT_IMAGE])
-    # Hash label vs. current sources; unlabeled (plain podman build) counts
+    # Hash label vs. current sources. Unlabeled (plain podman build) counts
     # as stale too.
     if runtime.image_is_stale():
         return CheckResult(
@@ -138,9 +137,33 @@ def check_image() -> CheckResult:
     return CheckResult("image", Status.OK, f"present: {img_id[:12]}{role}")
 
 
+STALE_IMAGE_FIX = "podstage runtime prune-images"
+
+
+def check_stale_images() -> CheckResult:
+    """Images left over from earlier `podstage runtime build` runs.
+
+    Every rebuild produces one and nothing else reports them. Decimal GB to
+    match `podman images`; the size is an upper bound, superseded runtime and
+    moonshine builds share base layers. The fix goes through the CLI because
+    the removal needs the running-session guard in
+    :func:`runtime.prune_stale_images`.
+    """
+    found = runtime.stale_images()
+    if not found:
+        return CheckResult("stale images", Status.OK, "none")
+    total = sum(b for _, b in found)
+    return CheckResult(
+        "stale images", Status.WARN,
+        f"{len(found)} superseded podstage build(s) from earlier rebuilds, "
+        f"up to {total / 1e9:.1f} GB reclaimable",
+        fix=STALE_IMAGE_FIX,
+    )
+
+
 # -- moonshine backend ------------------------------------------------------
 #
-# Every backend is checked regardless of what the profiles use; unused only
+# Every backend is checked regardless of what the profiles use. Unused only
 # lowers severity, see run_all().
 
 MOONSHINE_BUILD_FIX = "podstage runtime build --backend moonshine"
@@ -218,7 +241,7 @@ def parse_video_encode(out: str) -> tuple[bool, list[str]]:
 # with --no-health-check, so moonshine's own probe never runs and a missing
 # syscall surfaces as a panic mid-session.
 #
-# x86_64 syscall number; another architecture needs its own, so the probe
+# x86_64 syscall number. Another architecture needs its own, so the probe
 # reports "not checked" instead of calling something else by that number.
 _KCMP_NR_X86_64 = 312
 _KCMP_PROBE = (
@@ -264,7 +287,7 @@ def check_moonshine_kcmp() -> CheckResult:
     return CheckResult(
         "moonshine kcmp", _severity(name, Status.FAIL),
         f"kcmp(2) stays blocked under the generated profile ({out.strip()}), "
-        "so moonshine aborts on its first cached DMA-BUF import; a kernel "
+        "so moonshine aborts on its first cached DMA-BUF import. A kernel "
         "without CONFIG_CHECKPOINT_RESTORE causes this")
 
 
@@ -278,7 +301,7 @@ def check_moonshine_gpu() -> CheckResult:
     """
     name = backends.MOONSHINE.name
     if _run(["podman", "image", "exists", runtime.DEFAULT_IMAGE])[0] != 0:
-        # Nothing to probe with yet; the runtime image row says so already.
+        # Nothing to probe with yet. The runtime image row says so already.
         return CheckResult("moonshine gpu", Status.OK,
                            "not checked yet, needs the runtime image")
     rc, out = _run(_vulkaninfo_argv(), timeout=120)
@@ -292,18 +315,18 @@ def check_moonshine_gpu() -> CheckResult:
     return CheckResult(
         "moonshine gpu", _severity(name, Status.FAIL),
         "this GPU has no Vulkan video-encode queue, so the moonshine backend "
-        "cannot run here; the sunshine backend is unaffected")
+        "cannot run here. The sunshine backend is unaffected")
 
 
 def check_udev_rules() -> CheckResult:
     """Both host udev rules must be installed: the static seat9 rule (input
     isolation) and the generated per-user OWNER rule (rootless device
-    access — without it sunshine cannot open /dev/uinput and the stream has
+    access: without it sunshine cannot open /dev/uinput and the stream has
     no input at all)."""
     if not udev.STATIC_DEST.exists():
         return CheckResult(
             "udev rules", Status.FAIL,
-            f"{udev.STATIC_DEST.name} missing — client input would control the DESKTOP",
+            f"{udev.STATIC_DEST.name} missing, client input would control the DESKTOP",
             fix=UDEV_FIX,
         )
     try:
@@ -313,14 +336,14 @@ def check_udev_rules() -> CheckResult:
     if "*passthrough*" not in static_text or "28de" not in static_text:
         return CheckResult(
             "udev rules", Status.FAIL,
-            "installed seat rule is outdated — it must match *passthrough* "
+            "installed seat rule is outdated: it must match *passthrough* "
             "(sunshine's kb/mouse/touch) AND vendor 28de (Steam's virtual pad)",
             fix=UDEV_FIX,
         )
     if not udev.OWNER_DEST.exists():
         return CheckResult(
             "udev rules", Status.FAIL,
-            f"{udev.OWNER_DEST.name} missing — the container cannot open "
+            f"{udev.OWNER_DEST.name} missing, the container cannot open "
             "/dev/uinput or the streaming devices (no client input)",
             fix=UDEV_FIX,
         )
@@ -332,7 +355,7 @@ def check_udev_rules() -> CheckResult:
     if f'OWNER="{user}"' not in owner_text:
         return CheckResult(
             "udev rules", Status.FAIL,
-            f"installed owner rule does not grant user '{user}' — regenerate it",
+            f"installed owner rule does not grant user '{user}'. Regenerate it",
             fix=UDEV_FIX,
         )
     return CheckResult("udev rules", Status.OK,
@@ -340,7 +363,7 @@ def check_udev_rules() -> CheckResult:
 
 
 def check_mdns() -> CheckResult:
-    """moonlight auto-discovery: the host announces via avahi; firewalld must
+    """moonlight auto-discovery: the host announces via avahi. Firewalld must
     let mDNS (UDP 5353) in. Add-by-IP works without it."""
     fix = "sudo firewall-cmd --permanent --add-service=mdns && sudo firewall-cmd --reload"
     rc, out = _run(["firewall-cmd", "--query-service=mdns"])
@@ -351,11 +374,11 @@ def check_mdns() -> CheckResult:
     if rc != 0 and out.strip() not in ("no", ""):
         return CheckResult("mdns firewall", Status.WARN, f"cannot query firewalld ({out})", fix=fix)
     return CheckResult("mdns firewall", Status.WARN,
-                       "mDNS blocked — moonlight won't auto-discover (add-by-IP still works)",
+                       "mDNS blocked, moonlight won't auto-discover (add-by-IP still works)",
                        fix=fix)
 
 
-# Ports moonlight needs, as offsets from a profile's base port; a custom
+# Ports moonlight needs, as offsets from a profile's base port. A custom
 # base shifts the whole set. Both backends use the same block. The default base (47989) yields
 # TCP 47984/47989/48010 and UDP 47998-48000/48100/48200.
 # TCP: https/http/rtsp. UDP: video/control/audio + 2.
@@ -415,9 +438,9 @@ def check_stream_firewall() -> CheckResult:
     ``sunshine_port_base`` shifts the whole port set).
 
     Range-aware: a broad high-port range counts as open (so this doesn't warn on
-    a host that opens e.g. 1025-65535). Only ports are inspected; if you opened
+    a host that opens e.g. 1025-65535). Only ports are inspected. If you opened
     them via a firewalld *service*, ignore a warning. Add-by-IP pairing still
-    needs these; without them moonlight fails to pair/stream, often silently."""
+    needs these. Without them moonlight fails to pair/stream, often silently."""
     tcp, udp = stream_ports()
     rc, state = _run(["firewall-cmd", "--state"])
     if rc != 0 or "running" not in state:
@@ -438,7 +461,7 @@ def check_stream_firewall() -> CheckResult:
     missing = ([f"{p}/tcp" for p in missing_tcp]
                + [f"{p}/udp" for p in missing_udp])
     return CheckResult("stream firewall", Status.WARN,
-                       "closed: " + ", ".join(missing) + " — moonlight may fail to pair/stream",
+                       "closed: " + ", ".join(missing) + ". Moonlight may fail to pair/stream",
                        fix=_stream_fw_fix(missing_tcp, missing_udp))
 
 
@@ -452,17 +475,17 @@ def check_avahi() -> CheckResult:
         return CheckResult("avahi", Status.OK,
                            "not needed, moonshine announces itself")
     return CheckResult("avahi", Status.WARN,
-                       "avahi-publish-service missing — no moonlight auto-discovery")
+                       "avahi-publish-service missing, no moonlight auto-discovery")
 
 
 def check_cdi() -> CheckResult:
     if runtime.gpu_vendor() != "nvidia":
         return CheckResult("nvidia cdi", Status.OK,
-                           "not needed — non-NVIDIA GPU uses /dev/dri directly")
+                           "not needed, non-NVIDIA GPU uses /dev/dri directly")
     if CDI_SPEC.exists():
         return CheckResult("nvidia cdi", Status.OK, str(CDI_SPEC))
     return CheckResult("nvidia cdi", Status.FAIL,
-                       f"{CDI_SPEC} missing — GPU injection (--device nvidia.com/gpu) fails",
+                       f"{CDI_SPEC} missing, GPU injection (--device nvidia.com/gpu) fails",
                        fix="sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml")
 
 
@@ -470,26 +493,26 @@ def check_cdi() -> CheckResult:
 
 def check_uinput() -> CheckResult:
     """The rootless container injects client input through the REAL
-    /dev/uinput — the udev owner rule chowns it to this user. Not writable →
+    /dev/uinput. The udev owner rule chowns it to this user. Not writable →
     no client input at all."""
     dev = Path("/dev/uinput")
     if not dev.exists():
         return CheckResult("uinput", Status.FAIL,
-                           "/dev/uinput missing — client input won't work")
+                           "/dev/uinput missing, client input won't work")
     if os.access(dev, os.W_OK):
         # Writable either via the installed owner rule or because the distro
-        # already grants the user access (e.g. Bazzite) — both are fine.
+        # already grants the user access (e.g. Bazzite). Both are fine.
         return CheckResult("uinput", Status.OK, "/dev/uinput writable")
     return CheckResult(
         "uinput", Status.FAIL,
-        "/dev/uinput not writable — sunshine cannot create input devices. "
+        "/dev/uinput not writable, sunshine cannot create input devices. "
         "Install the udev rules, then re-trigger",
         fix="sudo udevadm trigger --sysname-match=uinput")
 
 
 def check_uhid() -> CheckResult:
     """The DualSense experimental feature (gamepad_ds5) creates the emulated
-    pad as a kernel HID device through /dev/uhid; without access the feature
+    pad as a kernel HID device through /dev/uhid. Without access the feature
     silently degrades to no pad at all. Only meaningful when enabled."""
     try:
         enabled = config.AppConfig.load(config.CONFIG_FILE) \
@@ -502,12 +525,12 @@ def check_uhid() -> CheckResult:
     dev = Path("/dev/uhid")
     if not dev.exists():
         return CheckResult("uhid (DS5)", Status.FAIL,
-                           "/dev/uhid missing; DualSense emulation cannot work")
+                           "/dev/uhid missing, DualSense emulation cannot work")
     if os.access(dev, os.R_OK | os.W_OK):
         return CheckResult("uhid (DS5)", Status.OK, "/dev/uhid accessible")
     return CheckResult(
         "uhid (DS5)", Status.FAIL,
-        "/dev/uhid not accessible; the generated owner rule grants it "
+        "/dev/uhid not accessible. The generated owner rule grants it "
         "(reinstall the udev rules), or disable the DualSense feature",
         fix=UDEV_FIX)
 
@@ -542,10 +565,10 @@ def check_gpu() -> CheckResult:
         return CheckResult("gpu/encoder", Status.WARN,
                            f"nvidia-smi gave nothing usable (exit {rc})")
     detail = lines[0].strip()
-    # DLSS needs the driver's wine NGX DLLs mounted in; without them Proton
+    # DLSS needs the driver's wine NGX DLLs mounted in. Without them Proton
     # just runs without it (no error anywhere).
     if runtime.nvidia_wine_dll_dir() is None:
-        detail += "; no nvngx.dll on the host — no DLSS in the sandbox"
+        detail += "; no nvngx.dll on the host, no DLSS in the sandbox"
     return CheckResult("gpu/encoder", Status.OK, detail)
 
 
@@ -572,7 +595,7 @@ def check_sunshine_conflict() -> CheckResult:
     return CheckResult("sunshine-conflict", Status.OK, "no always-on sunshine service")
 
 
-# (check, group) pairs, in host-first order; group is stamped onto the
+# (check, group) pairs, in host-first order. Group is stamped onto the
 # result in run_all() rather than repeated at every CheckResult call site.
 ALL_CHECKS: list[tuple[Callable[[], CheckResult], str]] = [
     (check_podman, GROUP_HOST),
@@ -582,6 +605,7 @@ ALL_CHECKS: list[tuple[Callable[[], CheckResult], str]] = [
     (check_uinput, GROUP_HOST),
     (check_uhid, GROUP_HOST),
     (check_steam, GROUP_HOST),
+    (check_stale_images, GROUP_HOST),
     (check_mdns, GROUP_STREAMING),
     (check_stream_firewall, GROUP_STREAMING),
     (check_avahi, GROUP_STREAMING),

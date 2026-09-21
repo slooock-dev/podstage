@@ -11,20 +11,20 @@ diagnostics shared with the CLI and are intentionally not translated.
 """
 
 import subprocess
+import time
 
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -41,7 +41,7 @@ from ...core import (
     update,
 )
 from ..i18n import tr
-from ..widgets import ElideLabel, card
+from ..widgets import ComboBox, ElideLabel, SpinBox, card
 from ..workers import start_action
 
 _GLYPH = {doctor.Status.OK: ("●", "ok"),
@@ -65,30 +65,33 @@ _EXPERIMENTAL_HINTS = {
 }
 _EXPERIMENTAL_DETAILS = {
     "hdr": lambda: tr(
-        "gamescope --hdr-enabled + DXVK_HDR, on moonshine also its own "
-        "compositor. Whether the stream carries HDR is unverified."),
+        "Enables HDR in the compositor. Whether the stream carries it is "
+        "unverified."),
     "gamepad_ds5": lambda: tr(
-        "sunshine emulates a DualSense instead of the Xbox pad: gyro and "
-        "matching glyphs. Needed for such a client, since sunshine picks "
-        "that pad by itself and fails without /dev/uhid. Steam Deck: needs "
-        "Steam Input off for moonlight (no trackpad-mouse then). Mounts "
-        "the host /dev."),
+        "Emulates a DualSense instead of the Xbox pad: gyro, matching glyphs. "
+        "Needs /dev/uhid. Steam Deck: turn Steam Input off in moonlight."),
     "gamepad_reconnect": lambda: tr(
-        "Routes /dev/input through removable symlinks so the reconnect "
-        "button can fake an unplug/replug of the streamed pads. No effect "
-        "on DualSense/moonshine pads, which Steam reads via hidraw."),
+        "Lets the reconnect button fake an unplug/replug of the streamed pads. "
+        "No effect on DualSense or moonshine pads."),
 }
 
 
-def _build_image(backend: str = backends.DEFAULT) -> str:
+def _build_image(backend: str = backends.DEFAULT, emit=None) -> str:
     # runtime.build_image stamps the source hash label doctor compares against.
-    # Deliberately in-process rather than through the generic shell fix runner:
-    # that one shells out to `podstage`, which is not on PATH for the GUI's
-    # interpreter, and caps the run at 10 minutes, which a from-scratch
-    # moonshine build (it compiles the server and its Rust dependency graph)
-    # would blow through.
-    runtime.build_image(backend=backend)
+    # In-process, not through the generic shell fix runner: `podstage` is not
+    # on the GUI interpreter's PATH, and that runner's 10-minute cap is
+    # shorter than a from-scratch moonshine build.
+    runtime.build_image(backend=backend, on_progress=emit)
     return tr("Image built.")
+
+
+def _prune_stale_images() -> str:
+    """In-process, see _build_image."""
+    count, freed = runtime.prune_stale_images()
+    if not count:
+        return tr("No superseded images.")
+    return tr("Removed {n} superseded image(s), {gb} GB.",
+              n=count, gb=f"{freed / 1e9:.1f}")
 
 
 def _group_label(group: str) -> str:
@@ -123,7 +126,7 @@ def _uninstall(delete_sandboxes: bool, include_shared: bool) -> str:
     steps = teardown.root_steps(teardown.inventory(), include_shared=include_shared)
     if steps:
         if not elevate.available():
-            raise RuntimeError(tr("pkexec is missing — finish with the CLI: "
+            raise RuntimeError(tr("pkexec is missing. Finish with the CLI: "
                                   "podstage uninstall"))
         rc, out = elevate.run_root(" && ".join(steps))
         if rc != 0:
@@ -131,9 +134,9 @@ def _uninstall(delete_sandboxes: bool, include_shared: bool) -> str:
     left = teardown.leftovers(include_shared=include_shared)
     done = "; ".join(f"{label}: {outcome}" for label, outcome in results)
     if left:
-        return tr("Removed ({done}) — still present: {names}", done=done,
+        return tr("Removed ({done}). Still present: {names}", done=done,
                   names=", ".join(a.label for a in left))
-    return tr("podstage removed — no residues found. ({done})", done=done)
+    return tr("podstage removed, no residues found. ({done})", done=done)
 
 
 def _gamepad_reconnect() -> str:
@@ -208,6 +211,38 @@ class SetupPage(QWidget):
         self._action_status.setProperty("muted", True)
         self._action_status.setWordWrap(True)
         lay.addWidget(self._action_status)
+
+        # Shown only while an action reports progress (the image build). The
+        # elapsed clock ticks independently of the bar: a single step can run
+        # for minutes and the window would otherwise look hung.
+        #
+        # Two widgets, not one string: the step text is a whole RUN command
+        # and would otherwise wrap and push the clock out of sight. The text
+        # elides into whatever width is left, the clock keeps its own.
+        self._progress_row = QWidget()
+        prow = QHBoxLayout(self._progress_row)
+        prow.setContentsMargins(0, 0, 0, 0)
+        self._progress_text = ElideLabel("")
+        self._progress_text.setProperty("muted", True)
+        self._progress_time = QLabel("")
+        self._progress_time.setProperty("muted", True)
+        self._progress_time.setAlignment(Qt.AlignmentFlag.AlignRight
+                                         | Qt.AlignmentFlag.AlignVCenter)
+        prow.addWidget(self._progress_text, 1)
+        prow.addWidget(self._progress_time, 0)
+        self._progress_row.hide()
+        lay.addWidget(self._progress_row)
+
+        self._progress = QProgressBar()
+        self._progress.setRange(0, 100)
+        self._progress.setTextVisible(True)
+        self._progress.hide()
+        lay.addWidget(self._progress)
+        self._build_step = None
+        self._build_started = 0.0
+        self._tick = QTimer(self)
+        self._tick.setInterval(1000)
+        self._tick.timeout.connect(self._on_tick)
         root.addWidget(frame)
 
         hframe, hlay = card(tr("Sandbox location"))
@@ -242,9 +277,8 @@ class SetupPage(QWidget):
         self._close_steam = QCheckBox(tr("Close the desktop Steam when a session starts"))
         self._close_steam.setChecked(self._ctx.config.close_desktop_steam)
         self._close_steam.toggled.connect(self._on_close_steam_toggled)
-        cshint = QLabel(tr("Off keeps the desktop Steam running; disable its "
-                           "\"Guide Button Focuses Steam\", or the session's "
-                           "Guide presses open its Big Picture."))
+        cshint = QLabel(tr("Off: disable the desktop Steam's \"Guide Button "
+                           "Focuses Steam\", or Guide presses open its Big Picture."))
         cshint.setProperty("muted", True)
         cshint.setWordWrap(True)
         slay.addWidget(self._close_steam)
@@ -252,15 +286,13 @@ class SetupPage(QWidget):
         self._keep_preview = QCheckBox(
             tr("Keep the last preview frame during static scenes"))
         self._keep_preview.setToolTip(tr(
-            "The capture only delivers frames while the picture changes. Off "
-            "hides the preview 45 s after the last new frame."))
+            "Off hides the preview 45 s after the last new frame."))
         self._keep_preview.setChecked(self._ctx.config.preview_keep_last)
         self._keep_preview.toggled.connect(self._on_keep_preview_toggled)
         slay.addWidget(self._keep_preview)
         self._mouse_kb = QCheckBox(tr("Mouse && keyboard input"))
         self._mouse_kb.setToolTip(tr(
-            "Streams the client's mouse and keyboard into the session; games "
-            "can lock the pointer for mouse look."))
+            "Streams the client's mouse and keyboard into the session."))
         self._mouse_kb.setChecked(self._ctx.config.mouse_keyboard)
         self._mouse_kb.toggled.connect(self._on_mouse_kb_toggled)
         mkhint = QLabel(tr("Recommended off for controller-only clients. "
@@ -277,23 +309,21 @@ class SetupPage(QWidget):
         slay.addWidget(mkbackend)
         self._perf = QCheckBox(tr("Performance metrics (FPS)"))
         self._perf.setToolTip(tr(
-            "A probe in the container asks gamescope for the presented frametime of "
-            "the running game and shows FPS on the Session page. Works on any GPU "
-            "vendor; needs a gamescope with the perf query (3.16+)."))
+            "Shows the running game's FPS on the Session page. Needs a gamescope "
+            "with the perf query (3.16+)."))
         self._perf.setChecked(self._ctx.config.perf_metrics)
         self._perf.toggled.connect(self._on_perf_toggled)
         slay.addWidget(self._perf)
         self._guide_hold = QCheckBox(tr("Hold Select to press Guide"))
         self._guide_hold.setToolTip(tr(
-            "Hold the controller's Select/Back button for the set time to "
-            "press the Guide/Xbox button, which opens the Steam menu (e.g. "
-            "to quit a game). For clients that cannot send Guide themselves: "
-            "on a Steam Deck the local Steam consumes the button."))
+            "Hold Select/Back to send Guide, which opens the Steam menu. For "
+            "clients that cannot send it themselves. A Steam Deck's local "
+            "Steam consumes the button."))
         self._guide_hold.setChecked(self._ctx.config.guide_hold_ms > 0)
         self._guide_hold.toggled.connect(self._on_guide_hold_toggled)
         # 0 in config means off; the spinbox never shows 0 so re-enabling
         # restores the last hold time instead of an invalid value.
-        self._guide_hold_ms = QSpinBox()
+        self._guide_hold_ms = SpinBox()
         self._guide_hold_ms.setRange(200, 10000)
         self._guide_hold_ms.setSingleStep(100)
         self._guide_hold_ms.setSuffix(" ms")
@@ -313,8 +343,8 @@ class SetupPage(QWidget):
 
         eframe, elay = card(tr("Experimental features"))
         eexpl = QLabel(tr(
-            "Global switches, applied at the next session start. "
-            "Container-side features need a current runtime image."))
+            "Applied at the next session start. Container-side features need a "
+            "current runtime image."))
         eexpl.setProperty("muted", True)
         eexpl.setWordWrap(True)
         elay.addWidget(eexpl)
@@ -352,7 +382,7 @@ class SetupPage(QWidget):
 
         lframe, llay = card(tr("Language"))
         lrow = QHBoxLayout()
-        self._lang = QComboBox()
+        self._lang = ComboBox()
         for label, code in ((tr("Automatic (system)"), "auto"),
                             ("English", "en"), ("Deutsch", "de")):
             self._lang.addItem(label, code)
@@ -389,8 +419,7 @@ class SetupPage(QWidget):
 
         uframe, ulay = card(tr("Remove podstage"))
         uexpl = QLabel(tr("Removes the udev rules, firewall ports, runtime "
-                          "image, data and configuration. Shared pieces stay "
-                          "unless selected."))
+                          "image, data and configuration."))
         uexpl.setProperty("muted", True)
         uexpl.setWordWrap(True)
         ulay.addWidget(uexpl)
@@ -408,9 +437,8 @@ class SetupPage(QWidget):
         root.addWidget(uframe)
 
         if not elevate.available():
-            warn = QLabel(tr("pkexec is missing, so there is no graphical "
-                             "privilege elevation. Run fixes manually via "
-                             "sudo (podstage setup)."))
+            warn = QLabel(tr("pkexec is missing: no graphical privilege "
+                             "elevation. Run fixes via sudo (podstage setup)."))
             warn.setProperty("status", "warn")
             warn.setWordWrap(True)
             root.addWidget(warn)
@@ -418,13 +446,8 @@ class SetupPage(QWidget):
 
     # -- checks ----------------------------------------------------------
     def _on_config_changed(self) -> None:
-        """Re-check only when a config change can actually change a result.
-
-        This page saves on every toggle it owns (language, preview behaviour,
-        mouse & keyboard), and the session page saves on every quality
-        dropdown. Re-running the checks on each of those would fire a
-        container probe per keystroke-ish event for no gain, so compare the
-        few fields the checks read instead."""
+        """Re-check only when a config change can change a result, see
+        doctor.config_signature."""
         signature = doctor.config_signature(self._ctx.config)
         if signature == self._config_signature:
             return
@@ -512,7 +535,14 @@ class SetupPage(QWidget):
             btn = QPushButton(tr("Build image"))
             btn.clicked.connect(
                 lambda: self._start("Image-Build",
-                                    lambda: _build_image(backend)))
+                                    lambda emit: _build_image(backend, emit),
+                                    progress=True))
+        elif r.name == "stale images":
+            # In-process, like the build: the generic runner shells out to
+            # `podstage`, which the GUI's interpreter cannot resolve.
+            btn = QPushButton(tr("Clean up"))
+            btn.clicked.connect(
+                lambda: self._start("Images", _prune_stale_images))
         elif r.status is doctor.Status.INFO:
             return None  # a path this install does not take, nothing to press
         elif r.name == "udev rules":
@@ -603,8 +633,8 @@ class SetupPage(QWidget):
             self._action_status.setText(tr("Nothing to remove."))
             return
         lines = "\n".join(
-            f"• {a.label}" + (f" — {a.detail}" if a.detail else "")
-            + ("  " + tr("(shared — kept)")
+            f"• {a.label}" + (f": {a.detail}" if a.detail else "")
+            + ("  " + tr("(shared, kept)")
                if a.shared and not self._rm_shared.isChecked() else "")
             for a in present)
         answer = QMessageBox.question(
@@ -676,16 +706,50 @@ class SetupPage(QWidget):
         QDesktopServices.openUrl(QUrl(info.url if info else update.RELEASES_URL))
 
     # -- actions ---------------------------------------------------------
-    def _start(self, label: str, fn) -> None:
+    def _start(self, label: str, fn, progress: bool = False) -> None:
         if self._busy:
             return
         self._busy = True
         self._action_status.setText(tr("{label} running …", label=label))
         self._render_results()  # grey out buttons
+        if progress:
+            self._build_step = None
+            self._build_started = time.monotonic()
+            self._progress.setValue(0)
+            self._progress_text.set_full_text("")
+            self._progress_time.setText("0:00")
+            self._progress_row.show()
+            self._progress.show()
+            self._tick.start()
 
         def _done(ok: bool, msg: str) -> None:
             self._busy = False
+            self._tick.stop()
+            self._progress.hide()
+            self._progress_row.hide()
+            self._build_step = None
             self._action_status.setText(msg if ok else f"{label}: {msg}")
             self.run_checks()
 
-        start_action(self._pool, fn, label, _done)
+        start_action(self._pool, fn, label, _done,
+                     on_progress=self._on_build_progress if progress else None)
+
+    def _on_build_progress(self, step) -> None:
+        self._build_step = step
+        self._progress.setValue(int(step.fraction * 100))
+        self._render_progress()
+
+    def _on_tick(self) -> None:
+        self._render_progress()
+
+    def _render_progress(self) -> None:
+        """Text beside the bar. Called from the step callback AND the timer,
+        so the elapsed clock keeps moving through a long single step."""
+        step = self._build_step
+        if step is None:
+            return
+        secs = int(time.monotonic() - self._build_started)
+        self._progress_text.set_full_text(tr(
+            "Building {image} | step {n}/{total} | {what}",
+            image=step.image, n=step.index, total=step.total, what=step.text))
+        self._progress_time.setText(f"{secs // 60}:{secs % 60:02d}")

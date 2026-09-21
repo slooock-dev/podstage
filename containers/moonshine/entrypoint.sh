@@ -130,9 +130,8 @@ HDR=false
 [ "${PS_HDR:-}" = enabled ] && HDR=true
 
 # Per-profile settings, written only when the host set them so an untouched
-# profile keeps moonshine's own defaults. Both keys were verified against the
-# server: it ignores unknown keys but rejects a wrong type, so the type check
-# is what proves they are read.
+# profile keeps moonshine's own defaults. moonshine ignores an unknown key
+# silently but rejects a wrong type.
 FEC_LINE=""
 [ -n "${PS_MOONSHINE_FEC:-}" ] && FEC_LINE="fec_percentage = $PS_MOONSHINE_FEC"
 KEYBOARD_BLOCK=""
@@ -297,20 +296,14 @@ fi
     done
 ) &
 
-# Preview for the host GUI: one scaled frame every N seconds into the mounted
-# sandbox HOME, exactly where the Sunshine loop drops it
-# (containers/runtime/runner.sh, $HOME/.cache/podstage/thumb.png).
+# Preview for the host GUI: one scaled frame every N seconds into
+# $HOME/.cache/podstage/thumb.png, the same file the sunshine loop writes.
+# moonshine's compositor implements no wlr-screencopy, so the frame comes from
+# the nested gamescope instead: `gamescopectl screenshot <path>` writes the
+# composited output, the picture moonshine encodes.
 #
-# The capture path is a different one though. Sunshine's loop records the labwc
-# output with wf-recorder, and moonshine's compositor implements no
-# wlr-screencopy at all (verified: wf-recorder rejects both moonshine's display
-# and gamescope's --expose-wayland one). What does work is asking the NESTED
-# gamescope for a screenshot: `gamescopectl screenshot <path>` writes gamescope's
-# composited output, i.e. the very picture moonshine encodes, with no second
-# capture path and no PipeWire.
-#
-# The loop re-resolves the socket every round on purpose: gamescope only exists
-# while a client is connected, and comes and goes with the session.
+# The socket is re-resolved every round: gamescope exists only while a client
+# is connected.
 if [ "${PS_THUMBNAIL:-enabled}" != disabled ]; then
     (
         TD="$HOME/.cache/podstage"

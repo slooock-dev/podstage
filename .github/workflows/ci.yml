@@ -37,6 +37,23 @@ jobs:
       - name: shellcheck container scripts
         run: shellcheck containers/runtime/*.sh containers/moonshine/*.sh ui.sh
 
+  # Types: the only automated reader of src/podstage/ui besides the smoke test
+  # below, since pytest imports none of it. Needs PyQt6 for those imports to
+  # resolve, hence the same install as gui-smoke. The version is pinned: a new
+  # pyright release tightens inference and would otherwise turn CI red with no
+  # change on our side. Settings (include, pythonVersion) are in pyproject.
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install (core + GUI)
+        run: pip install -e '.[ui]'
+      - name: pyright
+        run: npx --yes pyright@1.1.414
+
   # pytest runs without PyQt6, so ui/ errors stay green there — byte-compile
   # the GUI modules and boot the window offscreen once.
   gui-smoke:

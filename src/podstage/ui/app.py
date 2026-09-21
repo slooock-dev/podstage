@@ -113,7 +113,7 @@ class MainWindow(QMainWindow):
         side.addWidget(self._nav, 1)
         self._global_state = QLabel(tr("○ stopped"))
         self._global_state.setObjectName("globalState")
-        self._global_state.setWordWrap(True)  # "running · <profile>" exceeds 160 px
+        self._global_state.setWordWrap(True)  # "running | <profile>" exceeds 160 px
         side.addWidget(self._global_state)
         version = QLabel(f"v{__version__}")
         version.setProperty("muted", True)
@@ -141,8 +141,9 @@ class MainWindow(QMainWindow):
 
     def _on_snapshot(self, snap: monitor.Snapshot) -> None:
         self._session_page.on_snapshot(snap)
+        self._sandbox_page.on_snapshot(snap)
         if snap.running:
-            owner = f" · {snap.client_profile}" if snap.client_profile else ""
+            owner = f" | {snap.client_profile}" if snap.client_profile else ""
             self._global_state.setText(tr("● running") + owner)
             self._global_state.setProperty("state", "running")
         else:
@@ -153,12 +154,10 @@ class MainWindow(QMainWindow):
     def mousePressEvent(self, event) -> None:
         """Clicking empty space drops the focus from whatever field holds it.
 
-        Qt keeps the caret in a line edit or spin box until another focusable
-        widget takes over, so a field stayed visibly active after clicking
-        away. Widgets that do not accept mouse presses (labels, card
-        backgrounds) let the event bubble up to here, which is exactly the
-        "clicked on nothing" case. Values are persisted on editingFinished,
-        so this also commits a typed value instead of leaving it hanging.
+        Qt keeps the caret in a field until another focusable widget takes
+        it. Widgets that do not accept mouse presses let the event bubble up
+        here, which is the "clicked on nothing" case. Clearing focus also
+        fires editingFinished, so a typed value is committed.
         """
         focused = self.focusWidget()
         if focused is not None:

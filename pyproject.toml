@@ -52,3 +52,20 @@ version = { attr = "podstage.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.pyright]
+# GUI modules are invisible to pytest (no PyQt6 there), so the type checker is
+# the only automated reader of src/podstage/ui. Needs PyQt6 installed to
+# resolve those imports: `pip install -e '.[ui]'`, then `pyright`.
+include = ["src/podstage"]
+# The floor from requires-python, not whatever the checker happens to run on.
+pythonVersion = "3.11"
+# PyQt6's stubs name event handler parameters "a0" and "e". Matching those
+# would make every override here less readable for no gain.
+reportIncompatibleMethodOverride = "none"
+# Qt accessors (QTableWidget.item, QWidget.layout/style, QLayout.takeAt,
+# QHeaderView) are typed Optional, and the call sites here read back something
+# they just populated. Left as a warning rather than silenced: the accessors
+# really can return None, so these are worth narrowing one day, but not at the
+# cost of 23 guards written in one go.
+reportOptionalMemberAccess = "warning"
