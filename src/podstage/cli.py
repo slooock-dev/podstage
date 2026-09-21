@@ -487,6 +487,21 @@ def cmd_runtime_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_runtime_prune_images(_args: argparse.Namespace) -> int:
+    """Remove images left over from earlier builds of the runtime images."""
+    st = runtime.status()
+    if st.running:
+        print(f"a session is running (client: {st.client or 'unknown'}); "
+              "stop it first", file=sys.stderr)
+        return 1
+    count, freed = runtime.prune_stale_images()
+    if not count:
+        print("No superseded podstage images.")
+        return 0
+    print(f"Removed {count} superseded podstage image(s), {freed / 1e9:.1f} GB.")
+    return 0
+
+
 def cmd_runtime_stop(_args: argparse.Namespace) -> int:
     try:
         print("stopped" if runtime.stop() else "was not running")
@@ -568,7 +583,8 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="podstage", description=__doc__.splitlines()[0])
+    p = argparse.ArgumentParser(prog="podstage",
+                                description=(__doc__ or "").splitlines()[0])
     p.add_argument("-V", "--version", action="version", version=f"podstage {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -607,6 +623,10 @@ def build_parser() -> argparse.ArgumentParser:
     rb.add_argument("--backend", default=backends.DEFAULT, choices=backends.names(),
                     help=f"which image to build (default: {backends.DEFAULT})")
     rb.set_defaults(func=cmd_runtime_build)
+    rt_sub.add_parser(
+        "prune-images",
+        help="remove images left over from earlier builds"
+    ).set_defaults(func=cmd_runtime_prune_images)
     rt_sub.add_parser("stop", help="stop the runtime container").set_defaults(func=cmd_runtime_stop)
     rt_sub.add_parser("status", help="show runtime container status").set_defaults(func=cmd_runtime_status)
 

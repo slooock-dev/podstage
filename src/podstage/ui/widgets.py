@@ -1,12 +1,16 @@
 """Small shared building blocks: cards, meters, key-value rows."""
 
+from typing import Protocol
+
 from PyQt6.QtCore import QRect, QSize, Qt
 from PyQt6.QtGui import QPainter, QPixmap
 from PyQt6.QtWidgets import (
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QProgressBar,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -53,9 +57,51 @@ class AspectPixmapLabel(QLabel):
         painter.drawPixmap(QRect(x, y, size.width(), size.height()), self._source)
 
 
+# Qt's default lets a spin box or combo consume any wheel event beneath the
+# pointer, so scrolling a page silently rewrites whatever setting happens to
+# pass under it. Every one of these persists on change, so the edit reaches
+# config.toml with nothing on screen saying so.
+#
+# setFocusPolicy does NOT cover this: it only decides whether the wheel GIVES
+# focus, not whether it changes the value. StrongFocus is set on top so the
+# wheel never focuses the widget in the first place.
+#
+# Ignoring the event lets it bubble to the scroll area, so the page keeps
+# scrolling. Written out twice rather than as a mixin: a mixin has no base
+# that declares wheelEvent, which no type checker can follow.
+
+
+class SpinBox(QSpinBox):
+    """QSpinBox whose value only changes on a wheel while it has focus."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self, event) -> None:
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
+
+
+class ComboBox(QComboBox):
+    """QComboBox whose value only changes on a wheel while it has focus."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self, event) -> None:
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
+
+
 class ElideLabel(QLabel):
     """Single-line label that elides with '…' and shows the full text as a
-    tooltip — keeps dense rows from wrapping or clipping mid-word."""
+    tooltip. Keeps dense rows from wrapping or clipping mid-word."""
 
     def __init__(self, text: str = "") -> None:
         super().__init__()
@@ -92,7 +138,7 @@ def card(title: str) -> tuple[QFrame, QVBoxLayout]:
 
 
 class Meter(QWidget):
-    """caption | thin bar | mono value — for CPU/GPU/VRAM."""
+    """caption | thin bar | mono value, for CPU/GPU/VRAM."""
 
     def __init__(self, caption: str) -> None:
         super().__init__()
@@ -112,13 +158,16 @@ class Meter(QWidget):
         h.addWidget(self._bar, 1)
         h.addWidget(self._value)
 
-    def set(self, pct: int | None, text: str = "") -> None:
+    def set(self, pct: float | None, text: str = "") -> None:
+        # float, because every caller computes a percentage: cpu_pct is a
+        # float and the memory rows divide. Clamped and cast here so no call
+        # site has to.
         self._bar.setValue(0 if pct is None else max(0, min(int(pct), 100)))
         self._value.setText(text or "—")
 
 
 class InfoRow(QWidget):
-    """caption | value (mono) — for game/client/backend rows."""
+    """caption | value (mono), for game/client/backend rows."""
 
     def __init__(self, caption: str) -> None:
         super().__init__()
@@ -141,8 +190,25 @@ class InfoRow(QWidget):
         self._value.setText(text or "—")
 
 
-def align_captions(*rows: InfoRow) -> None:
-    """Give stacked InfoRows one caption column."""
+class CaptionRow(QWidget):
+    """A row built by hand that still lines up with the InfoRows above it.
+
+    Only exists so ``caption_label`` is a declared attribute; assigning it
+    onto a bare QWidget works at runtime but is invisible to a type checker.
+    """
+
+    caption_label: QLabel
+
+
+class HasCaption(Protocol):
+    """Anything that carries a caption column: InfoRow, or a hand-built row
+    that sets ``caption_label`` so it lines up with them."""
+
+    caption_label: QLabel
+
+
+def align_captions(*rows: HasCaption) -> None:
+    """Give stacked rows one caption column."""
     width = max(r.caption_label.minimumWidth() for r in rows)
     for r in rows:
         r.caption_label.setFixedWidth(width)

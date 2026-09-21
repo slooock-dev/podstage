@@ -19,9 +19,7 @@
 #       instead of the X360 pad; the host runtime binds /dev for the
 #       hidraw node (experimental)
 #   PS_CURSOR_IDLE_MS  outer-cursor idle-hide timeout in ms (seat-shim;
-#       default 3000 to match gamescope's own hide, 0 disables). gamescope
-#       delegates cursor drawing to labwc and never clears it on its internal
-#       idle-hide, so the shim hides and restores the outer image itself.
+#       default 3000, 0 disables)
 #   PS_SUNSHINE_PORT  base port                                    (default 47989)
 #   PS_SUNSHINE_NAME  name Moonlight lists this session as         (default podstage)
 #   PS_WEB_USER / PS_WEB_PASS   Sunshine web-manager login

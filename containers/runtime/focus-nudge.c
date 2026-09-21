@@ -1,37 +1,28 @@
-// podstage focus nudge — heals Steam Big Picture's gamepad navigation.
+// podstage focus nudge: heals Steam Big Picture's gamepad navigation.
 //
 // Symptom: after a game exits (and sometimes right after session start) Big
-// Picture takes controller input but cannot focus its own elements — the Play
+// Picture takes controller input but cannot focus its own elements, the Play
 // button never highlights. Holding B until the side menu opens fixes it.
 //
-// Diagnosed in a live session: in the broken state gamescope's
-// GAMESCOPE_FOCUSED_WINDOW, the X input focus and Steam's own STEAM_INPUT_FOCUS
-// all agree and point at the Big Picture window. A dump before and after the B
-// workaround is byte-for-byte identical, so nothing outside Steam is wrong and
-// nothing outside Steam can detect the state — it is Steam's UI that lost its
-// navigation focus. Dropping the X input focus and handing it straight back
-// does heal it (verified on the broken state), which is all this does.
+// Nothing outside Steam is wrong: gamescope's focus, the X input focus and
+// Steam's STEAM_INPUT_FOCUS all point at the Big Picture window in the broken
+// state. Only Steam's UI lost its navigation focus, and dropping the X input
+// focus and handing it straight back heals it. That is all this does.
 //
-// Trigger: gamescope publishes GAMESCOPE_FOCUSED_APP on its Xwayland root. Every
-// game exit shows up as that property switching back to Steam's 769. A launch
-// that never opens a window (cancelled, or failed between Steam and the game)
-// loses the navigation too but leaves both the focused app and window alone;
-// there the trace is GAMESCOPECTRL_BASELAYER_APPID, Steam's focus-control stack,
-// which gains the appid on launch and loses it again on the abort. Session start
-// shows up in neither, because the display is identified by the very same
-// property,
-// so its first observed value is already the final one — that case is nudged on
-// attach instead. Three shots per trigger (500 ms, 2.5 s, 10 s), because Steam
-// moves its focused window around for a while and the UI settles late. Since the
-// state is invisible, this is deliberately blind: a nudge that was not needed
-// re-focuses the same window and changes nothing. All shots stay inside the
-// first ten seconds, so none can interrupt someone typing in Steam's search.
+// Triggers, both read off gamescope's Xwayland root: GAMESCOPE_FOCUSED_APP
+// switching back to Steam's 769 (a game exited), and GAMESCOPECTRL_BASELAYER_APPID
+// losing an appid it gained (a launch that never opened a window). Session
+// start shows up in neither, because the property's first observed value is
+// already the final one, so that case is nudged on attach. Three shots per
+// trigger (500 ms, 2.5 s, 10 s): Steam moves its focused window around and the
+// UI settles late. The state is invisible, so this is deliberately blind; a
+// nudge that was not needed re-focuses the same window and changes nothing.
+// All shots stay inside ten seconds, so none can interrupt Steam's search.
 //
 // Env: PS_FOCUS_NUDGE=disabled turns it off, PS_FOCUS_NUDGE_DELAYS overrides the
 //      millisecond offsets (default "500,2500,10000"), PS_FOCUS_NUDGE_WAIT_S
-//      bounds the wait for gamescope's display — unbounded by default, since
+//      bounds the wait for gamescope's display, unbounded by default, since
 //      with dynamic resolution gamescope only starts on the first client.
-
 #define _GNU_SOURCE
 #include <stdarg.h>
 #include <stdio.h>

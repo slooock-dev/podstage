@@ -1,37 +1,15 @@
-"""Container runtime — build and manage the podstage runtime container.
+"""Single source of truth for the ``podman run`` invocation.
 
-Python port of ``containers/runtime/run.sh`` so the CLI and the desktop GUI
-both drive the exact same ``podman run`` invocation. run.sh remains as a thin
-wrapper calling into this module.
+CLI, GUI and ``containers/runtime/run.sh`` all build the container command
+here. What differs between the two backends lives in
+:mod:`podstage.core.backends`; the pipelines themselves are documented in
+containers/runtime/ and containers/moonshine/.
 
-Two streaming backends share this module (see :mod:`podstage.core.backends`,
-which holds everything that differs; the profile picks one):
-
-  * ``sunshine`` (default): the container runs the full pipeline described in
-    containers/runtime/: private PipeWire + session D-Bus → labwc(headless,
-    seat9) → gamescope(nested wayland) → Steam -gamepadui, plus sunshine
-    capturing labwc via wlr + NVENC/VAAPI.
-  * ``moonshine``: see containers/moonshine/. moonshine is compositor,
-    capture and server in one process, so labwc, seatd, the seat-shim and the
-    keeper fall away and the notes below on faked udev hotplug do not apply to
-    it. gamescope still runs nested inside the launched application.
-
-The container is ROOTLESS (``--userns=keep-id`` — it runs as this user, no
-sudo, no root store). The kernel delivers no udev uevents into a rootless user
-namespace. Three mechanisms make input work rootless instead:
-
-  * labwc/libinput hotplug — the seat-shim fakes the udev monitor via inotify
-    on the bind-mounted /dev/input (``PS_FAKE_UDEV=1``); device *enumeration*
-    works anyway through the mounted /run/udev DB.
-  * Steam/SDL gamepads — ``SDL_JOYSTICK_DISABLE_UDEV=1`` switches SDL to its
-    built-in inotify fallback (SDL dlopens libudev, a preload shim can't
-    reach it).
-  * Device access (DAC) — a generated per-user udev OWNER rule chowns the
-    streaming devices and /dev/uinput to this user (see core/udev.py); group
-    membership does not map through the user namespace, owner-uid does.
-
-Steam Input works because Steam creates and feeds its virtual X360 pad on the
-REAL /dev/uinput — there is no proxy layer in between.
+The container is rootless (``--userns=keep-id``), so the kernel delivers no
+udev uevents into it. Three mechanisms cover that, each set where it belongs:
+``PS_FAKE_UDEV`` for labwc (seat-shim.c), ``SDL_JOYSTICK_DISABLE_UDEV`` for
+Steam's gamepads, and a per-user udev OWNER rule for device access
+(core/udev.py).
 """
 
 import copy
@@ -39,9 +17,12 @@ import glob
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
+from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -236,12 +217,8 @@ def gpu_vendor() -> str:
     """"nvidia" | "amd" | "intel" | "unknown" — decides the GPU flag/encoder
     branch.
 
-    PS_GPU_VENDOR overrides detection (hybrid setups, experiments). With
-    several vendors present, NVIDIA wins over AMD over Intel — NVIDIA is the
-    tuned path on this project's reference host. The AMD path (/dev/dri +
-    VAAPI) is validated on a Rembrandt iGPU (Steam Deck client), though it
-    sees far less mileage than NVIDIA. The Intel path is the same wiring with
-    ANV/iHD userspace, confirmed on an Arc B580.
+    PS_GPU_VENDOR overrides detection. With several vendors present, NVIDIA
+    wins over AMD over Intel.
     """
     override = os.environ.get("PS_GPU_VENDOR", "").lower()
     if override in ("nvidia",) + MESA_VENDORS:
@@ -322,6 +299,9 @@ def shared_library_paths(home_dir: Path, provision: bool = True,
                 + (", compat default set" if res.compat_default_set else "")
                 + (f", {res.stale_uppers_purged} stale overlay upper(s) purged"
                    if res.stale_uppers_purged else "")
+                + (f", {res.orphan_downloads_purged} orphaned download "
+                   "staging dir(s) purged"
+                   if res.orphan_downloads_purged else "")
             )
             if res.dropped_compat_tools:
                 # Silence here would look like a game behaving oddly.
@@ -451,9 +431,8 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     env = container_env(opts, library_paths, vendor=vendor)
     args = ["run", "--rm", "--name", CONTAINER_NAME]
     args += ["-it"] if opts.attach else ["-d"]
-    # The whole host /dev: on sunshine only for the ds5 experimental feature,
-    # on moonshine always (inputtino creates its gamepads through /dev/uhid).
-    # Read off the env that is actually handed to the container, so the flag
+    # sunshine needs the whole host /dev only for the ds5 feature, moonshine
+    # always. Read off the env actually handed to the container, so the flag
     # and the variable can never disagree.
     full_dev = opts.spec.full_dev or env.get("PS_GAMEPAD_DS5") == "enabled"
     args += container_flags(library_paths, opts.home_dir, vendor=vendor,
@@ -562,25 +541,13 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     """Devices, isolation and mounts of the rootless runtime container.
     Excludes: container name/detach, the client HOME volume, env, image.
 
-    ``full_dev`` binds the host /dev wholesale instead of the uinput+input
-    pair, because a kernel HID device created via /dev/uhid brings a
-    dynamically appearing /dev/hidraw* node with it that Steam Input needs and
-    that cannot be pre-mounted. sunshine needs this only for the gamepad_ds5
-    experimental feature; the moonshine backend always does, since inputtino
-    creates every gamepad that way. Access control is unchanged either way:
-    rootless podman has no device cgroup, so device access is plain file
-    permissions under keep-id, the same the user has on the host.
-
-    ``seccomp_profile`` replaces podman's default for the single syscall
-    moonshine needs, see :func:`ensure_seccomp_profile`.
-
-    ``library_rw`` mounts the shared libraries plain read/write instead of as
-    overlays, so sandbox-side game updates persist to the host library.
-
-    ``input_mirror`` (gamepad_reconnect experimental feature) mounts the real
-    /dev/input at /dev/input-real plus a tmpfs at /dev/input, which the
-    entrypoint's mirror daemon fills with symlinks; pad-bounce needs the
-    indirection to fake a gamepad unplug/replug rootless."""
+    ``full_dev`` binds the host /dev wholesale, see the branch below.
+    ``seccomp_profile`` replaces podman's default, see
+    :func:`ensure_seccomp_profile`. ``library_rw`` mounts the shared libraries
+    plain read/write, so sandbox-side game updates persist to the host.
+    ``input_mirror`` (gamepad_reconnect) mounts the real /dev/input at
+    /dev/input-real plus a tmpfs at /dev/input, which the entrypoint's mirror
+    daemon fills with symlinks."""
     vendor = vendor or gpu_vendor()
     if vendor in MESA_VENDORS:
         # AMD/Intel: plain DRI nodes; Mesa Vulkan (RADV/ANV) + VAAPI userspace
@@ -617,6 +584,10 @@ def container_flags(library_paths: list[Path], home_dir: Path,
     if seccomp_profile is not None:
         args += ["--security-opt", f"seccomp={seccomp_profile}"]
     if full_dev:
+        # A kernel HID device created via /dev/uhid brings a dynamically
+        # appearing /dev/hidraw* node that Steam Input needs and that cannot
+        # be pre-mounted. Access control is unchanged: rootless podman has no
+        # device cgroup, so this is the file permissions the user already has.
         args += ["-v", "/dev:/dev"]
         if input_mirror:
             args += ["-v", "/dev/input:/dev/input-real"]
@@ -708,6 +679,61 @@ def runtime_src_hash(backend: str = backends.DEFAULT) -> str | None:
     return h.hexdigest()
 
 
+# Untagged AND carrying podstage's own build label: the current images are
+# tagged, and other projects' build-cache layers have no label. Dropping
+# either filter would sweep foreign images off the machine. Intermediate
+# layers inherit the label too, so this must NOT be run with `-a`.
+STALE_IMAGE_FILTERS = ["--filter", "dangling=true",
+                       "--filter", f"label={SRC_HASH_LABEL}"]
+# Removing one generation exposes the labelled image below it, so the prune
+# repeats. The cap is what keeps a podman that keeps reporting the same id
+# from spinning; in practice this converges in two rounds.
+STALE_IMAGE_ROUNDS = 8
+
+
+def stale_images() -> list[tuple[str, int]]:
+    """(id, bytes) of images left over from earlier builds of this project."""
+    rc, out = _run(["podman", "images", *STALE_IMAGE_FILTERS,
+                    "--format", "{{.ID}} {{.VirtualSize}}"])
+    if rc != 0:
+        return []
+    found = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        try:
+            found.append((parts[0], int(parts[1])))
+        except ValueError:
+            continue
+    return found
+
+
+def prune_stale_images() -> tuple[int, int]:
+    """Remove superseded build images. Returns (count, bytes).
+
+    ``-f`` is required, not a convenience: an interrupted build leaves a
+    buildah working container behind that pins the image, `podman image rm`
+    then fails with "image is in use by a container", and those containers do
+    not show up in `podman ps -a` at all (only ``--external``). ``-f`` also
+    stops containers using the image, so the CALLER must ensure no session is
+    running: rebuilding during a session leaves that session's image untagged
+    and labelled, which puts it in this very set.
+    """
+    removed = freed = 0
+    for _ in range(STALE_IMAGE_ROUNDS):
+        batch = stale_images()
+        if not batch:
+            break
+        rc, _out = _run(["podman", "image", "rm", "-f",
+                         *(i for i, _ in batch)], timeout=300)
+        removed += len(batch)
+        freed += sum(b for _, b in batch)
+        if rc != 0:
+            break
+    return removed, freed
+
+
 def image_src_hash(image: str = "", backend: str = backends.DEFAULT) -> str | None:
     """The image's source-hash label (None: no image or unlabeled build)."""
     image = image or backends.get(backend).image
@@ -736,8 +762,117 @@ def image_exists(image: str) -> bool:
     return _run(["podman", "image", "exists", image])[0] == 0
 
 
+# -- build progress ---------------------------------------------------------
+#
+# podman prints "STEP n/m: <cmd>" per step and "--> Using cache <sha>" for a
+# step it skips, which is everything needed to drive a progress bar.
+
+_STEP_RE = re.compile(r"^STEP (\d+)/(\d+):\s*(.*)$")
+_CACHE_RE = re.compile(r"^-->\s+Using cache\b")
+_COMMIT_RE = re.compile(r"^COMMIT\b")
+
+# Time weights, not sizes: a RUN compiles or downloads, everything else
+# (COPY/ENV/USER/EXPOSE/ENTRYPOINT/FROM off a local base) is near-instant. Two
+# classes on purpose — naming the expensive steps would need a weight table
+# per Containerfile and would rot on the next edit there.
+_WEIGHT_RUN = 10
+_WEIGHT_CHEAP = 1
+
+
+@dataclass(frozen=True)
+class BuildStep:
+    """One progress update from a running `podman build`."""
+
+    image: str
+    index: int
+    total: int
+    text: str
+    cached: bool
+    fraction: float
+
+
+class BuildProgress:
+    """Turns podman's build output into monotonic BuildStep updates.
+
+    A step's share of the time is unknown until it runs: finished steps are
+    weighted by kind, unseen ones by the running average, and a cache hit
+    re-weights its step down so a mostly-cached rebuild runs the bar out fast.
+    The fraction never decreases, because the estimate moves both ways as the
+    average settles.
+    """
+
+    def __init__(self, image: str) -> None:
+        self.image = image
+        self._weights: dict[int, int] = {}
+        self._index = 0
+        self._total = 0
+        self._text = ""
+        self._done_through = 0
+        self._fraction = 0.0
+
+    def _emit(self, cached: bool) -> BuildStep:
+        return BuildStep(self.image, self._index, self._total, self._text,
+                         cached, self._fraction)
+
+    def _advance(self, done_through: int) -> None:
+        self._done_through = max(self._done_through, done_through)
+        done = sum(self._weights.get(i, _WEIGHT_CHEAP)
+                   for i in range(1, self._done_through + 1))
+        unseen = max(self._total - self._done_through, 0)
+        avg = (sum(self._weights.values()) / len(self._weights)
+               if self._weights else _WEIGHT_RUN)
+        total = done + unseen * avg
+        fraction = done / total if total else 0.0
+        self._fraction = min(1.0, max(self._fraction, fraction))
+
+    def feed(self, line: str) -> BuildStep | None:
+        """One line of podman output; a BuildStep when it moved the bar."""
+        m = _STEP_RE.match(line.strip())
+        if m:
+            self._index, self._total = int(m.group(1)), int(m.group(2))
+            # Kept whole: the GUI elides to its own width and keeps the rest
+            # in a tooltip, so truncating here would only lose information.
+            text = " ".join(m.group(3).split())
+            self._text = text
+            self._weights[self._index] = (
+                _WEIGHT_RUN if text.upper().startswith("RUN") else _WEIGHT_CHEAP)
+            self._advance(self._index - 1)
+            return self._emit(cached=False)
+        if self._index and _CACHE_RE.match(line.strip()):
+            self._weights[self._index] = _WEIGHT_CHEAP
+            self._advance(self._index)
+            return self._emit(cached=True)
+        if self._index and _COMMIT_RE.match(line.strip()):
+            self._fraction = 1.0
+            self._done_through = self._total
+            return self._emit(cached=False)
+        return None
+
+
+def _build_streaming(cmd: list[str], image: str,
+                     on_progress: Callable[[BuildStep], None]) -> None:
+    """Run the build, reporting each step. Raises RuntimeError on failure.
+
+    stderr is merged into stdout: podman writes the STEP lines to stderr, and
+    reading two pipes without a reader thread deadlocks on a full buffer.
+    """
+    tail: deque[str] = deque(maxlen=12)
+    progress = BuildProgress(image)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True, bufsize=1)
+    # stdout=PIPE means p.stdout is never None; the annotation says otherwise.
+    for line in p.stdout or ():
+        tail.append(line.rstrip())
+        step = progress.feed(line)
+        if step is not None:
+            on_progress(step)
+    if p.wait(timeout=7200) != 0:
+        raise RuntimeError("podman build failed:\n" + "\n".join(tail))
+
+
 def build_image(image: str = "", backend: str = backends.DEFAULT, *,
-                quiet: bool = True) -> str:
+                quiet: bool = True,
+                on_progress: Callable[[BuildStep], None] | None = None) -> str:
     """Build a backend's image with the source-hash label (CLI and GUI both
     come through here). ``quiet=False`` streams podman's output.
 
@@ -757,13 +892,15 @@ def build_image(image: str = "", backend: str = backends.DEFAULT, *,
     if base is not None and (not image_exists(base.image)
                              or image_is_stale(backend=base.name)):
         print(f"[podstage] {base.image} is missing or stale, building it first")
-        build_image(backend=base.name, quiet=quiet)
+        build_image(backend=base.name, quiet=quiet, on_progress=on_progress)
     cmd = ["podman", "build", "-t", image]
     src_hash = runtime_src_hash(backend)
     if src_hash:
         cmd += ["--label", f"{SRC_HASH_LABEL}={src_hash}"]
     cmd.append(str(src))
-    if quiet:
+    if on_progress is not None:
+        _build_streaming(cmd, image, on_progress)
+    elif quiet:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=7200,
                            check=False)
         if p.returncode != 0:

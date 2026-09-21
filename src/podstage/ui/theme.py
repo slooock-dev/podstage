@@ -77,8 +77,8 @@ def arrow_icons() -> dict[str, str]:
 def qss() -> str:
     """The stylesheet with the freshly drawn arrow paths filled in.
 
-    A read-only or full cache dir costs the arrows, not the window: Qt draws
-    nothing for a missing image, which is exactly the state this replaced.
+    A read-only or full cache dir costs the arrows, not the window: Qt
+    silently draws nothing for a missing image.
     """
     try:
         icons = arrow_icons()

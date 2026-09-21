@@ -1,41 +1,20 @@
-/* LD_PRELOAD shim for labwc (wlroots): five jobs, all compositor-only.
+/* LD_PRELOAD shim for labwc (wlroots): five jobs, all compositor-only. Each
+ * is explained at its own section below.
  *
- * 1. Seat name — report the STREAMING seat instead of seatd's hardcoded
- *    "seat0". wlroots passes libseat_seat_name() to
- *    libinput_udev_assign_seat(), which filters devices by their udev ID_SEAT
- *    property. The host udev rule puts Sunshine's virtual devices on "seat9";
- *    with this shim labwc enumerates exactly those and never touches the
- *    desktop's real keyboard/mouse (input isolation in both directions).
- *
- * 2. Blank cursor — no-op the wlroots cursor-image setters so the dead pointer
- *    Sunshine creates isn't burned into the capture (see below).
- *
+ * 1. Seat name: report the STREAMING seat ("seat9", where the host udev rule
+ *    puts the virtual devices) instead of seatd's hardcoded "seat0", so labwc
+ *    never touches the desktop's real keyboard and mouse.
+ * 2. Blank cursor: no-op the wlroots cursor-image setters.
  * 3. Flat pointer acceleration (PS_POINTER_ACCEL=flat): client mouse counts
- *    arrive raw; libinput's adaptive accel on top is far too fast. Hook the
- *    device-attach, force the flat (1:1) profile on pointers.
+ *    arrive raw, libinput's adaptive accel on top is far too fast.
+ * 4. Fake udev monitor (PS_FAKE_UDEV): a rootless user namespace gets no
+ *    uevents, so hotplug never sees devices created mid-session. This is what
+ *    lets the container run rootless at all.
+ * 5. Cursor idle-hide (PS_SHOW_CURSOR only).
  *
- * 4. Fake udev monitor: in a rootless user namespace the kernel does NOT
- *    deliver udev netlink uevents, so libinput's hotplug monitor never sees
- *    the devices Sunshine creates mid-session. Enumerate still works (the
- *    udev DB is visible via the bind-mounted /run/udev), so we fake ONLY the
- *    monitor: an inotify watch on /dev/input drives an eventfd, and
- *    udev_monitor_receive_device() resolves each new eventN to a REAL
- *    udev_device via the visible DB. Gated by PS_FAKE_UDEV (the host runtime
- *    always sets it); without the env the real netlink monitor is untouched.
- *    This is what lets the container run rootless: the sole reason it needed
- *    root was uevent delivery.
- *
- * 5. Cursor idle-hide (only with PS_SHOW_CURSOR, since the cursor is blanked
- *    entirely otherwise): gamescope delegates cursor drawing to the outer
- *    compositor and never clears the image when it hides its own, so labwc
- *    keeps rendering the last arrow into the capture. The shim remembers the
- *    image, tracks pointer motion and clears it after PS_CURSOR_IDLE_MS
- *    (default 3000, matching gamescope). Details at that section below.
- *
- * Logging: hotplug and delivery each print one line to stderr, on purpose and
- * ungated. They fire per device event rather than continuously, and they are
- * the only signal that a device was seen but never attached, which is the
- * failure this file exists to prevent.
+ * Logging: hotplug and delivery each print one line to stderr, ungated on
+ * purpose. They are the only signal that a device was seen but never
+ * attached, the failure this file exists to prevent.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -242,18 +221,12 @@ static int show_cursor(void) {
 }
 
 /* ---- cursor idle-hide ----------------------------------------------------
- * gamescope hides its own cursor after idle (-C 3000), but in the nested
- * setup it DELEGATES cursor drawing to the outer compositor via
- * wl_pointer.set_cursor and never clears that image on its internal hide:
- * labwc keeps rendering the last arrow forever, burned into the stream.
- * Verified by comparing the wlr capture (arrow persists) against gamescope's
- * own screenshot (no cursor) after idle. So the shim hides it: remember the
- * last cursor image the compositor set, track pointer activity in
- * wlr_cursor_move/warp_absolute, clear the image once idle (piggybacked on
- * wl_display_flush_clients, which runs on the compositor thread), and replay
- * the remembered image on the next motion. PS_CURSOR_IDLE_MS overrides the
- * timeout (default 3000, matching gamescope; 0 disables). Only active with
- * PS_SHOW_CURSOR, the cursor is blanked entirely otherwise. */
+ * gamescope delegates cursor drawing to the outer compositor and never
+ * clears the image on its own idle-hide, so labwc keeps rendering the last
+ * arrow into the capture. Remember the image, track motion in
+ * wlr_cursor_move/warp_absolute, clear it after PS_CURSOR_IDLE_MS (default
+ * 3000, 0 disables) from wl_display_flush_clients (compositor thread), and
+ * replay it on the next motion. Only with PS_SHOW_CURSOR. */
 enum { CUR_NONE, CUR_XCURSOR, CUR_BUFFER, CUR_SURFACE };
 static struct {
     void *cursor;             /* labwc's wlr_cursor */

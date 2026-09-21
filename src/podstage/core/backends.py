@@ -1,27 +1,12 @@
-"""Streaming backends: what actually differs between sunshine and moonshine.
+"""Everything that differs between the sunshine and moonshine backends.
 
-podstage streams a sandboxed Steam Big Picture to a moonlight client. *How*
-that picture is composited, captured and encoded is the backend's job, and
-there are two:
+Each difference is a :class:`Backend` field, read by ``core/runtime.py``; do
+not branch on the backend name at call sites. The per-profile choice lives in
+``config.SessionConfig.backend``.
 
-``sunshine``
-    The original chain: labwc (headless) → gamescope (nested) → Steam, with
-    sunshine capturing labwc through wlr-screencopy and encoding via
-    NVENC/VAAPI. Runs on every GPU podstage supports, and is the only path
-    with a live config API (sunshine's web UI).
-
-``moonshine``
-    `moonshine <https://github.com/hgaiser/moonshine>`_ is a GameStream server
-    that brings its *own* headless compositor (smithay) and encodes with
-    Vulkan Video. It replaces compositor, capture and server in one process,
-    so labwc, the seat-shim, the keeper and the host-side mDNS publisher all
-    fall away. In exchange it needs a GPU with a Vulkan video-encode queue
-    (NVIDIA RTX, AMD RDNA2+, Intel Arc). Every older GPU that streams fine
-    through sunshine's VAAPI path cannot use this backend at all.
-
-Everything backend-specific is a field here; ``core/runtime.py`` reads them
-and stays the single source of truth for the ``podman run`` invocation. The
-per-profile choice lives in ``config.SessionConfig.backend``.
+The hard constraint: moonshine needs a GPU with a Vulkan video-encode queue
+(NVIDIA RTX, AMD RDNA2+, Intel Arc), so every older GPU that streams fine
+through sunshine's VAAPI path cannot use it at all.
 """
 
 from dataclasses import dataclass
@@ -114,17 +99,11 @@ class Backend:
     def advertised_name(self, profile: str = "") -> str:
         """What moonlight shows for this profile on this backend.
 
-        The backend belongs in the name because the two are separate servers
-        with separate pairings, kept in different state files: a client paired
-        to a profile's sunshine session is NOT paired to its moonshine one.
-        Two entries called the same thing would be indistinguishable in the
-        client, and the wrong one silently fails to connect.
-
-        Runs through `safe_name`, which is not cosmetic: a name moonlight
-        rejects makes the whole session undiscoverable. See there.
-
-        The suffix is lower-cased so both backends read the same way in the
-        client list ("-sunshine", "-moonshine"), whatever `label` carries.
+        The backend belongs in the name: the two servers keep separate
+        pairings, so two identically named entries silently connect to the
+        wrong one. Runs through `safe_name`, which is not cosmetic (see
+        there). The suffix is lower-cased so both read alike in the client
+        list.
         """
         return safe_name(f"{profile or 'podstage'}-{self.label.lower()}")
 

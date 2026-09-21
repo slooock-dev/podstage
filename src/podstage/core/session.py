@@ -1,18 +1,11 @@
-"""Session lifecycle — a client profile mapped onto the runtime container.
+"""One client profile mapped onto the runtime container.
 
-A session is one client's sandboxed Steam Big Picture stream. The heavy
-lifting (podman flags, provisioning, mounts, mDNS) lives in
-:mod:`podstage.core.runtime`; this module binds it to a
-:class:`~podstage.config.SessionConfig` profile and adds the host-side
-bring-up steps:
+The podman work lives in :mod:`podstage.core.runtime`; this module binds it to
+a :class:`~podstage.config.SessionConfig` and adds the host-side bring-up
+steps (see the method docstrings below).
 
-  setup()  – first-run: launch the isolated Steam *visibly* so the user logs in
-             (bootstraps ``$HOME`` and downloads the Steam client runtime).
-  start()  – provision + launch the runtime container for this profile.
-  stop()   – stop the runtime container (refuses if another profile owns it).
-
-Only ONE session can run at a time: games can only run from one Steam
-instance at a time — runtime.start() enforces it.
+Only one session runs at a time, because games can only run from one Steam
+instance. ``runtime.start()`` enforces it.
 """
 
 import os

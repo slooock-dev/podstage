@@ -1,18 +1,9 @@
-"""Provision an isolated streaming Steam instance with shared game files.
+"""Share the host's installed games into a sandbox HOME.
 
-Strategy (see CONTRIBUTING.md): the streaming Steam runs under its own ``$HOME``
-so it can run concurrently with the desktop Steam and keep separate settings.
-For each streamable app we:
-
-  * symlink ``steamapps/common/<installdir>`` to the main library (shared files,
-    no re-download),
-  * copy ``appmanifest_<appid>.acf`` so Steam considers it installed (only when
-    the sandbox has none or the host's is newer, see :func:`_share_into`),
-  * leave ``steamapps/compatdata/<appid>`` **separate** (fresh Proton prefix →
-    separate in-game settings).
-
-Proton / Steam Linux Runtime compat tools are shared the same way so the
-streaming instance need not re-download them.
+Per app: symlink ``steamapps/common/<installdir>`` at the host library, copy
+``appmanifest_<appid>.acf`` (conditions at :func:`_share_into`), and leave
+``steamapps/compatdata/<appid>`` separate so each sandbox gets its own Proton
+prefix. Compat tools are shared the same way.
 """
 
 import os
@@ -148,6 +139,54 @@ def _share_into(app: InstalledApp, target_steamapps: Path,
 def stream_steamapps(stream_home: Path) -> Path:
     """The streaming instance's default library folder (its own steamapps)."""
     return stream_home / ".local/share/Steam/steamapps"
+
+
+# Steam AppState bits. FullyInstalled means the app is on disk; the update bits
+# mean a download is in flight or waiting to resume.
+_STATE_FULLY_INSTALLED = 4
+_STATE_UPDATE_PENDING = 2 | 256 | 512 | 1024  # Required|Running|Paused|Started
+
+
+def _download_is_live(target_steamapps: Path, app_id: str) -> bool:
+    """Whether ``steamapps/downloading/<app_id>`` still belongs to a download.
+
+    Unreadable or unparsable manifests count as live: throwing away staging
+    that Steam still wants means re-downloading the whole app, and the failure
+    is silent until the next session stalls on it.
+    """
+    manifest = target_steamapps / f"appmanifest_{app_id}.acf"
+    if not manifest.exists():
+        return False  # app uninstalled, the staging can never be committed
+    try:
+        flags = int(_manifest_value(manifest, "StateFlags") or 0)
+    except (OSError, ValueError):
+        return True
+    if flags & _STATE_UPDATE_PENDING:
+        return True
+    return not flags & _STATE_FULLY_INSTALLED
+
+
+def purge_orphan_downloads(stream_home: Path) -> int:
+    """Drop staging dirs under ``steamapps/downloading/`` that no download owns.
+
+    Steam leaves the staging behind when a commit is interrupted; nothing ever
+    collects it, and it holds a full copy of the update (tens of GB for a large
+    game) inside the sandbox HOME. Only directories are swept: the loose
+    ``depot_*.delta`` files next to them carry a depot id that cannot be mapped
+    back to an app. Only safe while no container runs (callers provision before
+    ``podman run``). Returns the number of staging dirs purged.
+    """
+    downloading = stream_steamapps(stream_home) / "downloading"
+    if not downloading.is_dir():
+        return 0
+    target = stream_steamapps(stream_home)
+    purged = 0
+    for entry in downloading.iterdir():
+        if not entry.is_dir() or _download_is_live(target, entry.name):
+            continue
+        shutil.rmtree(entry, ignore_errors=True)
+        purged += 1
+    return purged
 
 
 def share_custom_compat_tools(stream_home: Path, steam_root: Path | None = None) -> list[str]:
@@ -449,6 +488,9 @@ class ProvisionAllResult:
     custom_tools: list[str]
     compat_default_set: bool = False
     stale_uppers_purged: int = 0
+    # Download staging Steam left behind on an interrupted commit; tens of GB
+    # per large game, nothing else ever collects it.
+    orphan_downloads_purged: int = 0
     # Host mappings pointing at a compat tool installed nowhere; named rather
     # than counted, those games run on the default Proton now.
     dropped_compat_tools: list[str] = field(default_factory=list)
@@ -483,11 +525,13 @@ def ensure_all(stream_home: Path, steam_root: Path | None = None,
     tools = _compat_tool_apps(steam_root)
     for tool in tools:
         purged += _share_into(tool, target, stream_home)
+    orphans = purge_orphan_downloads(stream_home)
     custom = share_custom_compat_tools(stream_home, steam_root)
     # Order matters: the mappings are filtered against the symlinks above.
     mirror = mirror_compat_mappings(stream_home, steam_root)
     compat = mirror.changed or ensure_compat_default(stream_home)
     return ProvisionAllResult([a.installdir for a in games], len(tools), custom, compat,
                               stale_uppers_purged=purged,
+                              orphan_downloads_purged=orphans,
                               dropped_compat_tools=mirror.dropped,
                               kept_compat_mappings=mirror.kept_from_session)

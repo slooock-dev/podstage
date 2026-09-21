@@ -22,3 +22,6 @@ venv/
 CLAUDE.md
 AGENTS.md
 .claude/
+
+# Debugging and misc
+debug_screenshots/

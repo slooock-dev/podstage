@@ -1,23 +1,14 @@
 """Thin client for the moonshine backend's HTTP endpoints.
 
-The counterpart to :mod:`podstage.core.sunshine_api`, and deliberately much
-smaller, because moonshine exposes much less: pairing is
-``POST http://…:<base>/submit-pin`` over plain HTTP with no auth and a form
-body (sunshine: TLS + basic auth, JSON, ``…:47990/api/pin``); a failed attempt
-returns ``400 Failed to register PIN.`` where sunshine returns true anyway
-(hence ``pair_verified``); there is no config endpoint, settings live in
-config.toml and need a restart (sunshine applies them live via
-``POST /api/config`` + ``/api/restart``); paired state is state.toml in the
-sandbox HOME, sunshine's is state.json.
+Pairing is ``POST http://…:<base>/submit-pin``, plain HTTP, no auth, form
+body. A failed attempt honestly returns ``400 Failed to register PIN.``, but
+``pair_verified`` still confirms against state.toml in the sandbox HOME rather
+than trusting the response, so both backends report the same kind of truth.
 
-There is nothing to authenticate against here: the endpoint sits on the same
-port moonlight talks to and takes anyone's PIN. That is moonshine's model, not
-a setting podstage can tighten. It is the reason ``Backend.live_config`` is
-False and why quality settings are not wired for this backend.
-
-``pair_verified`` still confirms against the sandbox state rather than trusting
-the response, so the CLI and GUI report the same kind of truth on both
-backends.
+There is no config endpoint: settings live in config.toml and need a restart,
+which is why ``Backend.live_config`` is False. The PIN endpoint sits on the
+port moonlight talks to and takes anyone's PIN, which is moonshine's model and
+nothing podstage can tighten.
 """
 
 import time

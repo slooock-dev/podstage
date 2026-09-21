@@ -24,9 +24,14 @@ atexit.register(shutil.rmtree, _CFG_HOME, True)
 os.environ["XDG_CONFIG_HOME"] = _CFG_HOME
 os.environ["PS_LANG"] = "en"
 
-from PyQt6.QtCore import QEvent, QObject, QPointF, Qt, pyqtSignal
-from PyQt6.QtGui import QMouseEvent
-from PyQt6.QtWidgets import QApplication, QLabel
+from PyQt6.QtCore import QEvent, QObject, QPoint, QPointF, Qt, pyqtSignal
+from PyQt6.QtGui import QMouseEvent, QWheelEvent
+from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
+    QApplication,
+    QComboBox,
+    QLabel,
+)
 
 from podstage import config
 from podstage.core import backends, monitor
@@ -156,6 +161,47 @@ def check_stepper_arrows(win) -> bool:
                if rule not in qss]
     if missing:
         print(f"gui smoke: FAILED (unstyled sub-controls: {', '.join(missing)})")
+        return False
+    return True
+
+
+def check_wheel_does_not_change_settings(win) -> bool:
+    """Scrolling a page must not rewrite the setting under the cursor.
+
+    Qt's default lets a spin box or combo consume any wheel event beneath the
+    pointer, and every one of these persists on change, so the edit reaches
+    config.toml with nothing on screen saying so. setFocusPolicy does not
+    cover it (it only decides whether the wheel GIVES focus), which is why
+    widgets.SpinBox/ComboBox exist. Checked here because pytest imports no
+    GUI module.
+    """
+    app = QApplication.instance()
+    boxes = win.findChildren(QAbstractSpinBox) + win.findChildren(QComboBox)
+    if not boxes:
+        print("gui smoke: FAILED (no spin boxes or combos found to check)")
+        return False
+    moved = []
+    for w in boxes:
+        if w.hasFocus():
+            continue
+        spin = hasattr(w, "value")
+        read = (lambda b=w: b.value()) if spin else (lambda b=w: b.currentIndex())
+        write = (lambda v, b=w: b.setValue(v)) if spin else (lambda v, b=w: b.setCurrentIndex(v))
+        # One direction at a time, restoring in between: scrolling down and
+        # back up nets out to the starting value and would pass vacuously.
+        # Both are tried because a widget already at a limit clamps.
+        for delta in (-120, 120):
+            before = read()
+            app.sendEvent(w, QWheelEvent(
+                QPointF(5, 5), w.mapToGlobal(QPointF(5, 5)),
+                QPoint(0, delta), QPoint(0, delta), Qt.MouseButton.NoButton,
+                Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False))
+            if read() != before:
+                moved.append(f"{type(w).__name__}({w.objectName() or 'unnamed'})")
+                write(before)
+                break
+    if moved:
+        print(f"gui smoke: FAILED (wheel changed without focus: {', '.join(moved)})")
         return False
     return True
 
@@ -390,6 +436,7 @@ def main() -> int:
         print("gui smoke: FAILED (empty grab)")
     ok = check_click_away_drops_focus(win) and ok
     ok = check_stepper_arrows(win) and ok
+    ok = check_wheel_does_not_change_settings(win) and ok
     ok = check_build_button_ignores_backend_choice(win) and ok
     ok = check_session_card_per_backend(win) and ok
     ok = check_extra_mount_picker() and ok

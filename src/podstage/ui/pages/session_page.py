@@ -12,7 +12,6 @@ from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QGuiApplication, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -22,7 +21,6 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -32,7 +30,16 @@ from ...core import backends, monitor, moonshine_api, runtime, sandbox, sunshine
 from ...core.session import Session
 from .. import theme
 from ..i18n import tr
-from ..widgets import AspectPixmapLabel, InfoRow, Meter, align_captions, card
+from ..widgets import (
+    AspectPixmapLabel,
+    CaptionRow,
+    ComboBox,
+    InfoRow,
+    Meter,
+    SpinBox,
+    align_captions,
+    card,
+)
 from ..workers import start_action
 
 try:  # fallback reference for the RAM meter when /proc/meminfo is unreadable
@@ -163,7 +170,7 @@ class SessionPage(QWidget):
         frame, lay = card(tr("Session"))
         top = QHBoxLayout()
         top.setSpacing(8)
-        self._client = QComboBox()
+        self._client = ComboBox()
         self._client.currentTextChanged.connect(self._on_profile_selected)
         self._start_btn = QPushButton(tr("Start"))
         self._start_btn.setProperty("primary", True)
@@ -198,7 +205,9 @@ class SessionPage(QWidget):
         self._resolution = InfoRow(tr("Resolution"))
         # Per-profile setting, shown here and in the profile dialog. Editable
         # while stopped; locked and showing the running backend while running.
-        self._backend_row = QWidget()
+        # Hand-built to sit in the same caption column as the InfoRows
+        # above it; align_captions takes anything carrying caption_label.
+        self._backend_row = CaptionRow()
         brow = QHBoxLayout(self._backend_row)
         brow.setContentsMargins(0, 0, 0, 0)
         brow.setSpacing(8)
@@ -207,7 +216,7 @@ class SessionPage(QWidget):
         caption.setFixedWidth(
             max(48, caption.fontMetrics().horizontalAdvance(tr("Backend")) + 4))
         self._backend_row.caption_label = caption
-        self._backend = QComboBox()
+        self._backend = ComboBox()
         for spec in backends.BACKENDS.values():
             self._backend.addItem(spec.label, spec.name)
         self._backend.currentIndexChanged.connect(self._on_backend_selected)
@@ -224,15 +233,15 @@ class SessionPage(QWidget):
         header = QHBoxLayout()
         header.setSpacing(8)
         header.addWidget(QLabel(tr("Refresh every")))
-        self._preview_interval = QSpinBox()
+        self._preview_interval = SpinBox()
         # Click-only focus: otherwise disabling Start on session start hands
         # keyboard focus to this box, which selects its value (blue highlight).
         self._preview_interval.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self._preview_interval.setRange(0, 300)
         self._preview_interval.setSpecialValueText(tr("off"))  # 0 → off
         self._preview_interval.setToolTip(tr(
-            "How often the in-container preview is captured; 0 turns it off. "
-            "Applies from the next stream start."))
+            "How often the preview is captured, 0 turns it off. From the next "
+            "stream start."))
         # valueChanged only toggles the unit label (cheap, no save); persistence
         # is on editingFinished so typing isn't interrupted by a save→reload.
         self._preview_interval.valueChanged.connect(
@@ -265,7 +274,7 @@ class SessionPage(QWidget):
         self._ram = Meter("RAM")
         self._gpu = Meter("GPU")
         self._vram = Meter("VRAM")
-        rows = [self._cpu, self._ram, self._gpu, self._vram]
+        rows: list[QWidget] = [self._cpu, self._ram, self._gpu, self._vram]
         # The NVENC session count is an NVIDIA-only signal (nvidia-smi); the
         # amdgpu kernel interface exposes no per-encoder counter (Intel gets
         # only a busy % via intel_gpu_top), so drop the row rather than show a
@@ -298,8 +307,8 @@ class SessionPage(QWidget):
 
         bottom = QHBoxLayout()
         self._quality_hint = QLabel(tr(
-            "Bitrate & codec are chosen by the moonlight client; these control "
-            "encoder quality on the server side."))
+            "Bitrate & codec come from the moonlight client. These are the "
+            "server-side quality."))
         self._quality_hint.setProperty("muted", True)
         self._quality_hint.setWordWrap(True)
         self._apply_btn = QPushButton(tr("Apply live"))
@@ -321,7 +330,7 @@ class SessionPage(QWidget):
         row = QHBoxLayout(panel)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
-        self._fec = QSpinBox()
+        self._fec = SpinBox()
         self._fec.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         # -1 is the minimum so it can carry the special text: 0 is a real
         # setting of its own ("no FEC"), not a stand-in for "leave default".
@@ -331,10 +340,8 @@ class SessionPage(QWidget):
             tr("moonshine default ({pct} %)", pct=config.MOONSHINE_FEC_DEFAULT))
         self._fec.setSuffix(" %")
         self._fec.setToolTip(tr(
-            "Forward error correction: how much redundancy is sent so lost "
-            "packets do not become visible artifacts. Higher survives a lossy "
-            "WiFi and costs bandwidth. 0 turns it off, and then every lost "
-            "packet is visible in the picture."))
+            "Redundancy against packet loss. Higher survives a lossy WiFi and "
+            "costs bandwidth. 0 turns it off."))
         self._fec.editingFinished.connect(self._persist_moonshine)
         row.addWidget(QLabel(tr("Error correction")))
         row.addWidget(self._fec)
@@ -350,18 +357,18 @@ class SessionPage(QWidget):
         self._quality_hint.setText(tr("Saved. Applies at the next session start."))
 
     def _build_nvenc_row(self, row: QHBoxLayout) -> None:
-        self._preset = QComboBox()
+        self._preset = ComboBox()
         for value in ("1", "2", "3", "4", "5", "6", "7"):
-            self._preset.addItem(f"P{value} · {_PRESET_LABELS[value]()}", value)
-        self._twopass = QComboBox()
+            self._preset.addItem(f"P{value} | {_PRESET_LABELS[value]()}", value)
+        self._twopass = ComboBox()
         for value in ("disabled", "quarter_res", "full_res"):
             self._twopass.addItem(_TWOPASS_LABELS[value](), value)
-        self._vbv = QSpinBox()
+        self._vbv = SpinBox()
         self._vbv.setRange(0, 400)
         self._vbv.setSingleStep(25)
         self._vbv.setToolTip(tr(
-            "VBV buffer increase (%): a larger buffer reduces artifacts in fast "
-            "motion at the same bitrate. 0 = sunshine default."))
+            "VBV buffer increase (%): larger reduces artifacts in fast motion. "
+            "0 = sunshine default."))
         # Combos persist on change (survives restarts). The spinbox persists on
         # editingFinished (Enter / focus-out), NOT valueChanged: saving on every
         # keystroke emits config_changed → reload → setValue, which would clobber
@@ -380,21 +387,20 @@ class SessionPage(QWidget):
         row.addWidget(vbv_unit)
 
     def _build_vaapi_row(self, row: QHBoxLayout) -> None:
-        self._vaapi_quality = QComboBox()
+        self._vaapi_quality = ComboBox()
         for value in ("auto", "speed", "balanced", "quality"):
             self._vaapi_quality.addItem(_VAAPI_QUALITY_LABELS[value](), value)
         self._vaapi_quality.setToolTip(tr(
             "VAAPI quality profile: the encoder's speed/quality tradeoff."))
-        self._vaapi_rc = QComboBox()
+        self._vaapi_rc = ComboBox()
         for value in ("auto", "vbr", "cbr", "cqp", "icq", "qvbr", "avbr"):
             self._vaapi_rc.addItem(_VAAPI_RC_LABELS[value](), value)
         self._vaapi_rc.setToolTip(tr(
-            "VAAPI rate-control mode. 'auto' lets the driver choose; not every "
-            "mode is supported on every GPU."))
+            "VAAPI rate-control mode. Not every mode works on every GPU."))
         self._vaapi_strict = QCheckBox(tr("Strict RC buffer"))
         self._vaapi_strict.setToolTip(tr(
-            "Avoids dropped frames over the network during scene changes, but "
-            "quality may drop during motion."))
+            "Fewer dropped frames on scene changes, at the cost of quality "
+            "during motion."))
         self._vaapi_quality.currentIndexChanged.connect(self._persist_quality)
         self._vaapi_rc.currentIndexChanged.connect(self._persist_quality)
         self._vaapi_strict.toggled.connect(self._persist_quality)
@@ -468,16 +474,15 @@ class SessionPage(QWidget):
         self._web_btn.setVisible(spec.web_port_off is not None)
         if sunshine:
             self._quality_hint.setText(tr(
-                "Bitrate & codec are chosen by the moonlight client; these "
-                "control encoder quality on the server side."))
+                "Bitrate & codec come from the moonlight client. These are the "
+                "server-side quality."))
         else:
             self._fec.blockSignals(True)
             self._fec.setValue(sc.moonshine_fec_percent)
             self._fec.blockSignals(False)
             self._quality_hint.setText(tr(
-                "Bitrate & codec are chosen by the moonlight client. "
-                "{backend} has no config API, so this applies at the next "
-                "session start.", backend=spec.label))
+                "Bitrate & codec come from the moonlight client. {backend} applies "
+                "this at the next session start.", backend=spec.label))
 
     def _load_preview(self, sc: config.SessionConfig) -> None:
         if self._preview_interval.hasFocus():  # don't clobber an in-progress edit
@@ -550,7 +555,7 @@ class SessionPage(QWidget):
         sc.sunshine_extra.update(self._quality_changes())
         self._ctx.save()
         self._quality_hint.setText(tr(
-            "Saved. Applies from the next stream start; use 'Apply live' for a "
+            "Saved. Applies from the next stream start. Use 'Apply live' for a "
             "running session."))
 
     # -- snapshot rendering ---------------------------------------------
@@ -560,7 +565,7 @@ class SessionPage(QWidget):
             self._set_state("busy", tr("starting …") if self._pending == "start"
                             else tr("stopping …"))
         elif snap.running:
-            owner = f" · {snap.client_profile}" if snap.client_profile else ""
+            owner = f" | {snap.client_profile}" if snap.client_profile else ""
             self._set_state("running", tr("● running") + owner)
             self._detail.setText(self._last_error)
         elif self._last_error:
@@ -583,9 +588,8 @@ class SessionPage(QWidget):
         self._backend.setEnabled(not snap.running)
         self._backend.setToolTip(
             tr("Stop the session to switch the backend.") if snap.running
-            else tr("Applies at the next session start. Each backend keeps its "
-                    "own pairings, so a client paired to one must be paired "
-                    "again for the other."))
+            else tr("Applies at the next session start. Each backend keeps "
+                    "its own pairings."))
         self._update_perf(snap)
         self._update_load(snap)
         self._update_thumbnail(snap.running)
@@ -610,11 +614,11 @@ class SessionPage(QWidget):
             return
         if backends.get_or_default(sc.backend).res_locked:
             self._resolution.set(tr(
-                "{w}x{h}@{r} · locked until the session restarts",
+                "{w}x{h}@{r} | locked until the session restarts",
                 w=w, h=h, r=r))
         else:
             self._resolution.set(tr(
-                "{w}x{h}@{r} · follows the connected client", w=w, h=h, r=r))
+                "{w}x{h}@{r} | follows the connected client", w=w, h=h, r=r))
 
     def _update_thumbnail(self, running: bool) -> None:
         """Show the preview frame the in-container loop drops into the mounted
@@ -746,7 +750,7 @@ class SessionPage(QWidget):
         def _launch() -> runtime.RuntimeStatus:
             if close_sandbox_steam and not session.close_sandbox_steam():
                 raise RuntimeError(tr(
-                    "Could not close the sandbox Steam; close it manually."))
+                    "Could not close the sandbox Steam. Close it manually."))
             return session.start(resolution=resolution)
 
         self._last_error = ""
@@ -803,8 +807,8 @@ class SessionPage(QWidget):
         base = sc.sunshine_port_base
         home = sc.home_dir()
         self._pair_btn.setEnabled(False)
-        failed = tr("The PIN was submitted but no pairing completed. Restart "
-                    "the pairing in moonlight and enter the new PIN.")
+        failed = tr("PIN submitted but no pairing completed. Restart the "
+                    "pairing in moonlight.")
 
         def _pair() -> str:
             if spec.name == backends.MOONSHINE.name:
@@ -828,7 +832,7 @@ class SessionPage(QWidget):
             return
         if not backends.get_or_default(sc.backend).live_config:
             self._quality_hint.setText(tr(
-                "The {backend} backend has no live quality settings; these "
+                "The {backend} backend has no live quality settings. These "
                 "apply to sunshine profiles only.",
                 backend=backends.get_or_default(sc.backend).label))
             return
@@ -852,7 +856,7 @@ class SessionPage(QWidget):
 
     def _on_quality_done(self, ok: bool, msg: str) -> None:
         self._quality_hint.setText(msg if ok else
-                                   tr("Saved; live apply failed: {msg}", msg=msg))
+                                   tr("Saved. Live apply failed: {msg}", msg=msg))
 
     def _open_web_ui(self) -> None:
         sc = self._profile()

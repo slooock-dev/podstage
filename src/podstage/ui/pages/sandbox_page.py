@@ -11,7 +11,6 @@ from pathlib import Path
 from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -26,7 +25,6 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
-    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -37,7 +35,7 @@ from ... import config
 from ...core import backends, provisioner, runtime, sandbox
 from ...core.session import Session
 from ..i18n import tr
-from ..widgets import card
+from ..widgets import ComboBox, SpinBox, card
 from ..workers import start_action
 
 # Labels are callables so tr() still sees literals (the i18n catalog test
@@ -90,7 +88,7 @@ class ProfileDialog(QDialog):
         self._name.setPlaceholderText(tr("e.g. deck, laptop, livingroom"))
         form.addRow(tr("Name"), self._name)
 
-        self._resolution = QComboBox()
+        self._resolution = ComboBox()
         self._resolution.addItems(
             [*config.RESOLUTION_PRESETS.keys(), self._pick_label, self._custom_label])
         self._custom = QLineEdit()
@@ -109,15 +107,14 @@ class ProfileDialog(QDialog):
 
         self._dynamic = QCheckBox(tr("Follow the client's resolution"))
         self._dynamic.setToolTip(tr(
-            "Render at the connecting client's resolution; the profile "
-            "resolution above is only the fallback. sunshine locks the first "
-            "client's mode until the session restarts, moonshine follows every "
-            "reconnect. Off: always render at the profile resolution."))
+            "Render at the connecting client's resolution. The one above is only "
+            "the fallback. sunshine locks the first client's mode until the "
+            "session restarts, moonshine follows every reconnect."))
         self._dynamic.setChecked(existing.dynamic_resolution if existing else True)
         form.addRow("", self._dynamic)
         self._sync_custom(self._resolution.currentText())
 
-        self._port = QSpinBox()
+        self._port = SpinBox()
         self._port.setRange(1024, 64000)
         self._port.setValue(existing.sunshine_port_base if existing else 47989)
         form.addRow(tr("moonlight port"), self._port)
@@ -125,18 +122,16 @@ class ProfileDialog(QDialog):
         # Streaming backend. The labels carry the backend key in UserData so
         # a translated label never has to be parsed back (same approach as
         # the resolution combo above).
-        self._backend = QComboBox()
+        self._backend = ComboBox()
         for spec in backends.BACKENDS.values():
             self._backend.addItem(spec.label, spec.name)
         current_backend = existing.backend if existing else backends.DEFAULT
         idx = self._backend.findData(current_backend)
         self._backend.setCurrentIndex(max(idx, 0))
         self._backend.setToolTip(tr(
-            "sunshine (default) works on every supported GPU. moonshine brings "
-            "its own compositor and encodes with Vulkan Video, which needs an "
-            "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU, and its quality settings "
-            "apply at the next session start instead of live. The Setup page "
-            "checks whether this machine can run it."))
+            "sunshine works on every supported GPU. moonshine encodes with Vulkan "
+            "Video, which needs an NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU. "
+            "The Setup page checks this machine."))
         self._backend.currentIndexChanged.connect(self._sync_backend_note)
         form.addRow(tr("Backend"), self._backend)
         self._backend_note = QLabel()
@@ -158,8 +153,8 @@ class ProfileDialog(QDialog):
         kb.addWidget(self._kb_layout, 1)
         kb.addWidget(self._kb_variant, 2)
         self._kb_row.setToolTip(tr(
-            "XKB layout of the streamed session, empty keeps moonshine's "
-            "default (us). Affects typing in Big Picture and in games."))
+            "XKB layout of the streamed session. Empty keeps moonshine's default "
+            "(us)."))
         self._kb_label = QLabel(tr("Keyboard"))
         form.addRow(self._kb_label, self._kb_row)
         self._sync_backend_note()
@@ -170,11 +165,9 @@ class ProfileDialog(QDialog):
         self._mounts.setPlaceholderText("/path/to/games\n/path/to/launcher:rw")
         self._mounts.setFixedHeight(64)
         self._mounts.setToolTip(tr(
-            "One host directory per line, mounted into the session at the "
-            "same path (start its games via non-Steam shortcuts in Big "
-            "Picture). Default is a read-only overlay like the Steam "
-            "libraries; append ':rw' for launchers that update themselves "
-            "in place."))
+            "One host directory per line, mounted at the same path in the "
+            "session. Read-only overlay by default. Append ':rw' for "
+            "launchers that update themselves in place."))
         if existing and existing.extra_mounts:
             self._mounts.setPlainText("\n".join(existing.extra_mounts))
         # The list stays editable text (that is how a path gets removed or an
@@ -192,9 +185,8 @@ class ProfileDialog(QDialog):
         browse.clicked.connect(self._on_browse_mount)
         self._mount_writable = QCheckBox(tr("writable"))
         self._mount_writable.setToolTip(tr(
-            "Add the chosen folder as ':rw'. Only for launchers that update "
-            "themselves in place: a writable mount lets the session change "
-            "host files."))
+            "Add the chosen folder as ':rw', which lets the session change host "
+            "files."))
         picker.addWidget(browse)
         picker.addWidget(self._mount_writable)
         picker.addStretch(1)
@@ -203,8 +195,8 @@ class ProfileDialog(QDialog):
 
         self._library_rw = QCheckBox(tr("Write game updates to the host library"))
         self._library_rw.setToolTip(tr(
-            "Mounts the shared Steam libraries read/write instead of as "
-            "overlays; updates from the sandbox persist on the host."))
+            "Mounts the shared Steam libraries read/write. Updates from the "
+            "sandbox persist on the host."))
         self._library_rw.setChecked(existing.library_rw if existing else False)
         form.addRow(tr("Host library"), self._library_rw)
 
@@ -252,10 +244,8 @@ class ProfileDialog(QDialog):
         self._kb_label.setVisible(moonshine)
         if moonshine:
             self._backend_note.setText(tr(
-                "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
-                "Intel Arc). Save this profile, then build its image and check "
-                "the GPU on the Setup page. Its quality setting applies at the "
-                "next start instead of live."))
+                "Needs Vulkan video encode (NVIDIA RTX, AMD RDNA2+, Intel Arc). Save "
+                "the profile, then build its image on the Setup page."))
         else:
             self._backend_note.setText("")
 
@@ -476,6 +466,7 @@ class SandboxPage(QWidget):
         self._bootstrap_profile: str | None = None
         self._sizes: dict[str, int | None] = {}
         self._overlay_sizes: dict[str, int | None] = {}
+        self._was_running = False
         self._build()
         ctx.config_changed.connect(self.refresh)
         self.refresh()
@@ -518,16 +509,14 @@ class SandboxPage(QWidget):
         self._delete_btn.clicked.connect(self._on_delete)
         self._clear_overlay_btn = QPushButton(tr("Clear overlay …"))
         self._clear_overlay_btn.setToolTip(tr(
-            "Discards this sandbox's writes onto the shared game libraries "
-            "(game updates re-apply in the next session). Host libraries and "
-            "the sandbox HOME are untouched."))
+            "Discards this sandbox's writes onto the shared game libraries. Host "
+            "libraries and the sandbox HOME are untouched."))
         self._clear_overlay_btn.clicked.connect(self._on_clear_overlay)
         self._stream_login_btn = QPushButton(tr("Streamed login"))
         self._stream_login_btn.setProperty("primary", True)
         self._stream_login_btn.setToolTip(tr(
             "Boots this sandbox into Big Picture's Steam sign-in over the "
-            "stream (QR code via the Steam Mobile App, or the on-screen "
-            "keyboard). No window opens on the host."))
+            "stream. No window opens on the host."))
         self._stream_login_btn.clicked.connect(self._on_stream_login)
         self._login_btn = QPushButton(tr("Start Steam login"))
         self._login_btn.clicked.connect(self._on_bootstrap)
@@ -547,11 +536,9 @@ class SandboxPage(QWidget):
         root.addWidget(frame)
 
         hint = QLabel(tr(
-            "Setup: 'Streamed login' signs in over the stream (QR code, no "
-            "window on the host). 'Start Steam login' opens the isolated "
-            "Steam visibly on the desktop instead, useful for settings Big "
-            "Picture does not expose. Either way the game library is "
-            "provisioned automatically afterwards."))
+            "'Streamed login' signs in over the stream, 'Start Steam login' opens "
+            "the isolated Steam on the desktop. Either way the game library "
+            "is provisioned afterwards."))
         hint.setProperty("muted", True)
         hint.setWordWrap(True)
         root.addWidget(hint)
@@ -577,7 +564,7 @@ class SandboxPage(QWidget):
             else:
                 resolution = sc.resolution
             login = tr("✓ logged in") if info.logged_in else (
-                tr("— empty") if not info.exists else tr("✗ no login"))
+                tr("empty") if not info.exists else tr("✗ no login"))
             paired = ", ".join(info.paired) if info.paired else "—"
             # Keyed, not positional: a column declared without a value raises
             # KeyError here instead of shifting every later cell one to the
@@ -615,6 +602,26 @@ class SandboxPage(QWidget):
         self._login_btn.setText(tr("Open sandbox Steam") if logged_in
                                 else tr("Start Steam login"))
 
+    def on_snapshot(self, snap) -> None:
+        """Re-measure the sizes once a session ends.
+
+        The cached size is the reason: it is filled on first sight and never
+        recomputed, so a sandbox that shrank during a session (the provisioner
+        purges orphaned download staging at every start) kept showing its old
+        number until the GUI restarted. A session end is the one moment the
+        number can have changed without this page doing anything.
+        """
+        if self._was_running and not snap.running:
+            name = snap.client_profile
+            if name:
+                self._sizes.pop(name, None)
+                self._overlay_sizes.pop(name, None)
+            else:
+                self._sizes.clear()
+                self._overlay_sizes.clear()
+            self._refresh_sizes()
+        self._was_running = snap.running
+
     def _refresh_sizes(self) -> None:
         profiles = [(sc.name, sc.home_dir()) for sc in self._ctx.config.sessions
                     if sc.name not in self._sizes and sc.home_dir().is_dir()]
@@ -632,9 +639,8 @@ class SandboxPage(QWidget):
     def _on_sizes_done(self, ok: bool, _msg: str) -> None:
         """Fill in the two size cells the background du just measured.
 
-        By key, never by a literal index. This writes into an already rendered
-        table, so a wrong index overwrites a neighbouring column instead of
-        failing, and nothing about the result looks wrong.
+        By key, never by index: this writes into a rendered table, so a wrong
+        index silently overwrites a neighbouring column.
         """
         if not ok:
             return
@@ -719,7 +725,7 @@ class SandboxPage(QWidget):
             self, tr("Clear overlay?"),
             tr("Discard '{name}'s writes onto the shared game libraries "
                "({size})? Game updates applied in a session are lost and "
-               "re-apply next time; the host libraries and the sandbox HOME "
+               "re-apply next time. The host libraries and the sandbox HOME "
                "are untouched.", name=sc.name, size=_fmt_size(size)),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel)
@@ -752,7 +758,7 @@ class SandboxPage(QWidget):
             self._status.setText(tr("A Steam login is already running."))
             return
         if runtime.status().running:
-            self._status.setText(tr("Stop the running streaming session first; "
+            self._status.setText(tr("Stop the running streaming session first. "
                                     "Steam can only run once."))
             return
         body = tr(
@@ -781,7 +787,7 @@ class SandboxPage(QWidget):
             return
         self._status.setText(tr(
             "Login session running: connect with moonlight and sign in. "
-            "Stop the session on the Session page when you are done; the "
+            "Stop the session on the Session page when you are done. The "
             "next regular start provisions the game library."))
 
     # -- bootstrap (first-time Steam login) ------------------------------
@@ -794,7 +800,7 @@ class SandboxPage(QWidget):
             self._status.setText(tr("A Steam login is already running."))
             return
         if runtime.status().running:
-            self._status.setText(tr("Stop the running streaming session first; "
+            self._status.setText(tr("Stop the running streaming session first. "
                                     "Steam can only run once."))
             return
         if self._ctx.config.close_desktop_steam:
@@ -830,11 +836,12 @@ class SandboxPage(QWidget):
             return
         env = QProcessEnvironment.systemEnvironment()
         env.insert("HOME", str(sc.home_dir()))
-        self._steam_proc = QProcess(self)
-        self._steam_proc.setProcessEnvironment(env)
-        self._steam_proc.finished.connect(self._on_steam_finished)
-        self._steam_proc.errorOccurred.connect(self._on_steam_error)
-        self._steam_proc.start("steam", [])
+        proc = QProcess(self)
+        proc.setProcessEnvironment(env)
+        proc.finished.connect(self._on_steam_finished)
+        proc.errorOccurred.connect(self._on_steam_error)
+        self._steam_proc = proc
+        proc.start("steam", [])
         self._status.setText(tr(
             "Steam is running isolated for '{name}'. Log in, then close "
             "Steam (Steam → Exit).", name=sc.name))
@@ -849,7 +856,7 @@ class SandboxPage(QWidget):
         self._steam_proc = None
         sc = self._ctx.config.get(self._bootstrap_profile or "")
         if sc is None:
-            self._finish_bootstrap(tr("Profile vanished; nothing was provisioned."))
+            self._finish_bootstrap(tr("Profile vanished. Nothing was provisioned."))
             return
         session = Session(sc)
         if not session.is_bootstrapped():

@@ -1,5 +1,5 @@
 from podstage import config
-from podstage.core import doctor
+from podstage.core import doctor, runtime
 
 
 def test_fw_range_covers_port():
@@ -383,3 +383,42 @@ def test_one_crashing_check_does_not_take_the_report_down(monkeypatch):
     assert [r.name for r in results] == ["boom", "fine"]
     assert results[0].status is doctor.Status.FAIL
     assert "podman went missing" in results[0].detail
+
+
+# -- superseded podstage images --------------------------------------------
+#
+# doctor only classifies; the podman query and its parsing live in
+# core/runtime.py and are tested there.
+
+
+def test_stale_images_ok_when_none(monkeypatch):
+    monkeypatch.setattr(runtime, "stale_images", list)
+    r = doctor.check_stale_images()
+    assert r.status is doctor.Status.OK
+    assert r.fix == ""
+
+
+def test_stale_images_warns_with_count_and_size(monkeypatch):
+    monkeypatch.setattr(runtime, "stale_images",
+                        lambda: [("88d7e7d3b25f", 4991143519),
+                                 ("9fff1b96c6c0", 2671639042)])
+    r = doctor.check_stale_images()
+    assert r.status is doctor.Status.WARN
+    assert "2" in r.detail
+    assert "7.7 GB" in r.detail
+
+
+def test_stale_images_fix_goes_through_the_guarded_cli(monkeypatch):
+    """A raw `podman image rm` fails on images pinned by leftover buildah
+    working containers, and a raw `-f` would kill a running session. The CLI
+    command carries the guard."""
+    monkeypatch.setattr(runtime, "stale_images",
+                        lambda: [("88d7e7d3b25f", 4991143519)])
+    assert doctor.check_stale_images().fix == "podstage runtime prune-images"
+
+
+def test_stale_images_is_a_host_check(monkeypatch):
+    monkeypatch.setattr(runtime, "stale_images", list)
+    results = {r.name: r for r in doctor.run_all()}
+    assert "stale images" in results
+    assert results["stale images"].group == doctor.GROUP_HOST

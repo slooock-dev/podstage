@@ -29,12 +29,12 @@ TEXTS: dict[str, str] = {
     "Game": "Spiel",
     "Preview": "Vorschau",
     "Refresh every": "Aktualisieren alle",
-    "How often the in-container preview is captured; 0 turns it off. Applies "
-    "from the next stream start.":
-        "Wie oft die Vorschau im Container aufgenommen wird; 0 schaltet sie aus. "
-        "Wirkt ab dem nächsten Stream-Start.",
-    "{w}x{h}@{r} · follows the connected client":
-        "{w}x{h}@{r} · folgt dem verbundenen Client",
+    "How often the preview is captured, 0 turns it off. From the next "
+    "stream start.":
+        "Wie oft die Vorschau aufgenommen wird, 0 schaltet sie aus. Ab dem "
+        "nächsten Stream-Start.",
+    "{w}x{h}@{r} | follows the connected client":
+        "{w}x{h}@{r} | folgt dem verbundenen Client",
     "Preview appears here while streaming.":
         "Die Vorschau erscheint hier während des Streams.",
     "Preview is off": "Vorschau ist aus",
@@ -45,38 +45,34 @@ TEXTS: dict[str, str] = {
     "Apply live": "Live übernehmen",
     "Apply immediately to the running session (stream briefly reconnects)":
         "Auf die laufende Session sofort anwenden (Stream verbindet kurz neu)",
-    "Bitrate & codec are chosen by the moonlight client; these control encoder "
-    "quality on the server side.":
-        "Bitrate & Codec wählt der moonlight-Client; diese steuern die "
-        "Encoder-Qualität serverseitig.",
-    "Bitrate & codec are chosen by the moonlight client. {backend} has no "
-    "config API, so this applies at the next session start.":
-        "Bitrate & Codec wählt der moonlight-Client. {backend} hat kein "
-        "Config-API, das hier gilt also ab dem nächsten Session-Start.",
+    "Bitrate & codec come from the moonlight client. These are the "
+    "server-side quality.":
+        "Bitrate & Codec kommen vom moonlight-Client. Dies ist die "
+        "serverseitige Qualität.",
+    "Bitrate & codec come from the moonlight client. {backend} applies "
+    "this at the next session start.":
+        "Bitrate & Codec kommen vom moonlight-Client. {backend} übernimmt "
+        "dies ab dem nächsten Session-Start.",
     "Error correction": "Fehlerkorrektur",
     "moonshine default ({pct} %)": "moonshine-Standard ({pct} %)",
-    "Forward error correction: how much redundancy is sent so lost "
-    "packets do not become visible artifacts. Higher survives a lossy "
-    "WiFi and costs bandwidth. 0 turns it off, and then every lost "
-    "packet is visible in the picture.":
-        "Vorwärtsfehlerkorrektur: wie viel Redundanz mitgesendet wird, damit "
-        "verlorene Pakete keine sichtbaren Artefakte werden. Höher übersteht "
-        "ein verlustbehaftetes WLAN und kostet Bandbreite. 0 schaltet sie ab, "
-        "dann ist jedes verlorene Paket im Bild zu sehen.",
+    "Redundancy against packet loss. Higher survives a lossy WiFi and "
+    "costs bandwidth. 0 turns it off.":
+        "Redundanz gegen Paketverlust. Höher übersteht ein verlustbehaftetes "
+        "WLAN und kostet Bandbreite. 0 schaltet sie ab.",
     "Saved. Applies at the next session start.":
         "Gespeichert. Gilt ab dem nächsten Session-Start.",
-    "The {backend} backend has no live quality settings; these apply to "
+    "The {backend} backend has no live quality settings. These apply to "
     "sunshine profiles only.":
-        "Das Backend {backend} hat keine Qualitätseinstellungen zur Laufzeit; "
-        "diese gelten nur für sunshine-Profile.",
-    "VBV buffer increase (%): a larger buffer reduces artifacts in fast motion "
-    "at the same bitrate. 0 = sunshine default.":
-        "VBV-Puffer-Erhöhung (%): ein größerer Puffer reduziert Artefakte bei "
-        "schnellen Bewegungen bei gleicher Bitrate. 0 = sunshine-Standard.",
+        "Das Backend {backend} hat keine Qualitätseinstellungen zur Laufzeit. "
+        "Diese gelten nur für sunshine-Profile.",
+    "VBV buffer increase (%): larger reduces artifacts in fast motion. "
+    "0 = sunshine default.":
+        "VBV-Puffer-Erhöhung (%): größer reduziert Artefakte bei schnellen "
+        "Bewegungen. 0 = sunshine-Standard.",
     "Open sunshine web UI": "sunshine Web-UI öffnen",
-    "Saved. Applies from the next stream start; use 'Apply live' for a "
+    "Saved. Applies from the next stream start. Use 'Apply live' for a "
     "running session.":
-        "Gespeichert. Gilt ab dem nächsten Stream-Start; »Live übernehmen« "
+        "Gespeichert. Gilt ab dem nächsten Stream-Start. »Live übernehmen« "
         "wendet es auf eine laufende Session an.",
     "starting …": "startet …",
     "stopping …": "stoppt …",
@@ -91,10 +87,10 @@ TEXTS: dict[str, str] = {
     "'{name}' picks its resolution at startup.\nResolution for this session:":
         "'{name}' wählt seine Auflösung beim Start.\nAuflösung für diese "
         "Session:",
-    "The PIN was submitted but no pairing completed. Restart the pairing in "
-    "moonlight and enter the new PIN.":
-        "Die PIN wurde übermittelt, aber kein Pairing abgeschlossen. Pairing "
-        "in moonlight neu starten und die neue PIN eintragen.",
+    "PIN submitted but no pairing completed. Restart the "
+    "pairing in moonlight.":
+        "PIN übermittelt, aber kein Pairing abgeschlossen. Pairing in "
+        "moonlight neu starten.",
     "Client '{name}' paired. moonlight can stream now.":
         "Client '{name}' gepairt. moonlight kann jetzt streamen.",
     "Paired. moonlight can stream now.":
@@ -107,8 +103,8 @@ TEXTS: dict[str, str] = {
     "No running session. The setting is saved and applies from the next start.":
         "Keine laufende Session. Die Einstellung ist gespeichert und gilt ab "
         "dem nächsten Start.",
-    "Saved; live apply failed: {msg}":
-        "Gespeichert; Live-Anwendung fehlgeschlagen: {msg}",
+    "Saved. Live apply failed: {msg}":
+        "Gespeichert. Live-Anwendung fehlgeschlagen: {msg}",
 
     # -- pair dialog -----------------------------------------------------
     "Pair client": "Client pairen",
@@ -154,14 +150,12 @@ TEXTS: dict[str, str] = {
     "VAAPI quality profile: the encoder's speed/quality tradeoff.":
         "VAAPI-Qualitätsprofil: Abwägung zwischen Geschwindigkeit und Qualität "
         "des Encoders.",
-    "VAAPI rate-control mode. 'auto' lets the driver choose; not every "
-    "mode is supported on every GPU.":
-        "VAAPI-Ratensteuerung. »auto« überlässt die Wahl dem Treiber; nicht "
-        "jeder Modus wird von jeder GPU unterstützt.",
-    "Avoids dropped frames over the network during scene changes, but "
-    "quality may drop during motion.":
-        "Vermeidet verworfene Frames über das Netzwerk bei Szenenwechseln, "
-        "die Qualität kann bei Bewegung aber sinken.",
+    "VAAPI rate-control mode. Not every mode works on every GPU.":
+        "VAAPI-Ratensteuerung. Nicht jeder Modus läuft auf jeder GPU.",
+    "Fewer dropped frames on scene changes, at the cost of quality "
+    "during motion.":
+        "Weniger verworfene Frames bei Szenenwechseln, dafür Qualitätsverlust "
+        "bei Bewegung.",
 
     # -- sandbox page: table + buttons ----------------------------------
     "Steam sandboxes": "Steam-Sandboxen",
@@ -172,54 +166,43 @@ TEXTS: dict[str, str] = {
     "Delete …": "Löschen …",
     "Start Steam login": "Steam-Login starten",
     "Clear overlay …": "Overlay leeren …",
-    "Discards this sandbox's writes onto the shared game libraries (game "
-    "updates re-apply in the next session). Host libraries and the sandbox "
-    "HOME are untouched.":
+    "Discards this sandbox's writes onto the shared game libraries. Host "
+    "libraries and the sandbox HOME are untouched.":
         "Verwirft die Schreibzugriffe dieser Sandbox auf die geteilten "
-        "Spiele-Bibliotheken (Spiel-Updates werden in der nächsten Session neu "
-        "angewendet). Host-Bibliotheken und Sandbox-HOME bleiben unberührt.",
+        "Spiele-Bibliotheken. Host-Bibliotheken und Sandbox-HOME bleiben "
+        "unberührt.",
     "Clear overlay?": "Overlay leeren?",
     "Discard '{name}'s writes onto the shared game libraries ({size})? Game "
-    "updates applied in a session are lost and re-apply next time; the host "
+    "updates applied in a session are lost and re-apply next time. The host "
     "libraries and the sandbox HOME are untouched.":
         "Die Schreibzugriffe von '{name}' auf die geteilten "
         "Spiele-Bibliotheken verwerfen ({size})? In einer Session angewendete "
         "Spiel-Updates gehen verloren und werden beim nächsten Mal neu "
-        "angewendet; Host-Bibliotheken und Sandbox-HOME bleiben unberührt.",
+        "angewendet. Host-Bibliotheken und Sandbox-HOME bleiben unberührt.",
     "Overlay of '{name}' cleared.": "Overlay von '{name}' geleert.",
     "Pick at startup": "Beim Start wählen",
     "✓ logged in": "✓ eingeloggt",
-    "— empty": "— leer",
+    "empty": "leer",
     "✗ no login": "✗ kein Login",
-    "Setup: 'Streamed login' signs in over the stream (QR code, no "
-    "window on the host). 'Start Steam login' opens the isolated "
-    "Steam visibly on the desktop instead, useful for settings Big "
-    "Picture does not expose. Either way the game library is "
-    "provisioned automatically afterwards.":
-        "Einrichtung: »Gestreamter Login« loggt sich über den Stream ein "
-        "(QR-Code, kein Fenster auf dem Host). »Steam-Login starten« öffnet "
-        "stattdessen das isolierte Steam sichtbar auf dem Desktop, nützlich "
-        "für Einstellungen, die Big Picture nicht anbietet. In beiden Fällen "
-        "wird die Spiele-Bibliothek danach automatisch provisioniert.",
+    "'Streamed login' signs in over the stream, 'Start Steam login' opens "
+    "the isolated Steam on the desktop. Either way the game library "
+    "is provisioned afterwards.":
+        "»Gestreamter Login« meldet über den Stream an, »Steam-Login "
+        "starten« öffnet das isolierte Steam auf dem Desktop. In beiden "
+        "Fällen wird die Spiele-Bibliothek danach provisioniert.",
     "Streamed login": "Gestreamter Login",
     "Extra mounts": "Zusätzliche Mounts",
     "Invalid extra mount": "Ungültiger Mount",
-    "One host directory per line, mounted into the session at the "
-    "same path (start its games via non-Steam shortcuts in Big "
-    "Picture). Default is a read-only overlay like the Steam "
-    "libraries; append ':rw' for launchers that update themselves "
-    "in place.":
+    "One host directory per line, mounted at the same path in the "
+    "session. Read-only overlay by default. Append ':rw' for "
+    "launchers that update themselves in place.":
         "Ein Host-Verzeichnis pro Zeile, wird unter demselben Pfad in die "
-        "Session gemountet (Spiele darin über Non-Steam-Shortcuts in Big "
-        "Picture starten). Standard ist ein read-only-Overlay wie bei den "
-        "Steam-Bibliotheken; ':rw' anhängen für Launcher, die sich selbst "
-        "aktualisieren.",
+        "Session gemountet. Standard ist ein read-only-Overlay. ':rw' "
+        "anhängen für Launcher, die sich selbst aktualisieren.",
     "Boots this sandbox into Big Picture's Steam sign-in over the "
-    "stream (QR code via the Steam Mobile App, or the on-screen "
-    "keyboard). No window opens on the host.":
-        "Startet diese Sandbox direkt in Steams Big-Picture-Anmeldung über "
-        "den Stream (QR-Code per Steam-Mobile-App oder Bildschirmtastatur). "
-        "Auf dem Host öffnet sich kein Fenster.",
+    "stream. No window opens on the host.":
+        "Startet diese Sandbox in Steams Big-Picture-Anmeldung über den "
+        "Stream. Auf dem Host öffnet sich kein Fenster.",
     "The sandbox\n{home}\nboots into Big Picture's Steam sign-in over "
     "the stream: connect with moonlight and log in with the QR code "
     "(Steam Mobile App) or the on-screen keyboard.\n\nContinue?":
@@ -229,10 +212,10 @@ TEXTS: dict[str, str] = {
     "Starting login session …": "Starte Login-Session …",
     "Login session failed: {msg}": "Login-Session fehlgeschlagen: {msg}",
     "Login session running: connect with moonlight and sign in. "
-    "Stop the session on the Session page when you are done; the "
+    "Stop the session on the Session page when you are done. The "
     "next regular start provisions the game library.":
         "Login-Session läuft: mit moonlight verbinden und einloggen. "
-        "Danach die Session auf der Session-Seite stoppen; der nächste "
+        "Danach die Session auf der Session-Seite stoppen. Der nächste "
         "normale Start provisioniert die Spiele-Bibliothek.",
 
     # -- sandbox page: profile dialog -----------------------------------
@@ -243,31 +226,22 @@ TEXTS: dict[str, str] = {
     "WidthxHeight@Hz, e.g. 1920x1080@60": "BreitexHöhe@Hz, z. B. 1920x1080@60",
     "moonlight port": "moonlight-Port",
     "Backend": "Backend",
-    "sunshine (default) works on every supported GPU. moonshine brings "
-    "its own compositor and encodes with Vulkan Video, which needs an "
-    "NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU, and its quality settings "
-    "apply at the next session start instead of live. The Setup page "
-    "checks whether this machine can run it.":
-        "sunshine (Standard) läuft auf jeder unterstützten GPU. moonshine "
-        "bringt einen eigenen Compositor mit und kodiert per Vulkan Video, "
-        "was eine NVIDIA RTX, AMD RDNA2+ oder Intel Arc voraussetzt, und "
-        "seine Qualitätseinstellungen wirken erst ab dem nächsten "
-        "Session-Start statt sofort. Die Setup-Seite prüft, ob diese "
-        "Maschine das kann.",
-    "Needs a GPU with Vulkan video encode (NVIDIA RTX, AMD RDNA2+, "
-    "Intel Arc). Save this profile, then build its image and check "
-    "the GPU on the Setup page. Its quality setting applies at the "
-    "next start instead of live.":
-        "Braucht eine GPU mit Vulkan-Video-Encode (NVIDIA RTX, AMD RDNA2+, "
-        "Intel Arc). Profil speichern, dann auf der Setup-Seite das Image "
-        "bauen und die GPU prüfen. Die Qualitätseinstellung gilt ab dem "
-        "nächsten Start statt live.",
+    "sunshine works on every supported GPU. moonshine encodes with Vulkan "
+    "Video, which needs an NVIDIA RTX, AMD RDNA2+ or Intel Arc GPU. "
+    "The Setup page checks this machine.":
+        "sunshine läuft auf jeder unterstützten GPU. moonshine kodiert per "
+        "Vulkan Video, was eine NVIDIA RTX, AMD RDNA2+ oder Intel Arc "
+        "voraussetzt. Die Setup-Seite prüft diese Maschine.",
+    "Needs Vulkan video encode (NVIDIA RTX, AMD RDNA2+, Intel Arc). Save "
+    "the profile, then build its image on the Setup page.":
+        "Braucht Vulkan-Video-Encode (NVIDIA RTX, AMD RDNA2+, Intel Arc). "
+        "Profil speichern, dann auf der Setup-Seite das Image bauen.",
     "Keyboard": "Tastatur",
     "variant, e.g. nodeadkeys": "Variante, z. B. nodeadkeys",
-    "XKB layout of the streamed session, empty keeps moonshine's "
-    "default (us). Affects typing in Big Picture and in games.":
-        "XKB-Belegung der gestreamten Session, leer behält moonshines "
-        "Standard (us). Betrifft Texteingabe in Big Picture und in Spielen.",
+    "XKB layout of the streamed session. Empty keeps moonshine's default "
+    "(us).":
+        "XKB-Belegung der gestreamten Session. Leer behält moonshines "
+        "Standard (us).",
     "Games in this sandbox": "Spiele in dieser Sandbox",
     "Include every installed game (and any you add later)":
         "Alle installierten Spiele einschließen (auch später hinzugefügte)",
@@ -318,8 +292,8 @@ TEXTS: dict[str, str] = {
         "Profil '{name}' entfernt (Sandbox-Daten bleiben unter {home}).",
     "Error: {msg}": "Fehler: {msg}",
     "A Steam login is already running.": "Es läuft bereits ein Steam-Login.",
-    "Stop the running streaming session first; Steam can only run once.":
-        "Erst die laufende Streaming-Session stoppen; Steam kann nur einmal "
+    "Stop the running streaming session first. Steam can only run once.":
+        "Erst die laufende Streaming-Session stoppen. Steam kann nur einmal "
         "laufen.",
     "Steam login": "Steam-Login",
     "Steam will now start visibly with the isolated sandbox\n{home}\nAny "
@@ -343,8 +317,8 @@ TEXTS: dict[str, str] = {
         "schließen (Steam → Beenden).",
     "Steam could not be started. Is it installed?":
         "Steam konnte nicht gestartet werden. Ist es installiert?",
-    "Profile vanished; nothing was provisioned.":
-        "Profil verschwunden; nichts provisioniert.",
+    "Profile vanished. Nothing was provisioned.":
+        "Profil verschwunden. Nichts provisioniert.",
     "Steam exited but no login was found. Try 'Start Steam login' again.":
         "Steam wurde beendet, aber kein Login gefunden. »Steam-Login starten« "
         "erneut versuchen.",
@@ -387,20 +361,19 @@ TEXTS: dict[str, str] = {
     "Streaming": "Streaming",
     "Close the desktop Steam when a session starts":
         "Desktop-Steam beim Start einer Session schließen",
-    "Off keeps the desktop Steam running; disable its \"Guide Button "
-    "Focuses Steam\", or the session's Guide presses open its Big Picture.":
-        "Aus lässt das Desktop-Steam laufen; dort \"Guide Button Focuses "
-        "Steam\" deaktivieren, sonst öffnen die Guide-Drücke der Session "
-        "dessen Big Picture.",
+    "Off: disable the desktop Steam's \"Guide Button "
+    "Focuses Steam\", or Guide presses open its Big Picture.":
+        "Aus: im Desktop-Steam \"Guide Button Focuses Steam\" "
+        "deaktivieren, sonst öffnen Guide-Drücke dessen Big Picture.",
     "Language": "Sprache",
     "Automatic (system)": "Automatisch (System)",
     "Applies after restarting the GUI.": "Wirkt nach einem Neustart der GUI.",
     "Language saved. Restart the GUI to apply.":
         "Sprache gespeichert. GUI neu starten, um sie zu übernehmen.",
-    "pkexec is missing, so there is no graphical privilege elevation. Run "
-    "fixes manually via sudo (podstage setup).":
-        "pkexec fehlt, daher keine grafische Rechtefreigabe. Fixes manuell "
-        "per sudo ausführen (podstage setup).",
+    "pkexec is missing: no graphical privilege "
+    "elevation. Run fixes via sudo (podstage setup).":
+        "pkexec fehlt: keine grafische Rechtefreigabe. Fixes per sudo "
+        "ausführen (podstage setup).",
     "Build image": "Image bauen",
     "Install (pkexec)": "Installieren (pkexec)",
     "Fix (pkexec)": "Beheben (pkexec)",
@@ -414,60 +387,55 @@ TEXTS: dict[str, str] = {
     "{label} running …": "{label} läuft …",
     "Exit code {rc}": "Exit-Code {rc}",
     "Image built.": "Image gebaut.",
+    "Building {image} | step {n}/{total} | {what}":
+        "Baue {image} | Schritt {n}/{total} | {what}",
+    "Clean up": "Aufräumen",
+    "No superseded images.": "Keine überholten Images.",
+    "Removed {n} superseded image(s), {gb} GB.":
+        "{n} überholte(s) Image(s) entfernt, {gb} GB.",
     "Keep the last preview frame during static scenes":
         "Bei statischem Bild das letzte Vorschaubild behalten",
-    "The capture only delivers frames while the picture changes. Off hides "
-    "the preview 45 s after the last new frame.":
-        "Die Aufnahme liefert nur Frames, solange sich das Bild ändert. Aus "
-        "blendet die Vorschau 45 s nach dem letzten neuen Frame aus.",
+    "Off hides the preview 45 s after the last new frame.":
+        "Aus blendet die Vorschau 45 s nach dem letzten neuen Frame aus.",
     "Experimental features": "Experimentelle Features",
-    "Global switches, applied at the next session start. Container-side "
-    "features need a current runtime image.":
-        "Globale Schalter, gelten ab dem nächsten Session-Start. "
-        "Container-seitige Features brauchen ein aktuelles Runtime-Image.",
+    "Applied at the next session start. Container-side features need a "
+    "current runtime image.":
+        "Gilt ab dem nächsten Session-Start. Container-seitige Features "
+        "brauchen ein aktuelles Runtime-Image.",
     "HDR stream": "HDR-Stream",
     "DualSense pad (gyro)": "DualSense-Pad (Gyro)",
     "sunshine only. For PlayStation controllers.":
         "Nur sunshine. Für PlayStation-Controller.",
-    "sunshine emulates a DualSense instead of the Xbox pad: gyro and "
-    "matching glyphs. Needed for such a client, since sunshine picks "
-    "that pad by itself and fails without /dev/uhid. Steam Deck: needs "
-    "Steam Input off for moonlight (no trackpad-mouse then). Mounts "
-    "the host /dev.":
-        "sunshine emuliert ein DualSense statt des Xbox-Pads: Gyro und "
-        "passende Tastensymbole. Für so einen Client nötig, weil sunshine "
-        "dieses Pad selbst wählt und ohne /dev/uhid scheitert. Steam Deck: "
-        "braucht Steam Input für moonlight aus (dann keine Trackpad-Maus). "
-        "Mountet das Host-/dev.",
-    "gamescope --hdr-enabled + DXVK_HDR, on moonshine also its own "
-    "compositor. Whether the stream carries HDR is unverified.":
-        "gamescope --hdr-enabled + DXVK_HDR, bei moonshine zusätzlich "
-        "dessen Compositor. Ob der Stream HDR trägt, ist unverifiziert.",
+    "Emulates a DualSense instead of the Xbox pad: gyro, matching glyphs. "
+    "Needs /dev/uhid. Steam Deck: turn Steam Input off in moonlight.":
+        "Emuliert ein DualSense statt des Xbox-Pads: Gyro, passende "
+        "Tastensymbole. Braucht /dev/uhid. Steam Deck: Steam Input in "
+        "moonlight ausschalten.",
+    "Enables HDR in the compositor. Whether the stream carries it is "
+    "unverified.":
+        "Schaltet HDR im Compositor ein. Ob der Stream es trägt, ist "
+        "unverifiziert.",
     "Performance metrics (FPS)": "Performance-Metriken (FPS)",
-    "A probe in the container asks gamescope for the presented frametime of "
-    "the running game and shows FPS on the Session page. Works on any GPU "
-    "vendor; needs a gamescope with the perf query (3.16+).":
-        "Eine Sonde im Container fragt gamescope nach der Bildzeit des "
-        "laufenden Spiels und zeigt FPS auf der Session-Seite. Läuft mit jedem "
-        "GPU-Hersteller; braucht ein gamescope mit Perf-Query (3.16+).",
+    "Shows the running game's FPS on the Session page. Needs a gamescope "
+    "with the perf query (3.16+).":
+        "Zeigt die FPS des laufenden Spiels auf der Session-Seite. Braucht "
+        "ein gamescope mit Perf-Query (3.16+).",
     "Hold Select to press Guide": "Select halten drückt Guide",
-    "Hold the controller's Select/Back button for the set time to "
-    "press the Guide/Xbox button, which opens the Steam menu (e.g. "
-    "to quit a game). For clients that cannot send Guide themselves: "
-    "on a Steam Deck the local Steam consumes the button.":
-        "Select/Back am Controller für die eingestellte Zeit halten drückt "
-        "den Guide/Xbox-Button, der das Steam-Menü öffnet (z.B. um ein Spiel "
-        "zu beenden). Für Clients, die selbst kein Guide senden können: am "
-        "Steam Deck konsumiert das lokale Steam die Taste.",
+    "Hold Select/Back to send Guide, which opens the Steam menu. For "
+    "clients that cannot send it themselves. A Steam Deck's local "
+    "Steam consumes the button.":
+        "Select/Back halten sendet Guide, das öffnet das Steam-Menü. Für "
+        "Clients, die es selbst nicht senden können. Am Steam Deck "
+        "konsumiert das lokale Steam die Taste.",
     "Applies at the next session start.":
         "Gilt ab dem nächsten Session-Start.",
     "Reconnect gamepad": "Gamepad neu verbinden",
     "Write game updates to the host library":
         "Spiel-Updates in die Host-Library schreiben",
-    "Mounts the shared Steam libraries read/write instead of as "
-    "overlays; updates from the sandbox persist on the host.":
-        "Bindet die geteilten Steam-Libraries read/write statt als Overlay "
-        "ein; Updates aus der Sandbox bleiben auf dem Host erhalten.",
+    "Mounts the shared Steam libraries read/write. Updates from the "
+    "sandbox persist on the host.":
+        "Bindet die geteilten Steam-Libraries read/write ein. Updates aus "
+        "der Sandbox bleiben auf dem Host erhalten.",
     "Host library": "Host-Library",
     "Briefly disconnects and reconnects the streamed pads.":
         "Trennt die gestreamten Pads kurz und verbindet sie neu.",
@@ -475,18 +443,13 @@ TEXTS: dict[str, str] = {
         "Gamepads getrennt und neu verbunden.",
     "reconnecting …": "verbinde neu …",
     "Gamepad reconnect": "Gamepad-Reconnect",
-    "Routes /dev/input through removable symlinks so the reconnect "
-    "button can fake an unplug/replug of the streamed pads. No effect "
-    "on DualSense/moonshine pads, which Steam reads via hidraw.":
-        "Leitet /dev/input über entfernbare Symlinks, damit der "
-        "Reconnect-Knopf ein Ab- und Anstecken der gestreamten Pads "
-        "vortäuschen kann. Ohne Wirkung auf DualSense-/moonshine-Pads, "
-        "die Steam über hidraw liest.",
+    "Lets the reconnect button fake an unplug/replug of the streamed pads. "
+    "No effect on DualSense or moonshine pads.":
+        "Lässt den Reconnect-Knopf ein Ab- und Anstecken der gestreamten "
+        "Pads vortäuschen. Ohne Wirkung auf DualSense- und moonshine-Pads.",
     "Mouse && keyboard input": "Maus- && Tastatur-Eingabe",
-    "Streams the client's mouse and keyboard into the session; games can "
-    "lock the pointer for mouse look.":
-        "Leitet Maus und Tastatur des Clients in die Session; Spiele können "
-        "den Zeiger für Mouse-Look locken.",
+    "Streams the client's mouse and keyboard into the session.":
+        "Leitet Maus und Tastatur des Clients in die Session.",
     "Recommended off for controller-only clients. Applies at the next "
     "session start.":
         "Für reine Controller-Clients empfohlen: aus. Gilt ab dem nächsten "
@@ -514,11 +477,9 @@ TEXTS: dict[str, str] = {
     # -- setup page: uninstall --------------------------------------------
     "Remove podstage": "podstage entfernen",
     "Removes the udev rules, firewall ports, runtime "
-    "image, data and configuration. Shared pieces stay "
-    "unless selected.":
+    "image, data and configuration.":
         "Entfernt die udev-Regeln, Firewall-Ports, das Runtime-Image, "
-        "Daten und Konfiguration. Geteilte Bestandteile bleiben, außer sie "
-        "sind ausgewählt.",
+        "Daten und Konfiguration.",
     "Also delete sandboxes (Steam logins, saves)":
         "Auch Sandboxen löschen (Steam-Logins, Spielstände)",
     "Also remove shared pieces (mDNS service, NVIDIA CDI spec)":
@@ -527,14 +488,14 @@ TEXTS: dict[str, str] = {
     "Nothing to remove.": "Nichts zu entfernen.",
     "Remove podstage?": "podstage entfernen?",
     "This removes:": "Das entfernt:",
-    "(shared — kept)": "(geteilt — bleibt)",
-    "pkexec is missing — finish with the CLI: "
+    "(shared, kept)": "(geteilt, bleibt)",
+    "pkexec is missing. Finish with the CLI: "
     "podstage uninstall":
-        "pkexec fehlt — mit der CLI abschließen: podstage uninstall",
-    "Removed ({done}) — still present: {names}":
-        "Entfernt ({done}) — noch vorhanden: {names}",
-    "podstage removed — no residues found. ({done})":
-        "podstage entfernt — keine Rückstände gefunden. ({done})",
+        "pkexec fehlt. Mit der CLI abschließen: podstage uninstall",
+    "Removed ({done}). Still present: {names}":
+        "Entfernt ({done}). Noch vorhanden: {names}",
+    "podstage removed, no residues found. ({done})":
+        "podstage entfernt, keine Rückstände gefunden. ({done})",
 
     # -- login guards ------------------------------------------------------
     "Open sandbox Steam": "Sandbox-Steam öffnen",
@@ -543,43 +504,38 @@ TEXTS: dict[str, str] = {
     "start the stream?":
         "Das Sandbox-Steam ist auf dem Desktop geöffnet. Schließen und den "
         "Stream starten?",
-    "Could not close the sandbox Steam; close it manually.":
-        "Sandbox-Steam konnte nicht geschlossen werden; bitte manuell schließen.",
+    "Could not close the sandbox Steam. Close it manually.":
+        "Sandbox-Steam konnte nicht geschlossen werden. Bitte manuell schließen.",
     "'{name}' has no Steam login yet. Log in via "
     "the 'Sandboxes' page first.":
         "»{name}« hat noch keinen Steam-Login. Zuerst über die Seite "
         "»Sandboxen« anmelden.",
     "Follow the client's resolution":
         "Auflösung folgt dem Client",
-    "Render at the connecting client's resolution; the profile "
-    "resolution above is only the fallback. sunshine locks the first "
-    "client's mode until the session restarts, moonshine follows every "
-    "reconnect. Off: always render at the profile resolution.":
-        "Rendert in der Auflösung des verbindenden Clients; die "
-        "Profil-Auflösung oben ist nur der Fallback. sunshine fixiert den "
-        "Modus des ersten Clients bis zum Session-Neustart, moonshine folgt "
-        "jedem Reconnect. Aus: es wird immer in der Profil-Auflösung "
-        "gerendert.",
+    "Render at the connecting client's resolution. The one above is only "
+    "the fallback. sunshine locks the first client's mode until the "
+    "session restarts, moonshine follows every reconnect.":
+        "Rendert in der Auflösung des verbindenden Clients. Die oben ist nur "
+        "der Fallback. sunshine fixiert den Modus des ersten Clients bis zum "
+        "Session-Neustart, moonshine folgt jedem Reconnect.",
     "Stop the session to switch the backend.":
         "Zum Wechseln des Backends die Session stoppen.",
-    "Applies at the next session start. Each backend keeps its own pairings, "
-    "so a client paired to one must be paired again for the other.":
+    "Applies at the next session start. Each backend keeps "
+    "its own pairings.":
         "Gilt ab dem nächsten Session-Start. Jedes Backend führt eigene "
-        "Pairings, ein Client muss für das andere also erneut gepairt werden.",
+        "Pairings.",
     "Client (auto)":
         "Client (auto)",
     "Add folder …": "Ordner hinzufügen …",
     "writable": "schreibbar",
-    "Add the chosen folder as ':rw'. Only for launchers that update "
-    "themselves in place: a writable mount lets the session change "
-    "host files.":
-        "Fügt den gewählten Ordner als »:rw« hinzu. Nur für Launcher, die "
-        "sich selbst an Ort und Stelle aktualisieren: ein schreibbarer Mount "
-        "lässt die Session Host-Dateien verändern.",
+    "Add the chosen folder as ':rw', which lets the session change host "
+    "files.":
+        "Fügt den gewählten Ordner als »:rw« hinzu, die Session darf dann "
+        "Host-Dateien verändern.",
     "Choose a folder to mount into the session":
         "Ordner wählen, der in die Session gemountet wird",
-    "{w}x{h}@{r} · locked until the session restarts":
-        "{w}x{h}@{r} · fixiert bis zum Session-Neustart",
+    "{w}x{h}@{r} | locked until the session restarts":
+        "{w}x{h}@{r} | fixiert bis zum Session-Neustart",
     "waiting for the first client …":
         "warte auf den ersten Client …",
 }

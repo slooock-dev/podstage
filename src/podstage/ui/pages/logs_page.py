@@ -34,7 +34,7 @@ class LogsPage(QWidget):
         root.setSpacing(12)
 
         header = QHBoxLayout()
-        title = QLabel(f"journald · CONTAINER_NAME={runtime.CONTAINER_NAME}")
+        title = QLabel(f"journald | CONTAINER_NAME={runtime.CONTAINER_NAME}")
         title.setProperty("muted", True)
         self._pause_btn = QPushButton(tr("Pause"))
         self._pause_btn.setCheckable(True)
@@ -54,10 +54,11 @@ class LogsPage(QWidget):
     def _start_tail(self) -> None:
         if self._proc is not None:
             return
-        self._proc = QProcess(self)
-        self._proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        self._proc.readyReadStandardOutput.connect(self._on_output)
-        self._proc.start("journalctl", _JOURNAL_ARGS)
+        proc = QProcess(self)
+        proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        proc.readyReadStandardOutput.connect(self._on_output)
+        self._proc = proc
+        proc.start("journalctl", _JOURNAL_ARGS)
 
     def _stop_tail(self) -> None:
         if self._proc is not None:
@@ -74,7 +75,7 @@ class LogsPage(QWidget):
     def _on_output(self) -> None:
         if self._proc is None:
             return
-        data = bytes(self._proc.readAllStandardOutput()).decode(errors="replace")
+        data = self._proc.readAllStandardOutput().data().decode(errors="replace")
         if data:
             self._log.appendPlainText(data.rstrip("\n"))
 

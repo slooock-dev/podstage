@@ -292,3 +292,111 @@ def test_share_custom_compat_tools_repairs_alias_links(main_steam: Path, tmp_pat
 
     assert shared == ["GE-Proton10-29"]
     assert os.readlink(stale) == str(tools / "GE-Proton10-29")
+
+
+# -- orphaned download staging ---------------------------------------------
+
+
+def _sandbox_manifest(target: Path, app_id: int, state_flags: int) -> None:
+    (target / f"appmanifest_{app_id}.acf").write_text(
+        '"AppState"\n{\n'
+        f'\t"appid"\t\t"{app_id}"\n'
+        f'\t"StateFlags"\t\t"{state_flags}"\n}}\n'
+    )
+
+
+def _staging(target: Path, app_id: int, size: int = 2048) -> Path:
+    d = target / "downloading" / str(app_id)
+    d.mkdir(parents=True)
+    (d / "chunk.bin").write_bytes(b"x" * size)
+    return d
+
+
+def test_purge_orphan_downloads_drops_staging_without_manifest(tmp_path: Path):
+    target = provisioner.stream_steamapps(tmp_path / "home")
+    target.mkdir(parents=True)
+    stale = _staging(target, 1643320)
+
+    assert provisioner.purge_orphan_downloads(tmp_path / "home") == 1
+    assert not stale.exists()
+
+
+def test_purge_orphan_downloads_drops_staging_of_installed_app(tmp_path: Path):
+    target = provisioner.stream_steamapps(tmp_path / "home")
+    target.mkdir(parents=True)
+    _sandbox_manifest(target, 1643320, 4)  # FullyInstalled, nothing pending
+    stale = _staging(target, 1643320)
+
+    assert provisioner.purge_orphan_downloads(tmp_path / "home") == 1
+    assert not stale.exists()
+
+
+@pytest.mark.parametrize("flags", [
+    4 | 2,     # UpdateRequired
+    4 | 256,   # UpdateRunning
+    4 | 512,   # UpdatePaused
+    4 | 1024,  # UpdateStarted
+])
+def test_purge_orphan_downloads_keeps_staging_of_pending_update(tmp_path: Path,
+                                                                flags: int):
+    target = provisioner.stream_steamapps(tmp_path / "home")
+    target.mkdir(parents=True)
+    _sandbox_manifest(target, 1643320, flags)
+    live = _staging(target, 1643320)
+
+    assert provisioner.purge_orphan_downloads(tmp_path / "home") == 0
+    assert live.exists()
+
+
+def test_purge_orphan_downloads_keeps_staging_of_uninstalled_app(tmp_path: Path):
+    """StateFlags without FullyInstalled: a first install is still in flight."""
+    target = provisioner.stream_steamapps(tmp_path / "home")
+    target.mkdir(parents=True)
+    _sandbox_manifest(target, 1643320, 1026)  # Uninstalled|UpdateRequired|Started
+    live = _staging(target, 1643320)
+
+    assert provisioner.purge_orphan_downloads(tmp_path / "home") == 0
+    assert live.exists()
+
+
+def test_purge_orphan_downloads_ignores_loose_files(tmp_path: Path):
+    """Only staging DIRECTORIES are swept; the loose delta/patch files carry
+    no appid that can be mapped back to a manifest."""
+    target = provisioner.stream_steamapps(tmp_path / "home")
+    target.mkdir(parents=True)
+    (target / "downloading").mkdir()
+    loose = target / "downloading" / "depot_1466062_240.delta"
+    loose.write_bytes(b"x" * 16)
+
+    assert provisioner.purge_orphan_downloads(tmp_path / "home") == 0
+    assert loose.exists()
+
+
+def test_purge_orphan_downloads_without_downloading_dir(tmp_path: Path):
+    target = provisioner.stream_steamapps(tmp_path / "home")
+    target.mkdir(parents=True)
+
+    assert provisioner.purge_orphan_downloads(tmp_path / "home") == 0
+
+
+def test_purge_orphan_downloads_leaves_the_rest_of_the_library(tmp_path: Path):
+    target = provisioner.stream_steamapps(tmp_path / "home")
+    (target / "compatdata" / "1643320").mkdir(parents=True)
+    (target / "common").mkdir()
+    _staging(target, 1643320)
+
+    provisioner.purge_orphan_downloads(tmp_path / "home")
+
+    assert (target / "compatdata" / "1643320").exists()
+    assert (target / "common").exists()
+
+
+def test_ensure_all_reports_purged_orphan_downloads(main_steam: Path, tmp_path: Path):
+    stream_home = tmp_path / "home"
+    target = provisioner.stream_steamapps(stream_home)
+    target.mkdir(parents=True)
+    _staging(target, 999999)
+
+    res = provisioner.ensure_all(stream_home, steam_root=main_steam)
+
+    assert res.orphan_downloads_purged == 1

@@ -30,7 +30,7 @@ one Steam config and one logged-in account. podstage spins up a separate,
 invisible session instead:
 
 - The desktop keeps its monitors, audio and Steam settings, and stays usable
-  while someone streams. (Desktop Steam closes on session start by default; a
+  while someone streams. (Desktop Steam closes on session start by default. A
   Setup toggle keeps it running, e.g. for a second account.)
 - Input from the client stays inside the session, in both directions.
 - Sandboxes sit side by side, each with its own login, Steam settings, Input
@@ -44,7 +44,7 @@ the setup, provisioning and monitoring you would otherwise assemble by hand.
 ## What podstage does
 
 podstage is an orchestrator. It writes no compositor, no encoder and no
-streaming server; it assembles existing ones into one disposable session and
+streaming server. It assembles existing ones into one disposable session and
 manages its lifecycle:
 
 - **builds the runtime image**, the container that carries the whole session
@@ -88,7 +88,7 @@ flowchart LR
 gamescope plus Big Picture is settled, not a placeholder: Steam forces the
 gamepad UI under gamescope, and gamescope provides the Xwayland environment,
 fullscreen forcing and scaling the rest builds on. A desktop-UI session exists
-in the runtime as a debug path, not as a way to play; the streamed first login
+in the runtime as a debug path, not as a way to play. The streamed first login
 runs the normal Big Picture pipeline.
 
 What is baked into the image vs. mounted at runtime, the exact run flags, and
@@ -164,8 +164,8 @@ seconds, adjustable) presses the Guide button (the Steam menu, e.g. to quit a
 game): sunshine's `back_button_timeout` and moonshine's `home_button.hold_ms`,
 wired to one Setup-page switch with a hold-time field. Steam Deck clients need this, the Deck's local Steam
 consumes the physical Steam button. A desktop Steam left running sees the
-emulated pad too; disable "Guide Button Focuses Steam" there. For text entry
-the Deck's own on-screen keyboard (Steam+X) types into the stream; on sunshine
+emulated pad too. Disable "Guide Button Focuses Steam" there. For text entry
+the Deck's own on-screen keyboard (Steam+X) types into the stream. On sunshine
 this needs the mouse & keyboard input switch, moonshine always streams the
 keyboard.
 
@@ -183,24 +183,24 @@ group on the Setup page.
 ## Requirements
 
 - Linux with a Wayland desktop. Developed on Bazzite-DX (Fedora-based, KDE
-  Plasma); other modern distros should work.
+  Plasma). Other modern distros should work.
 - podman.
 - A GPU with hardware video encode: NVIDIA (NVENC, via CDI injection), AMD or
   Intel (VAAPI via `/dev/dri`, Broadwell+ on Intel). The moonshine backend
   wants more, see [Streaming backends](#streaming-backends). The GUI adapts its
   encoder controls and telemetry to the detected vendor.
-- Steam on the host; its libraries are shared into the sandboxes.
+- Steam on the host. Its libraries are shared into the sandboxes.
 - Python ≥ 3.11 for the CLI and core. PyQt6 ≥ 6.6 only for the GUI, which is
   optional.
 - A moonlight client with a gamepad (Steam Deck, laptop, phone with
-  controller); mouse and keyboard are a toggle. A PlayStation controller needs
+  controller). Mouse and keyboard are a toggle. A PlayStation controller needs
   the `gamepad_ds5` experimental switch on the sunshine backend.
 
 > **Tested configuration.** Verified end to end on Bazzite-DX 43 (KDE Plasma,
 > Wayland) with an NVIDIA RTX 4080 SUPER, streaming to a Steam Deck. AMD is
 > validated on a Rembrandt iGPU, Intel confirmed by a community report (Arc
 > B580). Other distros and non-KDE compositors are untested (see
-> [Portability](#portability)); reports welcome.
+> [Portability](#portability)). Reports welcome.
 
 ## Getting started
 
@@ -326,7 +326,7 @@ disk per sandbox instead of once per machine, and every sandbox waits through
 its own "Processing Vulkan shaders" before a game starts.
 
 On strong hardware, turn it off (sandbox Steam → Settings → Downloads). That
-saves gigabytes per sandbox and skips the wait; DXVK and VKD3D compile on the
+saves gigabytes per sandbox and skips the wait. DXVK and VKD3D compile on the
 fly instead, which a capable CPU and GPU handle well, at the price of a brief
 stutter on first run in a few titles.
 
@@ -334,15 +334,15 @@ stutter on first run in a few titles.
 
 **podstage is built for a local, trusted network.** The stream, the pairing
 endpoints and sunshine's web UI listen on your LAN and belong nowhere else.
-Streaming requires a completed pairing on both backends; moonshine's PIN
+Streaming requires a completed pairing on both backends. moonshine's PIN
 endpoint has no authentication at all, which is upstream's design and nothing
 podstage can tighten.
 
-Everything runs as your user; after the one-time setup, nothing needs root. The
+Everything runs as your user. After the one-time setup, nothing needs root. The
 container is a compatibility sandbox, not a security boundary: it shares your
 network and the real `/dev/uinput`. Your Steam libraries are read-only overlay
 lowerdirs by default, so a hostile game cannot modify host game files and its
-writes stay in per-sandbox storage; the per-sandbox "write game updates to the
+writes stay in per-sandbox storage. The per-sandbox "write game updates to the
 host library" option trades that protection for persistent updates. Otherwise
 treat games with the same trust you would on the desktop.
 
@@ -353,7 +353,7 @@ sunshine package and a pinned moonshine commit.
 
 - **Big Picture takes controller input but focuses nothing.** Steam's UI lost
   its navigation focus, usually right after a game exits. A watchdog in the
-  container re-focuses Steam's window and normally heals it; otherwise press B
+  container re-focuses Steam's window and normally heals it. Otherwise press B
   until the side menu opens. `PS_FOCUS_NUDGE=disabled` turns it off.
 - **Client input controls the desktop, or the stream has no input.** Both udev
   rules must be installed: the seat rule pins the streaming devices to a
@@ -365,7 +365,7 @@ sunshine package and a pinned moonshine commit.
   (`firewall-cmd --add-service=mdns`, offered as a Setup fix). Pairing by IP
   always works, as long as the profile's moonlight port block is open too,
   which Setup checks separately.
-- **No GPU load shown on Intel.** The meter samples `intel_gpu_top`; install it
+- **No GPU load shown on Intel.** The meter samples `intel_gpu_top`. Install it
   (igt-gpu-tools) and make the GPU PMU readable (CAP_PERFMON or a relaxed
   `perf_event_paranoid`). VRAM stays unavailable on i915/xe.
 - **The preview stays blank.** On sunshine the capture only produces a frame

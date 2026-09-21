@@ -2,8 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
 from podstage import config
-from podstage.core import backends, runtime, udev
+from podstage.core import backends, provisioner, runtime, udev
 
 LIBS = [Path("/tmp/lib-a/steamapps"), Path("/tmp/lib-b/steamapps")]
 
@@ -799,3 +801,227 @@ def test_library_rw_flows_from_options(monkeypatch):
     default = " ".join(runtime.podman_run_args(_opts(), library_paths=LIBS))
     assert f"{LIBS[0]}:{LIBS[0]}:O,upperdir=" not in rw
     assert f"{LIBS[0]}:{LIBS[0]}:O,upperdir=" in default
+
+
+def test_provisioning_reports_purged_orphan_downloads(tmp_path, monkeypatch, capsys):
+    """A silent sweep of tens of GB would look like the sandbox shrinking on
+    its own; the start log has to name it."""
+    res = provisioner.ProvisionAllResult(games=[], steam_tools=0, custom_tools=[],
+                                         orphan_downloads_purged=3)
+    monkeypatch.setattr(provisioner, "ensure_all", lambda *a, **k: res)
+    monkeypatch.setattr(runtime.steam, "library_folders", lambda *a, **k: [])
+    monkeypatch.setattr(runtime.steam, "find_steam_root", lambda *a, **k: None)
+
+    runtime.shared_library_paths(tmp_path / "home")
+
+    assert "3 orphaned download staging dir(s) purged" in capsys.readouterr().out
+
+
+# -- superseded build images -----------------------------------------------
+
+
+def test_stale_images_parses_id_and_bytes(monkeypatch):
+    monkeypatch.setattr(runtime, "_run", lambda cmd, timeout=15: (
+        0, "88d7e7d3b25f 4991143519\n9fff1b96c6c0 2671639042"))
+    assert runtime.stale_images() == [("88d7e7d3b25f", 4991143519),
+                                      ("9fff1b96c6c0", 2671639042)]
+
+
+def test_stale_images_ignores_junk_lines(monkeypatch):
+    monkeypatch.setattr(runtime, "_run", lambda cmd, timeout=15: (
+        0, "88d7e7d3b25f 4991143519\ngarbage\nabc notanumber"))
+    assert runtime.stale_images() == [("88d7e7d3b25f", 4991143519)]
+
+
+def test_stale_images_empty_when_podman_fails(monkeypatch):
+    monkeypatch.setattr(runtime, "_run", lambda cmd, timeout=15: (127, "boom"))
+    assert runtime.stale_images() == []
+
+
+def test_stale_images_query_carries_both_filters(monkeypatch):
+    seen = []
+    monkeypatch.setattr(runtime, "_run",
+                        lambda cmd, timeout=15: (seen.append(cmd), (0, ""))[1])
+    runtime.stale_images()
+    joined = " ".join(seen[0])
+    assert "dangling=true" in joined
+    assert f"label={runtime.SRC_HASH_LABEL}" in joined
+
+
+def test_prune_stale_images_forces_removal(monkeypatch):
+    """Interrupted builds leave buildah working containers pinning the image;
+    they are invisible to `podman ps -a`, so a plain rm fails with
+    'image is in use by a container'."""
+    calls = []
+    rounds = [[("aaaaaaaaaaaa", 100)], []]
+
+    monkeypatch.setattr(runtime, "stale_images", lambda: rounds.pop(0))
+    monkeypatch.setattr(runtime, "_run",
+                        lambda cmd, timeout=15: (calls.append(cmd), (0, ""))[1])
+
+    assert runtime.prune_stale_images() == (1, 100)
+    assert calls[0][:4] == ["podman", "image", "rm", "-f"]
+    assert "aaaaaaaaaaaa" in calls[0]
+
+
+def test_prune_stale_images_repeats_until_empty(monkeypatch):
+    """Removing one generation exposes the next labelled image below it."""
+    rounds = [[("aaaaaaaaaaaa", 100)], [("bbbbbbbbbbbb", 50)], []]
+    monkeypatch.setattr(runtime, "stale_images", lambda: rounds.pop(0))
+    monkeypatch.setattr(runtime, "_run", lambda cmd, timeout=15: (0, ""))
+
+    assert runtime.prune_stale_images() == (2, 150)
+
+
+def test_prune_stale_images_is_bounded(monkeypatch):
+    """A podman that keeps reporting the same image must not spin forever."""
+    monkeypatch.setattr(runtime, "stale_images", lambda: [("aaaaaaaaaaaa", 100)])
+    calls = []
+    monkeypatch.setattr(runtime, "_run",
+                        lambda cmd, timeout=15: (calls.append(cmd), (0, ""))[1])
+
+    runtime.prune_stale_images()
+    assert len(calls) <= runtime.STALE_IMAGE_ROUNDS
+
+
+# -- build progress --------------------------------------------------------
+
+
+def _feed(tracker, lines):
+    return [s for s in (tracker.feed(ln) for ln in lines) if s is not None]
+
+
+def test_build_step_parses_index_total_and_text():
+    t = runtime.BuildProgress("podstage-runtime:latest")
+    step = t.feed("STEP 14/25: RUN pacman -S --noconfirm --needed patch meson")
+    assert (step.index, step.total) == (14, 25)
+    assert step.text.startswith("RUN pacman -S")
+    assert step.image == "podstage-runtime:latest"
+    assert step.cached is False
+
+
+def test_build_step_text_is_one_line_and_complete():
+    """The GUI elides to its own width and keeps the rest in a tooltip, so
+    this must not throw anything away."""
+    t = runtime.BuildProgress("x")
+    step = t.feed("STEP 2/9: RUN " + "a" * 200)
+    assert "\n" not in step.text
+    assert step.text == "RUN " + "a" * 200
+
+
+def test_build_step_text_collapses_whitespace():
+    t = runtime.BuildProgress("x")
+    step = t.feed("STEP 2/9: RUN  pacman   -S \t gcc")
+    assert step.text == "RUN pacman -S gcc"
+
+
+def test_build_progress_ignores_unrelated_lines():
+    t = runtime.BuildProgress("x")
+    assert t.feed("eins") is None
+    assert t.feed("--> fa805572c602") is None
+    assert t.feed("") is None
+
+
+def test_build_progress_marks_a_cached_step():
+    t = runtime.BuildProgress("x")
+    t.feed("STEP 2/4: RUN echo eins")
+    step = t.feed("--> Using cache 9aaeed0c05530edb3ac52ae33c58f3fbea04356a")
+    assert step is not None
+    assert step.cached is True
+    assert step.index == 2
+
+
+def test_build_progress_fraction_never_goes_backwards():
+    t = runtime.BuildProgress("x")
+    lines = ["STEP 1/6: FROM base",
+             "STEP 2/6: RUN heavy",
+             "--> Using cache abc",
+             "STEP 3/6: COPY a /a",
+             "STEP 4/6: RUN heavy",
+             "STEP 5/6: COPY b /b",
+             "STEP 6/6: ENV X=1"]
+    fractions = [s.fraction for s in _feed(t, lines)]
+    assert fractions == sorted(fractions)
+    assert all(0.0 <= f <= 1.0 for f in fractions)
+
+
+def test_build_progress_commit_completes_the_bar():
+    t = runtime.BuildProgress("x")
+    t.feed("STEP 1/2: FROM base")
+    t.feed("STEP 2/2: RUN echo hi")
+    step = t.feed("COMMIT localhost/x:latest")
+    assert step is not None
+    assert step.fraction == 1.0
+
+
+def test_build_progress_races_through_a_fully_cached_build():
+    """Cached steps cost no time, so the bar must not crawl through them."""
+    t = runtime.BuildProgress("x")
+    lines = ["STEP 1/4: FROM base",
+             "STEP 2/4: RUN echo eins", "--> Using cache a",
+             "STEP 3/4: RUN echo zwei", "--> Using cache b",
+             "STEP 4/4: COPY f /f", "--> Using cache c"]
+    assert _feed(t, lines)[-1].fraction > 0.9
+
+
+def test_build_progress_run_step_outweighs_a_copy():
+    """An uncached RUN is the expensive kind; a COPY is nearly free."""
+    a = runtime.BuildProgress("x")
+    a.feed("STEP 1/3: FROM base")
+    a.feed("STEP 2/3: COPY f /f")
+    after_copy = a.feed("STEP 3/3: RUN heavy").fraction
+
+    b = runtime.BuildProgress("x")
+    b.feed("STEP 1/3: FROM base")
+    b.feed("STEP 2/3: RUN heavy")
+    after_run = b.feed("STEP 3/3: COPY f /f").fraction
+
+    assert after_run > after_copy
+
+
+def test_build_image_reports_every_step(monkeypatch, tmp_path):
+    """The GUI's only source of progress is this callback."""
+    out = ["STEP 1/3: FROM base\n",
+           "STEP 2/3: RUN echo hi\n",
+           "--> Using cache abc\n",
+           "STEP 3/3: COPY f /f\n",
+           "COMMIT localhost/x:latest\n"]
+
+    class FakePopen:
+        def __init__(self, *a, **k):
+            self.stdout = iter(out)
+            self.returncode = 0
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(runtime.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(runtime, "runtime_src_dir", lambda backend: tmp_path)
+    monkeypatch.setattr(runtime, "runtime_src_hash", lambda backend: "deadbeef")
+    monkeypatch.setattr(runtime.backends, "base_of", lambda spec: None)
+
+    seen = []
+    runtime.build_image(backend=backends.SUNSHINE.name, on_progress=seen.append)
+
+    assert [s.index for s in seen] == [1, 2, 2, 3, 3]
+    assert seen[2].cached is True
+    assert seen[-1].fraction == 1.0
+
+
+def test_build_image_failure_keeps_the_output_tail(monkeypatch, tmp_path):
+    class FakePopen:
+        def __init__(self, *a, **k):
+            self.stdout = iter(["STEP 1/1: RUN boom\n", "error: it broke\n"])
+            self.returncode = 1
+
+        def wait(self, timeout=None):
+            return 1
+
+    monkeypatch.setattr(runtime.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(runtime, "runtime_src_dir", lambda backend: tmp_path)
+    monkeypatch.setattr(runtime, "runtime_src_hash", lambda backend: "deadbeef")
+    monkeypatch.setattr(runtime.backends, "base_of", lambda spec: None)
+
+    with pytest.raises(RuntimeError, match="it broke"):
+        runtime.build_image(backend=backends.SUNSHINE.name,
+                            on_progress=lambda _s: None)

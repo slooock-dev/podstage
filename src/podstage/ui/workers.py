@@ -45,28 +45,45 @@ class ActionWorker(QThread):
 
     The callable may return a string that becomes the success message
     (otherwise "<label> ok"); raising surfaces the error message.
+
+    With ``reports_progress`` the callable is handed an emitter for the
+    ``progress`` signal instead of being called bare. Crossing the thread
+    boundary has to go through a signal — a long action (the image build)
+    would otherwise leave the window showing the same text for minutes.
     """
 
     done = pyqtSignal(bool, str)
+    progress = pyqtSignal(object)
 
-    def __init__(self, fn: Callable[[], object], label: str) -> None:
+    def __init__(self, fn: Callable[..., object], label: str,
+                 reports_progress: bool = False) -> None:
         super().__init__()
         self._fn = fn
         self._label = label
+        self._reports_progress = reports_progress
 
     def run(self) -> None:
         try:
-            result = self._fn()
+            result = (self._fn(self.progress.emit) if self._reports_progress
+                      else self._fn())
             msg = result if isinstance(result, str) else f"{self._label} ok"
             self.done.emit(True, msg)
         except Exception as e:  # noqa: BLE001 — surface any failure in the UI
             self.done.emit(False, str(e))
 
 
-def start_action(pool: list, fn: Callable[[], object], label: str,
-                 on_done: Callable[[bool, str], None]) -> ActionWorker:
-    """Start an ActionWorker kept alive in ``pool`` until it finishes."""
-    worker = ActionWorker(fn, label)
+def start_action(pool: list, fn: Callable[..., object], label: str,
+                 on_done: Callable[[bool, str], None],
+                 on_progress: Callable[[object], None] | None = None,
+                 ) -> ActionWorker:
+    """Start an ActionWorker kept alive in ``pool`` until it finishes.
+
+    ``on_progress`` makes ``fn`` take one argument: the emitter it reports
+    through.
+    """
+    worker = ActionWorker(fn, label, reports_progress=on_progress is not None)
+    if on_progress is not None:
+        worker.progress.connect(on_progress)
 
     def _finish(ok: bool, msg: str) -> None:
         if worker in pool:

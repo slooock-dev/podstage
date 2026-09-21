@@ -17,10 +17,9 @@
 # Env read here: PS_BACKEND (sunshine|moonshine, default sunshine), PS_APP,
 # PS_NO_PROVISION=1 to skip provisioning.
 #
-# Every other PS_* variable is forwarded to the container by the Python
-# runtime, not by this script. The authoritative list is _COMMON_ENV,
-# _SUNSHINE_ENV and _MOONSHINE_ENV in core/runtime.py; it used to be copied
-# here and went stale, so it is deliberately not repeated.
+# Every other PS_* variable is forwarded by the Python runtime. The list is
+# _COMMON_ENV / _SUNSHINE_ENV / _MOONSHINE_ENV in core/runtime.py and is
+# deliberately not duplicated here.
 #
 # The container runs rootless (--userns=keep-id), no sudo involved.
 set -euo pipefail
