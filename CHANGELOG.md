@@ -8,6 +8,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Duplicate pairing records lock out the client.** sunshine v2026.914 refuses
+  a certificate that appears in more than one paired record, which reaches the
+  user as "client is not authorized" (401) and a host that stays locked in
+  moonlight. One moonlight install carries one certificate, so every re-pairing
+  of a known client created such a record. Session start prunes the older
+  records from the sandbox state, and a pairing removes the duplicate it
+  creates through the API.
+
 - **Pairing on the sunshine backend.** `POST /api/pin` needs the pending
   request's `pairing_id` (32 hex chars) since sunshine v2026.914, so every
   attempt after the 0.5.5 version bump failed with API 400. The PIN now goes

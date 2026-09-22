@@ -40,6 +40,69 @@ def _moonshine_state(home: Path) -> dict:
         return {}
 
 
+def sunshine_devices(home: Path) -> list[dict]:
+    """The sandbox's paired-device records (name, cert, uuid, enabled)."""
+    try:
+        data = json.loads((home / SUNSHINE_STATE).read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    devices = data.get("root", {}).get("named_devices", [])
+    return [d for d in devices if isinstance(d, dict)] if isinstance(devices, list) else []
+
+
+def duplicate_cert_uuids(devices: list) -> list[str]:
+    """uuids of the records whose certificate a later record repeats.
+
+    sunshine >= v2026.914 refuses a client whose certificate sits in more than
+    one record (nvhttp ``is_client_enabled``): the client is paired and
+    rejected at the same time, which reaches the user as "client is not
+    authorized" (401), a locked host in moonlight and one
+    "Client certificate identity is not enabled" per client poll in the
+    sunshine log. One moonlight install carries one certificate, so every
+    re-pairing of the same client adds such a record. The newest record per
+    certificate survives.
+    """
+    keep: dict[str, str] = {}
+    stale: list[str] = []
+    for dev in devices:
+        if not isinstance(dev, dict):
+            continue
+        # Whitespace-insensitive: PEM line endings differ between writers.
+        cert = "".join(str(dev.get("cert") or "").split())
+        uuid = str(dev.get("uuid") or "")
+        if not cert or not uuid:
+            continue
+        if cert in keep:
+            stale.append(keep[cert])
+        keep[cert] = uuid
+    return stale
+
+
+def prune_duplicate_client_certs(home: Path) -> list[tuple[str, str]]:
+    """Drop the duplicate records from the state FILE; returns what went as
+    (name, uuid).
+
+    Only valid while sunshine is not running — it owns the file and rewrites it
+    on exit. Use the API path (``sunshine_api.pair_verified``) for a live
+    instance.
+    """
+    devices = sunshine_devices(home)
+    stale = set(duplicate_cert_uuids(devices))
+    if not stale:
+        return []
+    path = home / SUNSHINE_STATE
+    data = json.loads(path.read_text())
+    dropped = [(str(d.get("name") or ""), str(d.get("uuid")))
+               for d in devices if str(d.get("uuid") or "") in stale]
+    data["root"]["named_devices"] = [
+        d for d in data["root"]["named_devices"]
+        if not (isinstance(d, dict) and str(d.get("uuid") or "") in stale)]
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=4))
+    tmp.replace(path)
+    return dropped
+
+
 def paired_clients(home: Path, backend: str = backends.DEFAULT) -> list[str]:
     """moonlight clients paired to this sandbox (the state file appears with
     the first pairing).

@@ -288,6 +288,15 @@ class Session:
                 "the sandbox Steam is still open on the desktop; close it "
                 "before starting the stream"
             )
+        # sunshine rejects a client whose certificate sits in more than one
+        # paired record, so a sandbox that collected duplicates (any
+        # re-pairing before podstage healed them) would refuse every client
+        # with a 401 and a locked host in moonlight. Prune before the
+        # container starts: sunshine reads the file at startup and owns it
+        # afterwards.
+        if self.cfg.backend != backends.MOONSHINE.name:
+            for name, uuid in sandbox.prune_duplicate_client_certs(self.home):
+                print(f"  dropped a duplicate pairing record: {name} ({uuid})")
         opts = self._options(resolution, app=app, attach=attach, mode=mode)
         # Stale from the previous session until the entrypoint rewrites it.
         (self.home / ".cache/podstage/client-mode").unlink(missing_ok=True)

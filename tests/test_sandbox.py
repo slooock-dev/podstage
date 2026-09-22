@@ -195,3 +195,50 @@ def test_inspect_reads_the_profiles_backend(tmp_path, monkeypatch):
     _moonshine_state(tmp_path / "tv", 'clients = ["ABC"]\npaired_certs = ["c"]\n')
     cfg = config.SessionConfig(name="tv", backend="moonshine")
     assert sandbox.inspect(cfg).paired == ["ABC"]
+
+
+# -- duplicate paired certs (sunshine >= v2026.914 rejects them) -------------
+
+CERT_A = "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n"
+CERT_B = "-----BEGIN CERTIFICATE-----\nBBBB\n-----END CERTIFICATE-----\n"
+
+
+def test_duplicate_cert_uuids_keeps_the_newest_record():
+    devices = [
+        {"name": "deck", "cert": CERT_A, "uuid": "u1"},
+        {"name": "laptop", "cert": CERT_B, "uuid": "u2"},
+        # same moonlight install paired again, twice; cert is identical, and
+        # the second copy is what makes sunshine reject the client
+        {"name": "deck-2", "cert": CERT_A.replace("\n", "\r\n"), "uuid": "u3"},
+        {"name": "tv", "cert": CERT_A, "uuid": "u4"},
+    ]
+    assert sandbox.duplicate_cert_uuids(devices) == ["u1", "u3"]
+
+
+def test_duplicate_cert_uuids_ignores_incomplete_records():
+    assert sandbox.duplicate_cert_uuids(
+        [{"name": "x"}, "junk", None, {"cert": CERT_A}, {"uuid": "u"}]) == []
+
+
+def test_prune_duplicate_client_certs_rewrites_the_state(tmp_path: Path):
+    _write_state(tmp_path, [
+        {"name": "deck", "cert": CERT_A, "uuid": "u1", "enabled": "true"},
+        {"name": "laptop", "cert": CERT_B, "uuid": "u2", "enabled": "true"},
+        {"name": "deck", "cert": CERT_A, "uuid": "u3", "enabled": "true"},
+    ])
+    assert sandbox.prune_duplicate_client_certs(tmp_path) == [("deck", "u1")]
+    left = json.loads((tmp_path / sandbox.SUNSHINE_STATE).read_text())
+    assert [d["uuid"] for d in left["root"]["named_devices"]] == ["u2", "u3"]
+    assert left["root"]["named_devices"][1]["enabled"] == "true"  # untouched
+
+
+def test_prune_duplicate_client_certs_leaves_a_clean_state_alone(tmp_path: Path):
+    _write_state(tmp_path, [{"name": "deck", "cert": CERT_A, "uuid": "u1"}])
+    state = tmp_path / sandbox.SUNSHINE_STATE
+    before = state.read_text()
+    assert sandbox.prune_duplicate_client_certs(tmp_path) == []
+    assert state.read_text() == before
+
+
+def test_prune_duplicate_client_certs_without_a_state_file(tmp_path: Path):
+    assert sandbox.prune_duplicate_client_certs(tmp_path) == []

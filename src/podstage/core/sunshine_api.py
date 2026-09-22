@@ -154,9 +154,21 @@ def pair_verified(pin: str, name: str, home: Path,
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if sandbox.paired_device_ids(home) - before:
+            # A re-pairing of a known client leaves its earlier records behind,
+            # and sunshine rejects a certificate that appears twice. Heal it
+            # here, through the API, because the running sunshine owns the
+            # state file.
+            for stale in sandbox.duplicate_cert_uuids(sandbox.sunshine_devices(home)):
+                unpair(stale, web_port)
             return True
         time.sleep(0.5)
     return False
+
+
+def unpair(uuid: str, web_port: int = DEFAULT_WEB_PORT) -> bool:
+    """Forget one paired device. The web UI's unpair button."""
+    resp = _request("/api/clients/unpair", web_port, payload={"uuid": uuid})
+    return str(resp.get("status", "")).lower() == "true"
 
 
 def restart(web_port: int = DEFAULT_WEB_PORT) -> None:

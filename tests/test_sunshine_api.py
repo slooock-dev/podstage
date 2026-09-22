@@ -97,3 +97,27 @@ def test_pair_verified_names_the_missing_attempt(monkeypatch, tmp_path):
     _record(monkeypatch, {"pairings": []}, {"status": "false"})
     with pytest.raises(sunshine_api.SunshineApiError, match="no pairing attempt"):
         sunshine_api.pair_verified("1234", "deck", tmp_path)
+
+
+def test_pair_verified_unpairs_duplicate_records(monkeypatch, tmp_path):
+    # A fresh pairing of an already-paired client adds a second record for the
+    # same cert, which sunshine then refuses. Heal it while sunshine is up.
+    posts: list[tuple[str, dict]] = []
+
+    def fake(path, web_port, payload=None, timeout=5.0):
+        if payload is None:
+            return PENDING
+        posts.append((path, payload))
+        return {"status": "true"}
+
+    monkeypatch.setattr(sunshine_api, "_request", fake)
+    monkeypatch.setattr(sunshine_api.sandbox, "paired_device_ids",
+                        lambda home, backend=None: set() if not posts else {"new"})
+    monkeypatch.setattr(sunshine_api.sandbox, "sunshine_devices", lambda home: [])
+    monkeypatch.setattr(sunshine_api.sandbox, "duplicate_cert_uuids",
+                        lambda devices: ["stale-1", "stale-2"])
+    assert sunshine_api.pair_verified("1234", "deck", tmp_path) is True
+    assert [p for p in posts if p[0] == "/api/clients/unpair"] == [
+        ("/api/clients/unpair", {"uuid": "stale-1"}),
+        ("/api/clients/unpair", {"uuid": "stale-2"}),
+    ]

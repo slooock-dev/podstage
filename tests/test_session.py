@@ -266,3 +266,23 @@ def test_moonshine_settings_never_leak_into_a_sunshine_session():
                        moonshine_keyboard_layout="de")
     env = Session(sc)._options().env
     assert not [k for k in env if k.startswith("PS_MOONSHINE_")]
+
+
+def test_start_prunes_duplicate_pairing_records(tmp_path, monkeypatch):
+    """sunshine refuses a certificate that appears in two paired records, so a
+    sandbox carrying duplicates must be healed before the container starts."""
+    from podstage.core import runtime, sandbox
+
+    sc = SessionConfig(name="deck", home=str(tmp_path / "deck"))
+    s = Session(sc)
+    monkeypatch.setattr(s, "is_bootstrapped", lambda: True)
+    monkeypatch.setattr(sandbox, "steam_logged_in", lambda home: True)
+    monkeypatch.setattr(s, "sandbox_steam_running", lambda: False)
+    monkeypatch.setattr(s, "close_host_steam", lambda timeout=20: None)
+    monkeypatch.setattr(runtime, "start",
+                        lambda opts: runtime.RuntimeStatus(running=True))
+    seen: list = []
+    monkeypatch.setattr(sandbox, "prune_duplicate_client_certs",
+                        lambda home: seen.append(home) or [("deck", "u1")])
+    assert s.start().running
+    assert seen == [s.home]
