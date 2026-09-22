@@ -9,31 +9,24 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - **Duplicate pairing records lock out the client.** sunshine v2026.914 refuses
-  a certificate that appears in more than one paired record, which reaches the
-  user as "client is not authorized" (401) and a host that stays locked in
-  moonlight. One moonlight install carries one certificate, so every re-pairing
-  of a known client created such a record. Session start prunes the older
-  records from the sandbox state, and a pairing removes the duplicate it
-  creates through the API.
+  a certificate that sits in more than one paired record, which reaches the user
+  as "client is not authorized" (401) and a host that stays locked in moonlight.
+  Session start prunes the older records from the sandbox state, a pairing
+  removes the duplicate it creates through the API.
 
 - **Pairing on the sunshine backend.** `POST /api/pin` needs the pending
-  request's `pairing_id` (32 hex chars) since sunshine v2026.914, so every
-  attempt after the 0.5.5 version bump failed with API 400. The PIN now goes
-  out with the id from `GET /api/pin`; with several clients waiting podstage
-  names them instead of guessing, since a miss costs that client its attempt.
-  The endpoint also answers only once the handshake resolved, so it gets its
-  own 30 s timeout and a mistyped PIN no longer surfaces as "API unreachable".
+  request's `pairing_id` since sunshine v2026.914, so every attempt after the
+  0.5.5 version bump failed with API 400. The PIN now goes out with the id from
+  `GET /api/pin`, under a 30 s timeout because the endpoint answers only once
+  the handshake resolved.
 
 ### Added
 
-- **ntsync passed into the container** (`--device /dev/ntsync`), so Proton can
-  use the kernel's NT sync primitives instead of fsync/esync. Which games take
-  that path stays the Proton build's decision, per-title in the CachyOS builds;
-  podstage exports no ntsync variable, because forcing one overrides that
-  curation for every game. The flag appears only when the host node exists and
-  is writable for this user, since `--device` on a missing node aborts the
-  container start. Doctor reports the node as informational and offers the
-  `modprobe` when only the module is missing.
+- **ntsync passed into the container** (`--device /dev/ntsync`, only when the
+  host node exists and is writable for this user), so Proton can use the
+  kernel's NT sync primitives instead of fsync/esync. Which games take that path
+  stays the Proton build's decision, so podstage exports no ntsync variable;
+  doctor reports the node as informational.
 
 ## [0.5.5] - 2026-09-21
 
