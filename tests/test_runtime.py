@@ -1,5 +1,6 @@
 """Tests for the rootless podman-run builder."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -217,6 +218,42 @@ def test_full_dev_mount_for_ds5():
     assert "/dev:/dev" in ds5
     assert "/dev/input:/dev/input" not in ds5   # covered by the full bind
     assert "/dev/uinput" not in ds5
+
+
+def test_ntsync_usable_probes_the_node(tmp_path, monkeypatch):
+    node = tmp_path / "ntsync"
+    monkeypatch.setattr(runtime, "NTSYNC_DEV", node)
+    assert runtime.ntsync_usable() is False      # kernel without ntsync
+    node.write_text("")
+    node.chmod(0o666)
+    assert runtime.ntsync_usable() is True
+    if os.getuid() != 0:                         # root ignores the mode bits
+        node.chmod(0o444)
+        assert runtime.ntsync_usable() is False  # root-only node, rootless: no
+
+
+def test_ntsync_device_passed_only_when_usable(monkeypatch):
+    home = Path("/tmp/home-x")
+    monkeypatch.setattr(runtime, "ntsync_usable", lambda: True)
+    assert "/dev/ntsync" in runtime.container_flags(LIBS, home, vendor="nvidia")
+    # the full /dev bind already carries the node
+    assert "/dev/ntsync" not in runtime.container_flags(LIBS, home, vendor="nvidia",
+                                                       full_dev=True)
+    # unusable: no flag. --device on a missing node aborts `podman run`.
+    monkeypatch.setattr(runtime, "ntsync_usable", lambda: False)
+    assert "/dev/ntsync" not in runtime.container_flags(LIBS, home, vendor="nvidia")
+
+
+def test_ntsync_env_follows_the_device(monkeypatch):
+    monkeypatch.delenv("PROTON_USE_NTSYNC", raising=False)
+    monkeypatch.setattr(runtime, "ntsync_usable", lambda: True)
+    assert runtime.container_env(_opts(), LIBS)["PROTON_USE_NTSYNC"] == "1"
+    # no device, no variable: Proton must not ask for what it cannot open
+    monkeypatch.setattr(runtime, "ntsync_usable", lambda: False)
+    assert "PROTON_USE_NTSYNC" not in runtime.container_env(_opts(), LIBS)
+    monkeypatch.setattr(runtime, "ntsync_usable", lambda: True)
+    assert runtime.container_env(_opts(env={"PROTON_USE_NTSYNC": "0"}),
+                                 LIBS)["PROTON_USE_NTSYNC"] == "0"
 
 
 def test_only_moonshine_swaps_the_seccomp_profile(monkeypatch):

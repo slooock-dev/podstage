@@ -120,6 +120,24 @@ def test_uhid_check_off_and_on(tmp_path, monkeypatch):
         raise AssertionError(res)
 
 
+def test_ntsync_check_is_informational(tmp_path, monkeypatch):
+    node = tmp_path / "ntsync"
+    monkeypatch.setattr(runtime, "NTSYNC_DEV", node)
+    # kernel without ntsync: a fact, not a problem, and nothing to fix
+    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10: (1, ""))
+    res = doctor.check_ntsync()
+    assert res.status is doctor.Status.INFO and not res.fix
+    # module shipped but not loaded: the fix is one modprobe
+    monkeypatch.setattr(doctor, "_run",
+                        lambda cmd, timeout=10: (0, "/lib/modules/x/ntsync.ko\n"))
+    res = doctor.check_ntsync()
+    assert res.status is doctor.Status.INFO and "modprobe ntsync" in res.fix
+    # usable node
+    node.write_text("")
+    node.chmod(0o666)
+    assert doctor.check_ntsync().status is doctor.Status.OK
+
+
 def test_owner_rule_covers_uhid():
     from podstage.core import udev
 

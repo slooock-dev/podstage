@@ -4,6 +4,17 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **ntsync passed into the container** (`--device /dev/ntsync` plus
+  `PROTON_USE_NTSYNC=1`), so Proton uses the kernel's NT sync primitives
+  instead of fsync/esync. Both are set only when the host node exists and is
+  writable for this user, because `--device` on a missing node aborts the
+  container start. Doctor reports the node as informational and offers the
+  `modprobe` when only the module is missing.
+
 ## [0.5.5] - 2026-09-21
 
 Needs an image rebuild for both backends (`podstage runtime build`, then

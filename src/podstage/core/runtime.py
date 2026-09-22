@@ -212,6 +212,22 @@ _PCI_VENDORS = {"0x10de": "nvidia", "0x1002": "amd", "0x8086": "intel"}
 # and no CDI, unlike NVIDIA.
 MESA_VENDORS = ("amd", "intel")
 
+# ntsync: in-kernel NT synchronization primitives (kernel 6.14+, misc device,
+# module "ntsync"), which Proton uses instead of its fsync/esync emulation.
+# Optional everywhere: no node means the session runs exactly as before.
+NTSYNC_DEV = Path("/dev/ntsync")
+
+
+def ntsync_usable() -> bool:
+    """True when the host node exists AND this user can open it read-write.
+
+    Both halves matter. ``--device`` on a missing node aborts `podman run`, and
+    the container runs with --userns=keep-id, so a root-only node is
+    unreachable inside it and Proton falls back to fsync without a word. The
+    kernel publishes the node 0666, a restrictive host policy is the exception.
+    """
+    return NTSYNC_DEV.exists() and os.access(NTSYNC_DEV, os.R_OK | os.W_OK)
+
 
 def gpu_vendor() -> str:
     """"nvidia" | "amd" | "intel" | "unknown" — decides the GPU flag/encoder
@@ -382,6 +398,12 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
     # pressure-vessel → game. PS_GAMESCOPE_WSI=enabled re-enables it.
     if opts.env.get("PS_GAMESCOPE_WSI", os.environ.get("PS_GAMESCOPE_WSI")) != "enabled":
         env["DISABLE_GAMESCOPE_WSI"] = "1"
+    # Proton only reaches for ntsync when the variable is set AND the device is
+    # there, so gate it on the same probe that decides the --device flag. Set
+    # without a usable node it is dead weight; both are silent.
+    if ntsync_usable() and "PROTON_USE_NTSYNC" not in opts.env \
+            and not os.environ.get("PROTON_USE_NTSYNC"):
+        env["PROTON_USE_NTSYNC"] = "1"
     if backend.name == backends.SUNSHINE.name:
         env.update(_sunshine_only_env(opts, vendor))
     env.update(_forwarded_env(opts))
@@ -581,6 +603,11 @@ def container_flags(library_paths: list[Path], home_dir: Path,
         "--tz", "local",
         "--shm-size=1g",
     ]
+    # ntsync for Proton, when the host has it. full_dev binds /dev wholesale
+    # and already carries the node. Conditional: --device on a missing node
+    # fails container creation, which would break every pre-6.14 host.
+    if not full_dev and ntsync_usable():
+        args += ["--device", str(NTSYNC_DEV)]
     if seccomp_profile is not None:
         args += ["--security-opt", f"seccomp={seccomp_profile}"]
     if full_dev:

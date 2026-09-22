@@ -535,6 +535,30 @@ def check_uhid() -> CheckResult:
         fix=UDEV_FIX)
 
 
+def check_ntsync() -> CheckResult:
+    """ntsync gives Proton in-kernel NT sync primitives instead of fsync/esync.
+    Optional: without it the session streams unchanged, so every verdict here is
+    informational. The node is passed into the container only when this user can
+    open it read-write, see runtime.ntsync_usable."""
+    dev = runtime.NTSYNC_DEV
+    if dev.exists():
+        if runtime.ntsync_usable():
+            return CheckResult("ntsync", Status.OK, f"{dev} usable, Proton uses ntsync")
+        return CheckResult("ntsync", Status.INFO,
+                           f"{dev} not writable for {getpass.getuser()}, "
+                           "Proton falls back to fsync/esync")
+    rc, out = _run(["modinfo", "-n", "ntsync"])
+    if rc == 0 and out.strip():
+        return CheckResult(
+            "ntsync", Status.INFO,
+            "ntsync module present but not loaded, Proton falls back to fsync/esync",
+            fix="sudo modprobe ntsync && "
+                "echo ntsync | sudo tee /etc/modules-load.d/ntsync.conf")
+    return CheckResult("ntsync", Status.INFO,
+                       "no ntsync in this kernel (needs 6.14+), "
+                       "Proton uses fsync/esync")
+
+
 def check_gpu() -> CheckResult:
     vendor = runtime.gpu_vendor()
     if vendor == "amd":
@@ -604,6 +628,7 @@ ALL_CHECKS: list[tuple[Callable[[], CheckResult], str]] = [
     (check_udev_rules, GROUP_HOST),
     (check_uinput, GROUP_HOST),
     (check_uhid, GROUP_HOST),
+    (check_ntsync, GROUP_HOST),
     (check_steam, GROUP_HOST),
     (check_stale_images, GROUP_HOST),
     (check_mdns, GROUP_STREAMING),
