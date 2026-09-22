@@ -26,10 +26,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **ntsync passed into the container** (`--device /dev/ntsync` plus
-  `PROTON_USE_NTSYNC=1`), so Proton uses the kernel's NT sync primitives
-  instead of fsync/esync. Both are set only when the host node exists and is
-  writable for this user, because `--device` on a missing node aborts the
+- **ntsync passed into the container** (`--device /dev/ntsync`), so Proton can
+  use the kernel's NT sync primitives instead of fsync/esync. Which games take
+  that path stays the Proton build's decision, per-title in the CachyOS builds;
+  podstage exports no ntsync variable, because forcing one overrides that
+  curation for every game. The flag appears only when the host node exists and
+  is writable for this user, since `--device` on a missing node aborts the
   container start. Doctor reports the node as informational and offers the
   `modprobe` when only the module is missing.
 

@@ -90,11 +90,13 @@ The container is rootless (`--userns=keep-id`): no sudo, no extra capabilities.
   virtual input devices on the real uinput, which is what keeps Steam Input
   working (Steam feeds its own virtual pad there too). labwc reads them from
   /dev/input.
-- `--device /dev/ntsync` + `PROTON_USE_NTSYNC=1`: in-kernel NT sync
-  primitives for Proton instead of fsync/esync. Both are added only when the
-  host node exists and is writable for this user (kernel 6.14+ with the
-  `ntsync` module loaded); `--device` on a missing node would fail container
-  creation. Absent, Proton falls back silently.
+- `--device /dev/ntsync`: in-kernel NT sync primitives for Proton instead of
+  fsync/esync. Added only when the host node exists and is writable for this
+  user (kernel 6.14+ with the `ntsync` module loaded); `--device` on a missing
+  node would fail container creation. Which games use it is the Proton build's
+  call (proton-cachyos 10.x: curated appid list plus `PROTON_USE_NTSYNC`; 11.x:
+  device presence, `PROTON_NO_NTSYNC` to opt out; GE: `WINENTSYNC`), so the
+  image exports no ntsync variable. Absent, Proton uses fsync.
 - `-v /run/udev:/run/udev:ro`: libinput enumerates devices through the udev DB,
   which is readable rootless. Hotplug uevents do NOT reach the user namespace;
   the seat shim fakes the monitor via inotify (`PS_FAKE_UDEV=1`), and

@@ -244,16 +244,12 @@ def test_ntsync_device_passed_only_when_usable(monkeypatch):
     assert "/dev/ntsync" not in runtime.container_flags(LIBS, home, vendor="nvidia")
 
 
-def test_ntsync_env_follows_the_device(monkeypatch):
-    monkeypatch.delenv("PROTON_USE_NTSYNC", raising=False)
+def test_no_ntsync_env_is_invented(monkeypatch):
+    # The device is the contract: GE and Proton-CachyOS take ntsync from the
+    # node's presence, and no shipped build reads a PROTON_USE_NTSYNC.
     monkeypatch.setattr(runtime, "ntsync_usable", lambda: True)
-    assert runtime.container_env(_opts(), LIBS)["PROTON_USE_NTSYNC"] == "1"
-    # no device, no variable: Proton must not ask for what it cannot open
-    monkeypatch.setattr(runtime, "ntsync_usable", lambda: False)
-    assert "PROTON_USE_NTSYNC" not in runtime.container_env(_opts(), LIBS)
-    monkeypatch.setattr(runtime, "ntsync_usable", lambda: True)
-    assert runtime.container_env(_opts(env={"PROTON_USE_NTSYNC": "0"}),
-                                 LIBS)["PROTON_USE_NTSYNC"] == "0"
+    env = runtime.container_env(_opts(), LIBS)
+    assert not [k for k in env if "NTSYNC" in k.upper()]
 
 
 def test_only_moonshine_swaps_the_seccomp_profile(monkeypatch):

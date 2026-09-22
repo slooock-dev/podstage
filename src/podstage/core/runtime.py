@@ -225,6 +225,14 @@ def ntsync_usable() -> bool:
     the container runs with --userns=keep-id, so a root-only node is
     unreachable inside it and Proton falls back to fsync without a word. The
     kernel publishes the node 0666, a restrictive host policy is the exception.
+
+    The node is all podstage contributes. Which games then use ntsync is the
+    Proton build's decision, and the builds disagree: proton-cachyos 10.x
+    enables it per appid from a curated list and takes PROTON_USE_NTSYNC as the
+    opt in, 11.x switches on the device's presence with PROTON_NO_NTSYNC as the
+    opt out, GE sets WINENTSYNC itself, Valve's builds mention none of it.
+    Exporting any of those variables session-wide would override that
+    per-title curation for every game, so podstage sets none.
     """
     return NTSYNC_DEV.exists() and os.access(NTSYNC_DEV, os.R_OK | os.W_OK)
 
@@ -398,12 +406,6 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
     # pressure-vessel → game. PS_GAMESCOPE_WSI=enabled re-enables it.
     if opts.env.get("PS_GAMESCOPE_WSI", os.environ.get("PS_GAMESCOPE_WSI")) != "enabled":
         env["DISABLE_GAMESCOPE_WSI"] = "1"
-    # Proton only reaches for ntsync when the variable is set AND the device is
-    # there, so gate it on the same probe that decides the --device flag. Set
-    # without a usable node it is dead weight; both are silent.
-    if ntsync_usable() and "PROTON_USE_NTSYNC" not in opts.env \
-            and not os.environ.get("PROTON_USE_NTSYNC"):
-        env["PROTON_USE_NTSYNC"] = "1"
     if backend.name == backends.SUNSHINE.name:
         env.update(_sunshine_only_env(opts, vendor))
     env.update(_forwarded_env(opts))
