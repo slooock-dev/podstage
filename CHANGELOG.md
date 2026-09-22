@@ -4,6 +4,18 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7] - 2026-09-22
+
+No image rebuild needed, the runtime image is unchanged.
+
+### Fixed
+
+- **Doctor wakes disabled monitors again on NVIDIA.** CDI specs from
+  nvidia-container-toolkit 1.20 carry `/dev/nvidia-modeset` with major/minor and
+  silently override the probe's `/dev/null` stand-in, so vulkaninfo probed the
+  host connectors on every GUI start. The probe now bind-mounts `/dev/null` over
+  the node inside the container before running vulkaninfo.
+
 ## [0.5.6] - 2026-09-22
 
 No image rebuild needed, the runtime image is unchanged.

@@ -294,6 +294,10 @@ def test_vulkaninfo_probe_gets_no_display_access_nvidia(monkeypatch):
     joined = " ".join(doctor._vulkaninfo_argv())
     assert "--device /dev/null:/dev/nvidia-modeset" in joined
     assert "--device /dev/nvidia-modeset" not in joined
+    # CDI specs with major/minor override the --device stand-in, so the probe
+    # masks the node from inside the container as well.
+    assert "mount --bind /dev/null /dev/nvidia-modeset && exec /usr/sbin/vulkaninfo" in joined
+    assert "--cap-add SYS_ADMIN" in joined
 
 
 def test_vulkaninfo_probe_gets_no_display_access_mesa(monkeypatch):

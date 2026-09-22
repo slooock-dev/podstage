@@ -211,18 +211,27 @@ def _vulkaninfo_argv() -> list[str]:
     (core/runtime.container_flags) minus display access: vulkaninfo's
     VK_KHR_display pass otherwise probes the host connectors and briefly wakes
     disabled monitors on every doctor run. Mesa gets render nodes instead of
-    all of /dev/dri; NVIDIA gets /dev/null as /dev/nvidia-modeset, which the
-    ICD accepts as zero displays where a missing node makes it segfault."""
+    all of /dev/dri. NVIDIA needs a /dev/nvidia-modeset that is /dev/null: the
+    ICD accepts it as zero displays, a missing node makes it segfault. The
+    ``--device`` stand-in only holds with CDI specs that list the node by path;
+    specs that carry its major/minor (nvidia-container-toolkit >= 1.20) win
+    over it silently, so a root shell bind-mounts /dev/null over whatever node
+    CDI created before exec'ing vulkaninfo."""
+    vulkaninfo = ["--entrypoint", "/usr/sbin/vulkaninfo", runtime.DEFAULT_IMAGE]
     if runtime.gpu_vendor() in runtime.MESA_VENDORS:
         devices = [flag for node in sorted(glob.glob("/dev/dri/renderD*"))
                    for flag in ("--device", node)]
     else:
         devices = ["--device", "nvidia.com/gpu=all",
-                   "--device", "/dev/null:/dev/nvidia-modeset"]
+                   "--device", "/dev/null:/dev/nvidia-modeset",
+                   "--user", "0", "--cap-add", "SYS_ADMIN"]
+        vulkaninfo = ["--entrypoint", "/bin/sh", runtime.DEFAULT_IMAGE, "-c",
+                      ("mount --bind /dev/null /dev/nvidia-modeset"
+                       " && exec /usr/sbin/vulkaninfo")]
     return (["podman", "run", "--rm", "--name", "podstage-vulkan-doctor"]
             + devices
-            + ["--security-opt", "label=disable", "--userns=keep-id",
-               "--entrypoint", "/usr/sbin/vulkaninfo", runtime.DEFAULT_IMAGE])
+            + ["--security-opt", "label=disable", "--userns=keep-id"]
+            + vulkaninfo)
 
 
 def parse_video_encode(out: str) -> tuple[bool, list[str]]:
