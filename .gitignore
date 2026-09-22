@@ -21,6 +21,7 @@ venv/
 # Agent working files (local-only, never published)
 CLAUDE.md
 AGENTS.md
+BACKLOG.md
 .claude/
 
 # Debugging and misc
