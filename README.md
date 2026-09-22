@@ -36,11 +36,6 @@ invisible session instead:
 - Sandboxes sit side by side, each with its own login, Steam settings, Input
   layout and per-game presets. One per client, per account, or per use case.
 
-A headless server like moonshine already isolates the stream. podstage drives
-it as one of its two backends and adds the sandboxed Steam around it: isolated
-login, games shared from your host libraries instead of downloaded twice, plus
-the setup, provisioning and monitoring you would otherwise assemble by hand.
-
 ## What podstage does
 
 podstage is an orchestrator. It writes no compositor, no encoder and no
@@ -146,29 +141,6 @@ flowchart TB
 | render size | first client's mode, locked until restart | the connecting client's mode, per connect |
 | image | `podstage-runtime` (about 3 GB) | `podstage-moonshine` (about 4 GB), built on top of it |
 
-**sunshine** was the initial approach and runs on anything with a hardware
-encoder: labwc composites the session, sunshine captures that output through
-wlr-screencopy. The cost is the plumbing between the parts, a dedicated seat
-for the client's input devices, faked udev hotplug in the rootless namespace,
-and a pointer capability held up so gamescope keeps mouse input.
-
-**moonshine** is compositor, capture, Vulkan Video encode, mDNS and GameStream
-server in one Rust process. Steam and gamescope sit on top unchanged, but the
-input layer below disappears, because that compositor never opens an evdev
-device. Its container runs under a seccomp profile derived from podman's own,
-with one syscall ungated for moonshine's DMA-BUF import cache (see
-[`containers/moonshine/README.md`](containers/moonshine/README.md)).
-
-On both backends, holding the controller's Select/Back button (default two
-seconds, adjustable) presses the Guide button (the Steam menu, e.g. to quit a
-game): sunshine's `back_button_timeout` and moonshine's `home_button.hold_ms`,
-wired to one Setup-page switch with a hold-time field. Steam Deck clients need this, the Deck's local Steam
-consumes the physical Steam button. A desktop Steam left running sees the
-emulated pad too. Disable "Guide Button Focuses Steam" there. For text entry
-the Deck's own on-screen keyboard (Steam+X) types into the stream. On sunshine
-this needs the mouse & keyboard input switch, moonshine always streams the
-keyboard.
-
 ```bash
 podstage sandbox add tv --backend moonshine
 podstage runtime build --backend moonshine     # once, builds from source
@@ -195,12 +167,9 @@ group on the Setup page.
 - A moonlight client with a gamepad (Steam Deck, laptop, phone with
   controller). Mouse and keyboard are a toggle. A PlayStation controller needs
   the `gamepad_ds5` experimental switch on the sunshine backend.
-
-> **Tested configuration.** Verified end to end on Bazzite-DX 43 (KDE Plasma,
-> Wayland) with an NVIDIA RTX 4080 SUPER, streaming to a Steam Deck. AMD is
-> validated on a Rembrandt iGPU, Intel confirmed by a community report (Arc
-> B580). Other distros and non-KDE compositors are untested (see
-> [Portability](#portability)). Reports welcome.
+  Hold Select/Back to press Guide (the Steam menu). A desktop Steam left
+  running sees the emulated pad too, disable "Guide Button Focuses Steam"
+  there.
 
 ## Getting started
 
@@ -318,17 +287,6 @@ client and the network:
 After that, tune the encoder on the Session page: on NVIDIA max the preset (P7)
 and two-pass (full res), and raise VBV if fast motion still shows artifacts; on
 AMD and Intel raise the VAAPI quality profile.
-
-### Shader caching
-
-Each sandbox keeps its own shader cache, so Steam's shader pre-caching costs
-disk per sandbox instead of once per machine, and every sandbox waits through
-its own "Processing Vulkan shaders" before a game starts.
-
-On strong hardware, turn it off (sandbox Steam → Settings → Downloads). That
-saves gigabytes per sandbox and skips the wait. DXVK and VKD3D compile on the
-fly instead, which a capable CPU and GPU handle well, at the price of a brief
-stutter on first run in a few titles.
 
 ## Security notes
 
