@@ -24,6 +24,12 @@ from . import sandbox
 
 DEFAULT_WEB_PORT = 47990
 
+# POST /api/pin answers only once the pairing handshake resolved (sunshine
+# >= v2026.914, upstream #5680): success, wrong PIN, cancellation or the
+# client's own timeout. The default request timeout would turn a mistyped PIN
+# into "API unreachable".
+PIN_TIMEOUT = 30.0
+
 # GET /api/config decorates the config with read-only metadata that the POST
 # endpoint must not receive back.
 _METADATA_KEYS = {"platform", "version", "restart_supported"}
@@ -76,20 +82,71 @@ def set_options(changes: dict[str, str], web_port: int = DEFAULT_WEB_PORT) -> No
     _request("/api/config", web_port, payload=cfg)
 
 
+def pending_pairings(web_port: int = DEFAULT_WEB_PORT) -> list[dict]:
+    """The pairing requests sunshine is waiting on: ``id`` (32 hex chars),
+    ``name`` and ``address`` of the asking client. Empty when no client has
+    asked yet or the request timed out."""
+    pairings = _request("/api/pin", web_port).get("pairings")
+    if not isinstance(pairings, list):
+        return []
+    return [p for p in pairings if isinstance(p, dict)]
+
+
 def pair(pin: str, name: str, web_port: int = DEFAULT_WEB_PORT) -> bool:
     """Complete a moonlight pairing: the client shows a 4-digit PIN, this
-    submits it (what the web UI's PIN form does). sunshine must be running."""
-    resp = _request("/api/pin", web_port, payload={"pin": pin, "name": name})
+    submits it (what the web UI's PIN form does). sunshine must be running.
+
+    POST /api/pin carries the pending request's ``pairing_id`` next to the PIN;
+    without it sunshine answers 400 ("pairing_id must contain exactly 32
+    hexadecimal characters") and no pairing can ever complete. An API without
+    GET /api/pin is an older image than this code: fall back to the old
+    pin + name payload.
+
+    Nothing pending means no POST at all. The endpoint answers 400 without a
+    pairing_id, and that error would replace the caller's "start it in
+    moonlight first" with an HTTP code. Several pending requests raise instead
+    of guessing: the PIN belongs to exactly one of them, and a miss costs that
+    client its attempt.
+    """
+    payload = {"pin": pin, "name": name}
+    try:
+        pending = pending_pairings(web_port)
+    except SunshineApiError:
+        resp = _request("/api/pin", web_port, payload=payload)
+        return str(resp.get("status", "")).lower() == "true"
+    if not pending:
+        return False
+    if len(pending) > 1:
+        waiting = ", ".join(f"{p.get('name') or '?'} ({p.get('address') or '?'})"
+                            for p in pending)
+        raise SunshineApiError(
+            f"{len(pending)} clients are waiting to pair ({waiting}); a PIN "
+            "belongs to one of them and the API needs that request picked "
+            "explicitly — do it in sunshine's web UI, or retry with a single "
+            "client waiting")
+    try:
+        resp = _request("/api/pin", web_port, timeout=PIN_TIMEOUT,
+                        payload={**payload, "pairing_id": str(pending[0].get("id", ""))})
+    except SunshineApiError as e:
+        if "timed out" not in str(e):
+            raise
+        raise SunshineApiError(
+            "pairing did not complete in time; the PIN is wrong or the client "
+            "stopped waiting (sunshine answers only once the handshake "
+            "resolved)") from e
     return str(resp.get("status", "")).lower() == "true"
 
 
 def pair_verified(pin: str, name: str, home: Path,
                   web_port: int = DEFAULT_WEB_PORT, timeout: float = 10.0) -> bool:
-    """Submit a PIN and wait for a new device in the sandbox pairing state;
-    /api/pin returns true even for a wrong PIN (the handshake fails later on
-    the client). False: never completed. Raises: unreachable / no attempt
-    pending. Compared by device id (uuid/cert), so a re-pairing under an
-    existing name counts as success too."""
+    """Submit a PIN and wait for a new device in the sandbox pairing state.
+
+    sunshine >= v2026.914 reports the real pairing result, so ``pair`` returning
+    true already means the handshake completed; the state poll additionally
+    proves the device reached the sandbox's persistent state, which is what
+    survives a session restart. False: never completed. Raises: unreachable /
+    no attempt pending. Compared by device id (uuid/cert), so a re-pairing
+    under an existing name counts as success too."""
     before = sandbox.paired_device_ids(home)
     if not pair(pin, name, web_port):
         raise SunshineApiError("no pairing attempt pending; start it in "

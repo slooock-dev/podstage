@@ -6,6 +6,16 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pairing on the sunshine backend.** `POST /api/pin` needs the pending
+  request's `pairing_id` (32 hex chars) since sunshine v2026.914, so every
+  attempt after the 0.5.5 version bump failed with API 400. The PIN now goes
+  out with the id from `GET /api/pin`; with several clients waiting podstage
+  names them instead of guessing, since a miss costs that client its attempt.
+  The endpoint also answers only once the handshake resolved, so it gets its
+  own 30 s timeout and a mistyped PIN no longer surfaces as "API unreachable".
+
 ### Added
 
 - **ntsync passed into the container** (`--device /dev/ntsync` plus
