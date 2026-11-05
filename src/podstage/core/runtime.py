@@ -123,6 +123,11 @@ _SUNSHINE_ENV: dict[str, str | None] = {
     # sunshine emulates a DualSense instead of an Xbox pad; moonshine's
     # inputtino has its own gamepad model, so this does not carry over.
     "PS_GAMEPAD_DS5": None,
+    # The profile pins a PlayStation pad (gamepad = ds4|ds5). Those are kernel
+    # HID devices built through /dev/uhid, not uinput ones, so the container
+    # needs the whole host /dev (see podman_run_args). Derived from the
+    # profile by session._options, never from the ds5 switch alone.
+    "PS_NEEDS_UHID": None,
     # Experimental (config.EXPERIMENTAL_FEATURES): symlink-mirrored
     # /dev/input for `session gamepad-reconnect`; drives the mounts below.
     "PS_GAMEPAD_RECONNECT": None,
@@ -181,6 +186,9 @@ class RuntimeOptions:
     # Shared libraries plain read/write instead of overlay
     # (config.SessionConfig.library_rw).
     library_rw: bool = False
+    # Name moonlight lists and the backend announces; empty derives
+    # ``{client}-{backend}`` (see advertised_name).
+    stream_name: str = ""
 
     @property
     def spec(self) -> backends.Backend:
@@ -364,6 +372,20 @@ def csrf_origins(web_port: int) -> str:
     return ",".join(origins)
 
 
+def advertised_name(opts: RuntimeOptions) -> str:
+    """The name moonlight lists and the backend announces for this session.
+
+    A profile's ``stream_name`` wins (sanitized: integration names reach the
+    mDNS service name, where the wrong character makes moonlight-qt drop the
+    session without a word — see ``backends.safe_name``). Empty keeps the
+    historical ``{profile}-{backend}`` derivation.
+    """
+    custom = opts.stream_name.strip()
+    if custom:
+        return backends.safe_name(custom)
+    return opts.spec.advertised_name(opts.client)
+
+
 def _forwarded_env(opts: RuntimeOptions) -> dict[str, str]:
     env: dict[str, str] = {}
     for key, default in _forward_env_for(opts.spec).items():
@@ -387,8 +409,8 @@ def container_env(opts: RuntimeOptions, library_paths: list[Path],
         # What a moonlight client lists this session as. sunshine puts it in
         # sunshine.conf, moonshine in its config.toml and its own mDNS
         # responder; the host-side publisher (sunshine only) announces the
-        # same string. See Backend.advertised_name.
-        backend.name_env: backend.advertised_name(opts.client),
+        # same string. See advertised_name.
+        backend.name_env: advertised_name(opts),
         "PS_APP": opts.app,
         "STEAM_COMPAT_MOUNTS": ":".join(str(p) for p in library_paths),
         # Rootless container: the kernel delivers no udev uevents into this
@@ -455,10 +477,12 @@ def podman_run_args(opts: RuntimeOptions, library_paths: list[Path] | None = Non
     env = container_env(opts, library_paths, vendor=vendor)
     args = ["run", "--rm", "--name", CONTAINER_NAME]
     args += ["-it"] if opts.attach else ["-d"]
-    # sunshine needs the whole host /dev only for the ds5 feature, moonshine
+    # sunshine needs the whole host /dev for the PlayStation pads (kernel HID
+    # through uhid: the ds5 switch or a profile pinning ds4/ds5) and moonshine
     # always. Read off the env actually handed to the container, so the flag
     # and the variable can never disagree.
-    full_dev = opts.spec.full_dev or env.get("PS_GAMEPAD_DS5") == "enabled"
+    full_dev = opts.spec.full_dev or env.get("PS_NEEDS_UHID") == "enabled" \
+        or env.get("PS_GAMEPAD_DS5") == "enabled"
     args += container_flags(library_paths, opts.home_dir, vendor=vendor,
                             extra_mounts=opts.extra_mounts, full_dev=full_dev,
                             seccomp_profile=(SECCOMP_PROFILE if opts.spec.needs_kcmp
@@ -1124,7 +1148,7 @@ def start(opts: RuntimeOptions) -> RuntimeStatus:
     argv = ["podman"] + podman_run_args(opts, library_paths=library_paths)
     publisher_pid = host_pid = None
     if spec.host_mdns and opts.mode in ("pipeline", "desktop"):
-        publisher_pid, host_pid = start_publisher(spec.advertised_name(opts.client),
+        publisher_pid, host_pid = start_publisher(advertised_name(opts),
                                                   port=opts.stream_port)
     save_state(opts, publisher_pid, host_pid)
     try:

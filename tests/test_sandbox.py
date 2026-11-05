@@ -242,3 +242,77 @@ def test_prune_duplicate_client_certs_leaves_a_clean_state_alone(tmp_path: Path)
 
 def test_prune_duplicate_client_certs_without_a_state_file(tmp_path: Path):
     assert sandbox.prune_duplicate_client_certs(tmp_path) == []
+
+
+def test_steam_env_points_the_xdg_dirs_at_the_sandbox(tmp_path: Path,
+                                                      monkeypatch):
+    # Steam's launcher prefers XDG over HOME
+    # (``STEAM_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"``), so a launch
+    # that overrides HOME alone reads the desktop install and writes
+    # loginusers.vdf there: the sandbox never sees the login.
+    monkeypatch.setenv("XDG_DATA_HOME", "/host/.local/share")
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/host/.config")
+    monkeypatch.setenv("XDG_CACHE_HOME", "/host/.cache")
+    monkeypatch.setenv("XDG_STATE_HOME", "/host/.local/state")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/4242")
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+
+    env = sandbox.steam_env(tmp_path)
+
+    assert env["HOME"] == str(tmp_path)
+    assert env["XDG_DATA_HOME"] == str(tmp_path / ".local/share")
+    assert env["XDG_CONFIG_HOME"] == str(tmp_path / ".config")
+    assert env["XDG_CACHE_HOME"] == str(tmp_path / ".cache")
+    assert env["XDG_STATE_HOME"] == str(tmp_path / ".local/state")
+    # Session plumbing must pass through untouched or Steam has nowhere to
+    # draw and no socket dir.
+    assert env["XDG_RUNTIME_DIR"] == "/run/user/4242"
+    assert env["WAYLAND_DISPLAY"] == "wayland-1"
+
+
+def test_steam_env_sets_the_xdg_dirs_when_the_host_has_none(tmp_path: Path,
+                                                            monkeypatch):
+    for key in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
+                "XDG_STATE_HOME"):
+        monkeypatch.delenv(key, raising=False)
+
+    env = sandbox.steam_env(tmp_path)
+
+    assert env["XDG_DATA_HOME"] == str(tmp_path / ".local/share")
+    assert env["XDG_CONFIG_HOME"] == str(tmp_path / ".config")
+    assert env["XDG_CACHE_HOME"] == str(tmp_path / ".cache")
+    assert env["XDG_STATE_HOME"] == str(tmp_path / ".local/state")
+
+
+def test_drop_foreign_steam_links_unlinks_the_desktop_install(tmp_path: Path):
+    # A sandbox touched by the pre-0.5.8 login bug holds
+    # ``.steam/steam -> ~/.local/share/Steam``. Steam's launcher prefers a
+    # usable ``$HOME/.steam/steam`` over ``$XDG_DATA_HOME/Steam``, so that
+    # stale link keeps launching the desktop client and its login.
+    desktop = tmp_path / "desktop-steam"
+    desktop.mkdir()
+    home = tmp_path / "sandbox"
+    (home / ".steam").mkdir(parents=True)
+    (home / ".steam/steam").symlink_to(desktop)
+    (home / ".steam/root").symlink_to(desktop)
+
+    dropped = sandbox.drop_foreign_steam_links(home)
+
+    assert sorted(p.name for p in dropped) == ["root", "steam"]
+    assert not (home / ".steam/steam").is_symlink()
+    assert not (home / ".steam/root").is_symlink()
+
+
+def test_drop_foreign_steam_links_keeps_a_sandbox_install(tmp_path: Path):
+    inside = tmp_path / ".local/share/Steam"
+    inside.mkdir(parents=True)
+    (tmp_path / ".steam").mkdir()
+    (tmp_path / ".steam/steam").symlink_to(inside)
+
+    assert sandbox.drop_foreign_steam_links(tmp_path) == []
+
+    assert (tmp_path / ".steam/steam").is_symlink()
+
+
+def test_drop_foreign_steam_links_ignores_a_missing_steam_dir(tmp_path: Path):
+    assert sandbox.drop_foreign_steam_links(tmp_path) == []

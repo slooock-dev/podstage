@@ -286,3 +286,49 @@ def test_start_prunes_duplicate_pairing_records(tmp_path, monkeypatch):
                         lambda home: seen.append(home) or [("deck", "u1")])
     assert s.start().running
     assert seen == [s.home]
+
+
+def test_setup_launches_steam_isolated_from_the_host_xdg(tmp_path, monkeypatch):
+    # Regression: the login button used to pass HOME only, so Steam kept
+    # resolving its data dir from the host XDG_DATA_HOME, opened the desktop
+    # client, and wrote loginusers.vdf into the desktop profile.
+    import subprocess as sp
+
+    from podstage.core import runtime
+    from podstage.core import session as session_mod
+
+    sc = SessionConfig(name="deck", home=str(tmp_path))
+    s = Session(sc)
+    monkeypatch.setattr(runtime, "is_running", lambda: False)
+    monkeypatch.setattr(Session, "close_host_steam",
+                        lambda self, timeout=20: None)
+    monkeypatch.setenv("XDG_DATA_HOME", "/host/.local/share")
+    seen: dict = {}
+
+    def fake_run(cmd, env=None, **kwargs):
+        seen["cmd"] = cmd
+        seen["env"] = env
+        return sp.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(session_mod.subprocess, "run", fake_run)
+    s.setup()
+
+    assert seen["cmd"] == ["steam"]
+    assert seen["env"]["HOME"] == str(tmp_path)
+    assert seen["env"]["XDG_DATA_HOME"] == str(tmp_path / ".local/share")
+    assert seen["env"]["XDG_CONFIG_HOME"] == str(tmp_path / ".config")
+
+
+def test_pinned_playstation_pad_requests_uhid():
+    sc = SessionConfig(name="deck", sunshine_extra={"gamepad": "ds4"})
+    assert Session(sc)._options().env["PS_NEEDS_UHID"] == "enabled"
+
+    sc = SessionConfig(name="deck", sunshine_extra={"gamepad": "ds5"})
+    assert Session(sc)._options().env["PS_NEEDS_UHID"] == "enabled"
+
+
+def test_other_pads_do_not_request_uhid():
+    for pad in ("auto", "x360", "xone", "switch"):
+        sc = SessionConfig(name="deck", sunshine_extra={"gamepad": pad})
+        assert "PS_NEEDS_UHID" not in Session(sc)._options().env, pad
+    assert "PS_NEEDS_UHID" not in Session(SessionConfig(name="deck"))._options().env

@@ -8,7 +8,6 @@ Only one session runs at a time, because games can only run from one Steam
 instance. ``runtime.start()`` enforces it.
 """
 
-import os
 import shutil
 import subprocess
 import time
@@ -81,7 +80,7 @@ class Session:
             return True
         if shutil.which("steam") is None:
             return False
-        _steam_shutdown(env=dict(os.environ, HOME=str(self.home)))
+        _steam_shutdown(env=sandbox.steam_env(self.home))
         for _ in range(timeout):
             if not self.sandbox_steam_running():
                 return True
@@ -150,6 +149,11 @@ class Session:
         # Hold Select/Back to press Guide (Steam menu): both backends read
         # it, each through its own config key (see runtime._COMMON_ENV).
         env["PS_GUIDE_HOLD_MS"] = str(self.app_config().guide_hold_ms)
+        # PlayStation pads are kernel HID devices (libvirtualhid → /dev/uhid),
+        # not uinput ones: pinning ds4/ds5 needs the host /dev in the container
+        # or sunshine silently creates no pad at all.
+        if self.cfg.sunshine_extra.get("gamepad", "") in ("ds4", "ds5"):
+            env["PS_NEEDS_UHID"] = "enabled"
         # Settings that only exist on the labwc + sunshine pipeline. Setting
         # them for moonshine would be dead env, and silently pretending they
         # apply is worse than the honest gap (see containers/moonshine/).
@@ -193,6 +197,7 @@ class Session:
             env=env,
             extra_mounts=list(self.cfg.extra_mounts),
             library_rw=self.cfg.library_rw,
+            stream_name=self.cfg.stream_name,
         )
 
     # -- lifecycle -------------------------------------------------------
@@ -203,16 +208,21 @@ class Session:
         Steam's desktop UI (not Big Picture), so the first-time login and
         setting each game's Proton compatibility tool are easy with keyboard
         and mouse. Also the way to edit sandbox Steam settings later. This
-        runs on the HOST with an isolated HOME, not in the container: the
-        container's ``desktop`` mode is a debug path and nothing here uses it.
+        runs on the HOST with an isolated HOME and isolated XDG dirs (see
+        :func:`sandbox.steam_env`), not in the container: the container's
+        ``desktop`` mode is a debug path and nothing here uses it.
         """
         if runtime.is_running():
             raise RuntimeError(
                 "a streaming session is running; stop it before opening the "
                 "sandbox Steam (Steam is single-instance per HOME)")
         self.home.mkdir(parents=True, exist_ok=True)
+        dropped = sandbox.drop_foreign_steam_links(self.home)
+        if dropped:
+            print(f"Repaired {len(dropped)} sandbox Steam link(s) pointing "
+                  f"outside {self.home}")
         self.close_host_steam()
-        env = dict(os.environ, HOME=str(self.home))
+        env = sandbox.steam_env(self.home)
 
         if self.is_bootstrapped():
             # Already logged in once: make games appear now so Proton can be set.
