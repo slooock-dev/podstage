@@ -74,6 +74,21 @@ _VAAPI_RC_LABELS = {
     "qvbr": lambda: tr("quality-defined VBR"),
     "avbr": lambda: tr("average VBR"),
 }
+# sunshine's virtual pad (sunshine.conf `gamepad`). Values verified against
+# sunshine's configuration docs; xone/xseries are newer than plain x360 and
+# switch/generic exist for clients that report themselves oddly.
+_GAMEPAD_CHOICES = ("auto", "x360", "xone", "xseries", "ds4", "ds5",
+                    "switch", "generic")
+_GAMEPAD_LABELS = {
+    "auto": lambda: tr("auto (client decides)"),
+    "x360": lambda: tr("Xbox 360"),
+    "xone": lambda: tr("Xbox One"),
+    "xseries": lambda: tr("Xbox Series"),
+    "ds4": lambda: tr("DualShock 4 (PS4)"),
+    "ds5": lambda: tr("DualSense (PS5)"),
+    "switch": lambda: tr("Switch Pro"),
+    "generic": lambda: tr("generic HID"),
+}
 
 
 THUMB_MAX_AGE_S = 45  # strict mode only: older previews count as stale
@@ -223,8 +238,31 @@ class SessionPage(QWidget):
         brow.addWidget(caption)
         brow.addWidget(self._backend)
         brow.addStretch(1)
-        align_captions(self._game, self._resolution, self._backend_row)
-        for w in (self._game, self._resolution, self._backend_row):
+
+        # The name moonlight lists and sunshine announces. Durable here (in
+        # sunshine it lives in the tmpfs config, rewritten at every start).
+        self._stream_name_row = CaptionRow()
+        nrow = QHBoxLayout(self._stream_name_row)
+        nrow.setContentsMargins(0, 0, 0, 0)
+        nrow.setSpacing(8)
+        name_caption = QLabel(tr("Moonlight name"))
+        name_caption.setProperty("muted", True)
+        name_caption.setFixedWidth(max(
+            48, name_caption.fontMetrics().horizontalAdvance(
+                tr("Moonlight name")) + 4))
+        self._stream_name_row.caption_label = name_caption
+        self._stream_name = QLineEdit()
+        self._stream_name.setToolTip(tr(
+            "Name moonlight lists and the server announces. Leave it empty to "
+            "derive one from the sandbox and backend. Applies at the next "
+            "session start."))
+        self._stream_name.editingFinished.connect(self._persist_stream_name)
+        nrow.addWidget(name_caption)
+        nrow.addWidget(self._stream_name, 1)
+        align_captions(self._game, self._resolution, self._backend_row,
+                       self._stream_name_row)
+        for w in (self._game, self._resolution, self._backend_row,
+                  self._stream_name_row):
             lay.addWidget(w)
         return frame
 
@@ -292,8 +330,10 @@ class SessionPage(QWidget):
         # its panel with the selected profile's backend rather than greying
         # one set out (see _load_backend).
         self._sunshine_panel = QWidget()
-        row = QHBoxLayout(self._sunshine_panel)
-        row.setContentsMargins(0, 0, 0, 0)
+        panel_lay = QVBoxLayout(self._sunshine_panel)
+        panel_lay.setContentsMargins(0, 0, 0, 0)
+        panel_lay.setSpacing(8)
+        row = QHBoxLayout()
         row.setSpacing(8)
         # NVENC (NVIDIA) and VAAPI (AMD/Intel) expose different encoder knobs;
         # the runtime already picks the matching sunshine encoder by GPU vendor.
@@ -301,6 +341,10 @@ class SessionPage(QWidget):
             self._build_nvenc_row(row)
         else:
             self._build_vaapi_row(row)
+        panel_lay.addLayout(row)
+        # Input is the other half of "server-side" quality: a client that
+        # reports itself wrong otherwise gets the pad sunshine guesses.
+        panel_lay.addLayout(self._build_gamepad_row())
         lay.addWidget(self._sunshine_panel)
         self._moonshine_panel = self._build_moonshine_row()
         lay.addWidget(self._moonshine_panel)
@@ -322,6 +366,27 @@ class SessionPage(QWidget):
         bottom.addWidget(self._web_btn)
         lay.addLayout(bottom)
         return frame
+
+    def _build_gamepad_row(self) -> QHBoxLayout:
+        """sunshine's virtual pad, persisted like the encoder knobs.
+
+        With ``auto`` sunshine picks the pad from what the client reports, and
+        some clients report incorrectly (that is the bug this fixes); pinning a
+        type removes the guess.
+        """
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._gamepad = ComboBox()
+        for value in _GAMEPAD_CHOICES:
+            self._gamepad.addItem(_GAMEPAD_LABELS[value](), value)
+        self._gamepad.setToolTip(tr(
+            "Virtual pad sunshine creates. 'auto' follows what the client "
+            "reports; pin one if a client gets the wrong pad."))
+        self._gamepad.currentIndexChanged.connect(self._persist_quality)
+        row.addWidget(QLabel(tr("Gamepad")))
+        row.addWidget(self._gamepad, 1)
+        row.addStretch(1)
+        return row
 
     def _build_moonshine_row(self) -> QWidget:
         """moonshine's one transport knob. It has no config API, so this is
@@ -472,6 +537,7 @@ class SessionPage(QWidget):
         self._moonshine_panel.setVisible(not sunshine)
         self._apply_btn.setVisible(spec.live_config)
         self._web_btn.setVisible(spec.web_port_off is not None)
+        self._load_stream_name(sc)
         if sunshine:
             self._quality_hint.setText(tr(
                 "Bitrate & codec come from the moonlight client. These are the "
@@ -506,6 +572,30 @@ class SessionPage(QWidget):
             self._load_nvenc_quality(sc)
         else:
             self._load_vaapi_quality(sc)
+        self._load_gamepad(sc)
+
+    def _load_gamepad(self, sc: config.SessionConfig) -> None:
+        value = sc.sunshine_extra.get("gamepad", "auto")
+        self._gamepad.blockSignals(True)
+        self._gamepad.setCurrentIndex(max(0, self._gamepad.findData(value)))
+        self._gamepad.blockSignals(False)
+
+    def _load_stream_name(self, sc: config.SessionConfig) -> None:
+        if self._stream_name.hasFocus():  # never clobber an in-progress edit
+            return
+        self._stream_name.blockSignals(True)
+        self._stream_name.setText(sc.stream_name)
+        self._stream_name.setPlaceholderText(
+            backends.get_or_default(sc.backend).advertised_name(sc.name))
+        self._stream_name.blockSignals(False)
+
+    def _persist_stream_name(self) -> None:
+        """Save the announced name to the profile; applies at the next start."""
+        sc = self._profile()
+        if sc is None:
+            return
+        sc.stream_name = self._stream_name.text().strip()
+        self._ctx.save()
 
     def _load_nvenc_quality(self, sc: config.SessionConfig) -> None:
         preset = sc.sunshine_extra.get("nvenc_preset", "1")
@@ -538,13 +628,19 @@ class SessionPage(QWidget):
 
     def _quality_changes(self) -> dict[str, str]:
         if self._nvidia:
-            return {"nvenc_preset": self._preset.currentData(),
-                    "nvenc_twopass": self._twopass.currentData(),
-                    "nvenc_vbv_increase": str(self._vbv.value())}
-        return {"vaapi_quality": self._vaapi_quality.currentData(),
+            changes = {"nvenc_preset": self._preset.currentData(),
+                       "nvenc_twopass": self._twopass.currentData(),
+                       "nvenc_vbv_increase": str(self._vbv.value())}
+        else:
+            changes = {
+                "vaapi_quality": self._vaapi_quality.currentData(),
                 "vaapi_rc": self._vaapi_rc.currentData(),
                 "vaapi_strict_rc_buffer":
                     "enabled" if self._vaapi_strict.isChecked() else "disabled"}
+        # The pad is a sunshine.conf key like the rest: saving it here is what
+        # makes the choice survive a restart (the config is regenerated).
+        changes["gamepad"] = self._gamepad.currentData()
+        return changes
 
     def _persist_quality(self) -> None:
         """Save the current dropdown selection to the profile immediately, so

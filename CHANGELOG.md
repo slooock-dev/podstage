@@ -4,6 +4,27 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.10] - 2026-11-04
+
+No image rebuild needed, the runtime image is unchanged.
+
+### Added
+
+- **Gamepad type and moonlight name are now profile settings.** The gamepad
+  select (auto/x360/xone/xseries/ds4/ds5/switch/generic) joins the encoder knobs
+  on the Session page and the name field sits under Backend; both persist in the
+  profile instead of the tmpfs `sunshine.conf`, so a client that reports itself
+  wrong keeps the pad you pinned and a renamed host keeps its name. The name
+  reaches `sunshine_name` / `PS_MOONSHINE_NAME` and the host's avahi
+  announcement through `runtime.advertised_name`, and is sanitized the same way
+  the derived one is.
+- **Pinning a PlayStation pad mounts the host `/dev`.** A ds4/ds5 pad is a
+  kernel HID device built through `/dev/uhid`, not a uinput one, so forcing it
+  without the wide mount made sunshine create no pad at all (`auto` only worked
+  because it falls back to the uinput Xbox pad). `session._options` now derives
+  `PS_NEEDS_UHID` from the pinned pad, the doctor checks `/dev/uhid` for those
+  profiles too, and the check reads "uhid (PS4/PS5)".
+
 ## [0.5.9] - 2026-11-04
 
 No image rebuild needed, the runtime image is unchanged.

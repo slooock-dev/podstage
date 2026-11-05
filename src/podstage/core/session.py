@@ -149,6 +149,11 @@ class Session:
         # Hold Select/Back to press Guide (Steam menu): both backends read
         # it, each through its own config key (see runtime._COMMON_ENV).
         env["PS_GUIDE_HOLD_MS"] = str(self.app_config().guide_hold_ms)
+        # PlayStation pads are kernel HID devices (libvirtualhid → /dev/uhid),
+        # not uinput ones: pinning ds4/ds5 needs the host /dev in the container
+        # or sunshine silently creates no pad at all.
+        if self.cfg.sunshine_extra.get("gamepad", "") in ("ds4", "ds5"):
+            env["PS_NEEDS_UHID"] = "enabled"
         # Settings that only exist on the labwc + sunshine pipeline. Setting
         # them for moonshine would be dead env, and silently pretending they
         # apply is worse than the honest gap (see containers/moonshine/).
@@ -192,6 +197,7 @@ class Session:
             env=env,
             extra_mounts=list(self.cfg.extra_mounts),
             library_rw=self.cfg.library_rw,
+            stream_name=self.cfg.stream_name,
         )
 
     # -- lifecycle -------------------------------------------------------

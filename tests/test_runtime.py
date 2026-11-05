@@ -1058,3 +1058,43 @@ def test_build_image_failure_keeps_the_output_tail(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="it broke"):
         runtime.build_image(backend=backends.SUNSHINE.name,
                             on_progress=lambda _s: None)
+
+
+def test_advertised_name_derives_from_profile_and_backend():
+    # Historical default: the backend stays in the name because the two
+    # servers keep separate pairings.
+    assert runtime.advertised_name(_opts()) == "deck-sunshine"
+
+
+def test_advertised_name_honours_the_profile_override():
+    opts = _opts(stream_name="Living room!")
+    assert runtime.advertised_name(opts) == "Living-room"
+
+
+def test_advertised_name_falls_back_when_the_override_is_blank():
+    assert runtime.advertised_name(_opts(stream_name="  ")) == "deck-sunshine"
+
+
+def test_container_env_carries_the_custom_name():
+    env = runtime.container_env(_opts(stream_name="tv"), LIBS)
+    assert env["PS_SUNSHINE_NAME"] == "tv"
+
+
+def test_container_env_carries_the_custom_name_to_moonshine():
+    env = runtime.container_env(_opts(stream_name="tv", backend="moonshine"), LIBS)
+    assert env["PS_MOONSHINE_NAME"] == "tv"
+
+
+def test_pinned_playstation_pad_binds_the_whole_dev():
+    # A PlayStation pad is a kernel HID device (libvirtualhid → /dev/uhid), not
+    # a uinput one, so the container needs the host /dev. Without it sunshine
+    # creates no pad at all when the profile pins ds4/ds5.
+    opts = _opts(env={"PS_NEEDS_UHID": "enabled"})
+    joined = " ".join(runtime.podman_run_args(opts, library_paths=LIBS))
+    assert "-v /dev:/dev" in joined
+
+
+def test_xbox_pad_keeps_the_narrow_device_set():
+    joined = " ".join(runtime.podman_run_args(_opts(), library_paths=LIBS))
+    assert "-v /dev:/dev" not in joined
+    assert "--device /dev/uinput" in joined

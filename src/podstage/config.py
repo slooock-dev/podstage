@@ -249,6 +249,12 @@ class SessionConfig:
     # The sandbox keeps its own manifest copy, so the host Steam sees the new
     # build only after its own (quick, files already current) update pass.
     library_rw: bool = False
+    # Name moonlight lists and the backend announces (sunshine_name, i.e.
+    # PS_SUNSHINE_NAME / PS_MOONSHINE_NAME). Empty derives
+    # `{profile}-{backend}` via runtime.advertised_name, which keeps the
+    # backend in the name: the two servers keep separate pairings, so two
+    # identically named entries silently connect to the wrong one.
+    stream_name: str = ""
 
     def __post_init__(self) -> None:
         # "ask" is an explicit resolution choice at start; the dynamic
