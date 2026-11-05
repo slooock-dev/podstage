@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from podstage import config
-from podstage.core import desktop, teardown, udev
+from podstage.core import desktop, doctor, teardown, udev
 
 
 def _fake_system(monkeypatch, tmp_path: Path, *, udev_present=True, ports=None,
@@ -23,6 +23,7 @@ def _fake_system(monkeypatch, tmp_path: Path, *, udev_present=True, ports=None,
     if cdi:
         cdi_spec.write_text("x")
     monkeypatch.setattr(teardown, "CDI_SPEC", cdi_spec)
+    monkeypatch.setattr(teardown, "_firewall_kind", lambda: "firewalld")
     monkeypatch.setattr(teardown, "_open_stream_ports", lambda: ports or [])
     monkeypatch.setattr(teardown, "_mdns_allowed", lambda: mdns)
     monkeypatch.setattr(teardown, "_image_present", lambda: image)
@@ -113,3 +114,38 @@ def test_leftovers_exclude_shared_by_default(monkeypatch, tmp_path):
     _fake_system(monkeypatch, tmp_path, udev_present=False, mdns=True, cdi=True)
     assert teardown.leftovers() == []
     assert {a.key for a in teardown.leftovers(include_shared=True)} == {"mdns", "cdi"}
+
+
+def test_root_steps_remove_ufw_rules(monkeypatch, tmp_path):
+    _fake_system(monkeypatch, tmp_path, udev_present=False,
+                 ports=["47989/tcp", "48000/udp"], mdns=True)
+    monkeypatch.setattr(teardown, "_firewall_kind", lambda: "ufw")
+    arts = teardown.inventory()
+
+    joined = " && ".join(teardown.root_steps(arts, include_shared=True))
+
+    assert "ufw delete allow 47989/tcp" in joined
+    assert "ufw delete allow 48000/udp" in joined
+    assert "ufw delete allow 5353/udp" in joined
+    assert "firewall-cmd" not in joined  # never mix the two
+
+
+def test_ufw_artifacts_come_from_ufw_rules(monkeypatch, tmp_path):
+    from podstage import config
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[[sessions]]\nname = "a"\n')
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg)
+    rules = tmp_path / "user.rules"
+    rules.write_text(
+        "-A ufw-user-input -p tcp -m tcp --dport 47989 -j ACCEPT\n"
+        "-A ufw-user-input -p udp -m udp --dport 47998:48000 -j ACCEPT\n"
+        "-A ufw-user-input -p udp -m udp --dport 5353 -j ACCEPT\n")
+    monkeypatch.setattr(doctor, "UFW_USER_RULES", rules)
+    monkeypatch.setattr(teardown, "_firewall_kind", lambda: "ufw")
+
+    arts = {a.key: a for a in teardown.inventory()}
+
+    # only the exact single-port rule counts as podstage's own
+    assert arts["ports"].detail == "47989/tcp"
+    assert arts["mdns"].present

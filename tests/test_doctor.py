@@ -107,7 +107,7 @@ def test_uhid_check_off_and_on(tmp_path, monkeypatch):
     # feature off (no config): informational OK
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "missing.toml")
     res = doctor.check_uhid()
-    assert res.status is doctor.Status.OK and "off" in res.detail
+    assert res.status is doctor.Status.OK and "not needed" in res.detail
     # feature on, /dev/uhid inaccessible: FAIL with the udev fix
     cfg = tmp_path / "config.toml"
     cfg.write_text("[experimental]\ngamepad_ds5 = true\n")
@@ -118,6 +118,23 @@ def test_uhid_check_off_and_on(tmp_path, monkeypatch):
         assert "uhid" in res.detail
     else:  # host without /dev/uhid at all also FAILs; OK impossible here
         raise AssertionError(res)
+
+
+def test_uhid_check_follows_a_pinned_playstation_pad(tmp_path, monkeypatch):
+    from podstage import config
+
+    # A profile that pins gamepad = ds4 needs the same uhid path as the
+    # experimental ds5 switch; without it the pad silently never appears.
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[[sessions]]\nname = "a"\n[sessions.sunshine_extra]\n'
+                   'gamepad = "ds4"\n')
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg)
+    monkeypatch.setattr(doctor.os, "access", lambda p, m: False)
+
+    res = doctor.check_uhid()
+
+    assert res.status is doctor.Status.FAIL
+    assert "uhid" in res.detail
 
 
 def test_ntsync_check_is_informational(tmp_path, monkeypatch):
@@ -444,3 +461,100 @@ def test_stale_images_is_a_host_check(monkeypatch):
     results = {r.name: r for r in doctor.run_all()}
     assert "stale images" in results
     assert results["stale images"].group == doctor.GROUP_HOST
+
+
+def _ufw_machine(monkeypatch, tmp_path, rules_text, *, enabled=True,
+                 conf_enabled="ENABLED=yes\n"):
+    """Point doctor at a fake ufw with no firewalld in sight."""
+    monkeypatch.setattr(doctor, "_run", lambda cmd, timeout=10:
+                        (127, "firewall-cmd: not found"))
+    monkeypatch.setattr(doctor.shutil, "which",
+                        lambda name: None if name == "firewall-cmd"
+                        else f"/usr/bin/{name}")
+    conf = tmp_path / "ufw.conf"
+    conf.write_text(conf_enabled)
+    monkeypatch.setattr(doctor, "UFW_CONF", conf)
+    rules = tmp_path / "user.rules"
+    if rules_text is not None:
+        rules.write_text(rules_text)
+    monkeypatch.setattr(doctor, "UFW_USER_RULES", rules)
+    assert doctor.ufw_enabled() is enabled
+
+
+def test_stream_firewall_ufw_reports_missing_ports(monkeypatch, tmp_path):
+    from podstage import config
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[[sessions]]\nname = "a"\n')
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg)
+    _ufw_machine(monkeypatch, tmp_path,
+                 "### RULES ###\n### END RULES ###\n")
+
+    res = doctor.check_stream_firewall()
+
+    assert res.status is doctor.Status.WARN
+    assert "47984/tcp" in res.detail and "48200/udp" in res.detail
+    assert "ufw allow 47984/tcp" in res.fix
+    assert "firewall-cmd" not in res.fix
+
+
+def test_stream_firewall_ufw_open_ports_are_ok(monkeypatch, tmp_path):
+    from podstage import config
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[[sessions]]\nname = "a"\n')
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg)
+    lines = []
+    for port in (47984, 47989, 48010):
+        lines.append(f"-A ufw-user-input -p tcp -m tcp --dport {port} -j ACCEPT")
+    for port in (47998, 47999, 48000, 48100, 48200):
+        lines.append(f"-A ufw-user-input -p udp -m udp --dport {port} -j ACCEPT")
+    _ufw_machine(monkeypatch, tmp_path, "\n".join(lines) + "\n")
+
+    res = doctor.check_stream_firewall()
+
+    assert res.status is doctor.Status.OK
+    assert "moonlight stream ports open" in res.detail
+
+
+def test_stream_firewall_ufw_takes_a_range_as_open(monkeypatch, tmp_path):
+    from podstage import config
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[[sessions]]\nname = "a"\n')
+    monkeypatch.setattr(config, "CONFIG_FILE", cfg)
+    _ufw_machine(
+        monkeypatch, tmp_path,
+        "-A ufw-user-input -p tcp -m multiport --dports 47984,47989,48010 -j ACCEPT\n"
+        "-A ufw-user-input -p udp -m udp --dport 47998:48200 -j ACCEPT\n")
+
+    assert doctor.check_stream_firewall().status is doctor.Status.OK
+
+
+def test_stream_firewall_ufw_unreadable_rules_warns(monkeypatch, tmp_path):
+    _ufw_machine(monkeypatch, tmp_path, None)  # rule file never created
+
+    res = doctor.check_stream_firewall()
+
+    assert res.status is doctor.Status.WARN
+    assert "not readable" in res.detail
+    assert "ufw allow" in res.fix
+
+
+def test_mdns_ufw_blocked_then_allowed(monkeypatch, tmp_path):
+    _ufw_machine(monkeypatch, tmp_path, "### RULES ###\n### END RULES ###\n")
+    res = doctor.check_mdns()
+    assert res.status is doctor.Status.WARN
+    assert res.fix == "sudo ufw allow 5353/udp"
+
+    _ufw_machine(monkeypatch, tmp_path,
+                 "-A ufw-user-input -p udp -m udp --dport 5353 -j ACCEPT\n")
+    res = doctor.check_mdns()
+    assert res.status is doctor.Status.OK
+
+
+def test_firewalls_ok_with_no_host_firewall(monkeypatch, tmp_path):
+    _ufw_machine(monkeypatch, tmp_path, "### RULES ###\n", enabled=False,
+                 conf_enabled="ENABLED=no\n")
+    assert doctor.check_mdns().status is doctor.Status.OK
+    assert doctor.check_stream_firewall().status is doctor.Status.OK

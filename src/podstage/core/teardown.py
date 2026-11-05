@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .. import config
 from . import desktop, runtime, sandbox, udev
-from .doctor import CDI_SPEC, stream_ports
+from .doctor import CDI_SPEC, MDNS_PORT, stream_ports, ufw_enabled, ufw_open_ranges
 
 
 @dataclass
@@ -36,22 +36,48 @@ def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str]:
         return 127, str(e)
 
 
-def _open_stream_ports() -> list[str]:
-    """podstage's moonlight stream ports currently open in firewalld (exact tokens
-    only — a user's broad range is their config, not ours)."""
+def _firewall_kind() -> str | None:
+    """Which host firewall podstage manages here. firewalld wins when both
+    respond: setup adds firewalld rules on such a host."""
     rc, state = _run(["firewall-cmd", "--state"])
-    if rc != 0 or state.strip() != "running":
-        return []
-    _, out = _run(["firewall-cmd", "--list-ports"])
-    toks = set(out.split())
+    if rc == 0 and state.strip() == "running":
+        return "firewalld"
+    return "ufw" if ufw_enabled() else None
+
+
+def _open_stream_ports() -> list[str]:
+    """podstage's moonlight stream ports currently open in the host firewall
+    (exact single-port tokens only — a user's broad range is their config, not
+    ours)."""
     tcp, udp = stream_ports()
     ports = [f"{p}/tcp" for p in tcp] + [f"{p}/udp" for p in udp]
-    return [p for p in ports if p in toks]
+    kind = _firewall_kind()
+    if kind == "firewalld":
+        _, out = _run(["firewall-cmd", "--list-ports"])
+        toks = set(out.split())
+        return [p for p in ports if p in toks]
+    if kind == "ufw":
+        ranges = ufw_open_ranges()
+        if ranges is None:
+            return []
+        found = []
+        for token in ports:
+            num, _, proto = token.partition("/")
+            if (int(num), int(num)) in ranges.get(proto, []):
+                found.append(token)
+        return found
+    return []
 
 
 def _mdns_allowed() -> bool:
-    rc, out = _run(["firewall-cmd", "--query-service=mdns"])
-    return rc == 0 and out.strip().endswith("yes")
+    kind = _firewall_kind()
+    if kind == "firewalld":
+        rc, out = _run(["firewall-cmd", "--query-service=mdns"])
+        return rc == 0 and out.strip().endswith("yes")
+    if kind == "ufw":
+        ranges = ufw_open_ranges() or {}
+        return any(lo <= MDNS_PORT <= hi for lo, hi in ranges.get("udp", []))
+    return False
 
 
 def _image_present() -> bool:
@@ -95,6 +121,7 @@ def inventory() -> list[Artifact]:
 def root_steps(arts: list[Artifact], include_shared: bool = False) -> list[str]:
     """Root-side removal steps, no sudo prefix (pkexec runs them as root)."""
     a = {x.key: x for x in arts}
+    kind = _firewall_kind()
     steps: list[str] = []
     if a["udev"].present:
         steps += [f"rm -f {udev.STATIC_DEST} {udev.OWNER_DEST}",
@@ -102,11 +129,19 @@ def root_steps(arts: list[Artifact], include_shared: bool = False) -> list[str]:
                   # restore the distro-default /dev/uinput ownership
                   "udevadm trigger --sysname-match=uinput"]
     if a["ports"].present:
-        remove = " ".join(f"--remove-port={p}" for p in a["ports"].detail.split())
-        steps.append(f"firewall-cmd --permanent {remove}")
+        if kind == "ufw":
+            steps.append(" && ".join(f"ufw delete allow {p}"
+                                     for p in a["ports"].detail.split()))
+        else:
+            remove = " ".join(f"--remove-port={p}" for p in a["ports"].detail.split())
+            steps.append(f"firewall-cmd --permanent {remove}")
     if include_shared and a["mdns"].present:
-        steps.append("firewall-cmd --permanent --remove-service=mdns")
-    if a["ports"].present or (include_shared and a["mdns"].present):
+        if kind == "ufw":
+            steps.append(f"ufw delete allow {MDNS_PORT}/udp")
+        else:
+            steps.append("firewall-cmd --permanent --remove-service=mdns")
+    if (kind != "ufw"   # ufw applies a delete immediately, firewalld needs it
+            and (a["ports"].present or (include_shared and a["mdns"].present))):
         steps.append("firewall-cmd --reload")
     if include_shared and a["cdi"].present:
         steps.append(f"rm -f {CDI_SPEC}")

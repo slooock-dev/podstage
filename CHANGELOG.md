@@ -4,6 +4,21 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-11-04
+
+No image rebuild needed, the runtime image is unchanged.
+
+### Fixed
+
+- **ufw hosts are checked and fixed instead of reported as unprotected.** Both
+  firewall checks only spoke firewalld, so a machine running ufw with its
+  default DROP policy reported the mDNS check as "cannot query firewalld", the
+  stream ports as a false OK, and every fix ran a `firewall-cmd` that is not
+  even installed — which is why moonlight never discovered the host. The checks
+  now read ufw's enabled flag and its user rules (range-aware, warning when the
+  rules are root-only), fixes run `ufw allow` per port, and uninstall deletes
+  exactly the rules podstage added.
+
 ## [0.5.8] - 2026-11-04
 
 No image rebuild needed, the runtime image is unchanged.

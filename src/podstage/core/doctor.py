@@ -372,19 +372,32 @@ def check_udev_rules() -> CheckResult:
 
 
 def check_mdns() -> CheckResult:
-    """moonlight auto-discovery: the host announces via avahi. Firewalld must
-    let mDNS (UDP 5353) in. Add-by-IP works without it."""
-    fix = "sudo firewall-cmd --permanent --add-service=mdns && sudo firewall-cmd --reload"
-    rc, out = _run(["firewall-cmd", "--query-service=mdns"])
-    if rc == 0 and out.strip().endswith("yes"):
-        return CheckResult("mdns firewall", Status.OK, "mDNS allowed (auto-discovery works)")
-    if "not" in out and "running" in out:
-        return CheckResult("mdns firewall", Status.OK, "firewalld not running")
-    if rc != 0 and out.strip() not in ("no", ""):
-        return CheckResult("mdns firewall", Status.WARN, f"cannot query firewalld ({out})", fix=fix)
-    return CheckResult("mdns firewall", Status.WARN,
-                       "mDNS blocked, moonlight won't auto-discover (add-by-IP still works)",
-                       fix=fix)
+    """moonlight auto-discovery: the host announces via avahi, so the host
+    firewall must let mDNS (UDP 5353) in. Add-by-IP works without it."""
+    if _firewalld_running():
+        fix = ("sudo firewall-cmd --permanent --add-service=mdns "
+               "&& sudo firewall-cmd --reload")
+        rc, out = _run(["firewall-cmd", "--query-service=mdns"])
+        if rc == 0 and out.strip().endswith("yes"):
+            return CheckResult("mdns firewall", Status.OK,
+                               "mDNS allowed (auto-discovery works)")
+        return CheckResult("mdns firewall", Status.WARN,
+                           "mDNS blocked, moonlight won't auto-discover "
+                           "(add-by-IP still works)", fix=fix)
+    if ufw_enabled():
+        fix = f"sudo ufw allow {MDNS_PORT}/udp"
+        ranges = ufw_open_ranges()
+        if ranges is None:
+            return CheckResult("mdns firewall", Status.WARN,
+                               "ufw is active and its rule list is not readable, "
+                               "so mDNS cannot be verified", fix=fix)
+        if _fw_covered(MDNS_PORT, "udp", ranges):
+            return CheckResult("mdns firewall", Status.OK,
+                               "mDNS allowed (auto-discovery works)")
+        return CheckResult("mdns firewall", Status.WARN,
+                           "mDNS blocked by ufw, moonlight won't auto-discover "
+                           "(add-by-IP still works)", fix=fix)
+    return CheckResult("mdns firewall", Status.OK, "no host firewall running")
 
 
 # Ports moonlight needs, as offsets from a profile's base port. A custom
@@ -441,24 +454,68 @@ def _fw_covered(port: int, proto: str, ranges: dict[str, list[tuple[int, int]]])
     return any(lo <= port <= hi for lo, hi in ranges.get(proto, []))
 
 
-def check_stream_firewall() -> CheckResult:
-    """Firewalld must let the moonlight stream ports through, for every
-    configured profile's base port and not just the default (a custom
-    ``sunshine_port_base`` shifts the whole port set).
+# ufw keeps its enabled flag world-readable and its rule list root-owned on
+# most distros, so detection works unprivileged while verification may not.
+MDNS_PORT = 5353
+UFW_CONF = Path("/etc/ufw/ufw.conf")
+UFW_USER_RULES = Path("/etc/ufw/user.rules")
 
-    Range-aware: a broad high-port range counts as open (so this doesn't warn on
-    a host that opens e.g. 1025-65535). Only ports are inspected. If you opened
-    them via a firewalld *service*, ignore a warning. Add-by-IP pairing still
-    needs these. Without them moonlight fails to pair/stream, often silently."""
-    tcp, udp = stream_ports()
+
+def _firewalld_running() -> bool:
     rc, state = _run(["firewall-cmd", "--state"])
-    if rc != 0 or "running" not in state:
-        return CheckResult("stream firewall", Status.OK, "firewalld not running (ports unrestricted)")
-    rc, out = _run(["firewall-cmd", "--list-ports"])
-    if rc != 0:
-        return CheckResult("stream firewall", Status.WARN,
-                           f"cannot query firewalld ({out})", fix=_stream_fw_fix(tcp, udp))
-    ranges = _fw_open_ranges(out)
+    return rc == 0 and "running" in state
+
+
+def ufw_enabled() -> bool:
+    """ufw is enabled when it is installed and its config opts in."""
+    if shutil.which("ufw") is None:
+        return False
+    try:
+        text = UFW_CONF.read_text(errors="replace")
+    except OSError:
+        return False
+    return bool(re.search(r"^\s*ENABLED\s*=\s*[\"']?yes", text,
+                         re.IGNORECASE | re.MULTILINE))
+
+
+def ufw_open_ranges() -> dict[str, list[tuple[int, int]]] | None:
+    """``{proto: [(lo, hi), ...]}`` allowed by ufw's user rules, or None when
+    the file cannot be read (root-owned on most distros).
+
+    ufw writes one ``-A ufw-user-input`` line per allow, either a single
+    ``--dport``, a ``--dport lo:hi`` range or a ``--dports a,b,c`` list.
+    """
+    try:
+        text = UFW_USER_RULES.read_text(errors="replace")
+    except OSError:
+        return None
+    ranges: dict[str, list[tuple[int, int]]] = {"tcp": [], "udp": []}
+    for line in text.splitlines():
+        if not line.startswith("-A ufw-user-input") or "-j ACCEPT" not in line:
+            continue
+        proto = re.search(r"(?:^|\s)-p\s+(tcp|udp)(?=\s|$)", line)
+        if not proto:
+            continue
+        for token in re.findall(r"--dports?\s+([0-9:,]+)", line):
+            for part in token.split(","):
+                lo, _, hi = part.partition(":")
+                try:
+                    ranges[proto.group(1)].append(
+                        (int(lo), int(hi) if hi else int(lo)))
+                except ValueError:
+                    continue
+    return ranges
+
+
+def _stream_fw_fix_ufw(tcp: list[int], udp: list[int]) -> str:
+    allows = ([f"ufw allow {p}/tcp" for p in tcp]
+              + [f"ufw allow {p}/udp" for p in udp])
+    return "sudo " + " && sudo ".join(allows)
+
+
+def _stream_fw_verdict(ranges: dict[str, list[tuple[int, int]]],
+                       tcp: list[int], udp: list[int], fix: str,
+                       firewall: str) -> CheckResult:
     missing_tcp = [p for p in tcp if not _fw_covered(p, "tcp", ranges)]
     missing_udp = [p for p in udp if not _fw_covered(p, "udp", ranges)]
     if not missing_tcp and not missing_udp:
@@ -470,8 +527,40 @@ def check_stream_firewall() -> CheckResult:
     missing = ([f"{p}/tcp" for p in missing_tcp]
                + [f"{p}/udp" for p in missing_udp])
     return CheckResult("stream firewall", Status.WARN,
-                       "closed: " + ", ".join(missing) + ". Moonlight may fail to pair/stream",
-                       fix=_stream_fw_fix(missing_tcp, missing_udp))
+                       f"closed in {firewall}: " + ", ".join(missing)
+                       + ". Moonlight may fail to pair/stream", fix=fix)
+
+
+def check_stream_firewall() -> CheckResult:
+    """The host firewall must let the moonlight stream ports through, for every
+    configured profile's base port and not just the default (a custom
+    ``sunshine_port_base`` shifts the whole port set). Both firewalld and ufw
+    are inspected; range-aware, so a broad high-port range counts as open
+    (this never warns on a host that opens e.g. 1025-65535).
+
+    Only ports are inspected: if you opened them through a firewalld *service*
+    or a ufw app profile, ignore a warning. Add-by-IP pairing still needs these;
+    without them moonlight fails to pair/stream, often silently."""
+    tcp, udp = stream_ports()
+    if _firewalld_running():
+        rc, out = _run(["firewall-cmd", "--list-ports"])
+        if rc != 0:
+            return CheckResult("stream firewall", Status.WARN,
+                               f"cannot query firewalld ({out})",
+                               fix=_stream_fw_fix(tcp, udp))
+        return _stream_fw_verdict(_fw_open_ranges(out), tcp, udp,
+                                  _stream_fw_fix(tcp, udp), "firewalld")
+    if ufw_enabled():
+        ranges = ufw_open_ranges()
+        if ranges is None:
+            return CheckResult("stream firewall", Status.WARN,
+                               "ufw is active and its rule list is not readable, "
+                               "so the moonlight ports cannot be verified",
+                               fix=_stream_fw_fix_ufw(tcp, udp))
+        return _stream_fw_verdict(ranges, tcp, udp,
+                                  _stream_fw_fix_ufw(tcp, udp), "ufw")
+    return CheckResult("stream firewall", Status.OK,
+                       "no host firewall running (ports unrestricted)")
 
 
 def check_avahi() -> CheckResult:
@@ -520,27 +609,31 @@ def check_uinput() -> CheckResult:
 
 
 def check_uhid() -> CheckResult:
-    """The DualSense experimental feature (gamepad_ds5) creates the emulated
-    pad as a kernel HID device through /dev/uhid. Without access the feature
-    silently degrades to no pad at all. Only meaningful when enabled."""
+    """PlayStation-style pads are kernel HID devices created through
+    /dev/uhid: the gamepad_ds5 feature, or any profile that pins
+    gamepad = ds4/ds5. Without access sunshine silently creates no pad at all.
+    Only meaningful when one of those is in play."""
     try:
-        enabled = config.AppConfig.load(config.CONFIG_FILE) \
-            .experimental.get("gamepad_ds5", False)
+        cfg = config.AppConfig.load(config.CONFIG_FILE)
+        enabled = bool(cfg.experimental.get("gamepad_ds5")) or any(
+            s.sunshine_extra.get("gamepad") in ("ds4", "ds5")
+            for s in cfg.sessions)
     except (OSError, ValueError, TypeError):
         enabled = False
     if not enabled:
-        return CheckResult("uhid (DS5)", Status.OK,
-                           "not needed (DualSense feature off)")
+        return CheckResult("uhid (PS4/PS5)", Status.OK,
+                           "not needed (no profile pins a PlayStation pad)")
     dev = Path("/dev/uhid")
     if not dev.exists():
-        return CheckResult("uhid (DS5)", Status.FAIL,
-                           "/dev/uhid missing, DualSense emulation cannot work")
+        return CheckResult("uhid (PS4/PS5)", Status.FAIL,
+                           "/dev/uhid missing, PlayStation pad emulation "
+                           "cannot work")
     if os.access(dev, os.R_OK | os.W_OK):
-        return CheckResult("uhid (DS5)", Status.OK, "/dev/uhid accessible")
+        return CheckResult("uhid (PS4/PS5)", Status.OK, "/dev/uhid accessible")
     return CheckResult(
-        "uhid (DS5)", Status.FAIL,
+        "uhid (PS4/PS5)", Status.FAIL,
         "/dev/uhid not accessible. The generated owner rule grants it "
-        "(reinstall the udev rules), or disable the DualSense feature",
+        "(reinstall the udev rules), or pin a non-PlayStation pad",
         fix=UDEV_FIX)
 
 
