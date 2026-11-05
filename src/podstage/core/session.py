@@ -8,7 +8,6 @@ Only one session runs at a time, because games can only run from one Steam
 instance. ``runtime.start()`` enforces it.
 """
 
-import os
 import shutil
 import subprocess
 import time
@@ -81,7 +80,7 @@ class Session:
             return True
         if shutil.which("steam") is None:
             return False
-        _steam_shutdown(env=dict(os.environ, HOME=str(self.home)))
+        _steam_shutdown(env=sandbox.steam_env(self.home))
         for _ in range(timeout):
             if not self.sandbox_steam_running():
                 return True
@@ -203,16 +202,21 @@ class Session:
         Steam's desktop UI (not Big Picture), so the first-time login and
         setting each game's Proton compatibility tool are easy with keyboard
         and mouse. Also the way to edit sandbox Steam settings later. This
-        runs on the HOST with an isolated HOME, not in the container: the
-        container's ``desktop`` mode is a debug path and nothing here uses it.
+        runs on the HOST with an isolated HOME and isolated XDG dirs (see
+        :func:`sandbox.steam_env`), not in the container: the container's
+        ``desktop`` mode is a debug path and nothing here uses it.
         """
         if runtime.is_running():
             raise RuntimeError(
                 "a streaming session is running; stop it before opening the "
                 "sandbox Steam (Steam is single-instance per HOME)")
         self.home.mkdir(parents=True, exist_ok=True)
+        dropped = sandbox.drop_foreign_steam_links(self.home)
+        if dropped:
+            print(f"Repaired {len(dropped)} sandbox Steam link(s) pointing "
+                  f"outside {self.home}")
         self.close_host_steam()
-        env = dict(os.environ, HOME=str(self.home))
+        env = sandbox.steam_env(self.home)
 
         if self.is_bootstrapped():
             # Already logged in once: make games appear now so Proton can be set.

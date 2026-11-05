@@ -4,6 +4,26 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-11-04
+
+No image rebuild needed, the runtime image is unchanged.
+
+### Fixed
+
+- **The login button opens the sandbox Steam, not the desktop one.** Steam's
+  launcher reads `XDG_DATA_HOME` before `HOME`, so launching with `HOME` alone
+  put the bootstrap, the client and `loginusers.vdf` in the desktop profile and
+  the sandbox stayed "no login" forever. Every host-side launch — the GUI
+  button, `podstage sandbox setup` and the sandbox `-shutdown` — now goes
+  through `sandbox.steam_env`, which repoints `HOME` and the four XDG dirs
+  while leaving `XDG_RUNTIME_DIR` and the display vars on the host.
+- **Sandboxes written by that bug are repaired on launch.** Steam also prefers
+  an existing `~/.steam/steam` over the XDG data dir, and the broken launch left
+  sandboxes with `.steam/steam` pointing at the desktop install, so the
+  environment fix alone was not enough. `sandbox.drop_foreign_steam_links`
+  unlinks install links that resolve outside the sandbox, after which the
+  launcher bootstraps a fresh install inside it.
+
 ## [0.5.7] - 2026-09-22
 
 No image rebuild needed, the runtime image is unchanged.
