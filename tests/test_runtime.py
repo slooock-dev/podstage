@@ -394,6 +394,115 @@ def test_nvidia_wine_dll_dir_and_mount(tmp_path, monkeypatch):
     assert f"{wine}:{runtime.NV_WINE_TARGET}:ro" in runtime.nvidia_lib32_mounts()
 
 
+# Minimal ELF identification headers: 4-byte magic + EI_CLASS (1 = 32-bit,
+# 2 = 64-bit). The mount builder only needs the ident, never the rest.
+_ELF32_HEADER = b"\x7fELF\x01\x01\x01" + b"\x00" * 9
+_ELF64_HEADER = b"\x7fELF\x02\x01\x01" + b"\x00" * 9
+
+
+def _isolate_nvidia_mounts(monkeypatch, globs, glx=None, wine=None):
+    """Pin the NVIDIA 32-bit discovery to synthetic fixtures."""
+    monkeypatch.setattr(runtime, "_NV32_GLOBS", globs)
+    monkeypatch.setattr(runtime, "_glxserver", lambda: glx)
+    monkeypatch.setattr(runtime, "nvidia_wine_dll_dir", lambda: wine)
+
+
+def test_nvidia_lib32_mounts_select_elf32_sources(tmp_path, monkeypatch):
+    """Mount the host's real 32-bit stack, never a 64-bit file of the same
+    name: the CDI spec leaves the container's /usr/lib32 without NVIDIA GL, so
+    binding an unusable ELF64 object over it breaks 32-bit GLX/EGL entirely."""
+    lib32 = tmp_path / "usr-lib32"
+    multiarch = tmp_path / "i386-linux-gnu"
+    usrlib = tmp_path / "usr-lib"
+    for d in (lib32, multiarch, usrlib):
+        d.mkdir()
+    globs = [
+        f"{lib32}/libGLX_nvidia.so.*",
+        f"{lib32}/libEGL_nvidia.so.*",
+        f"{multiarch}/libEGL_nvidia.so.*",
+        f"{usrlib}/libnvidia-glcore.so.*",
+        f"{usrlib}/libnvidia-eglcore.so.*",
+    ]
+    (lib32 / "libGLX_nvidia.so.0").write_bytes(_ELF32_HEADER)
+    # A 64-bit copy in the preferred dir: it must be skipped WITHOUT claiming
+    # the basename, so the valid 32-bit copy found later still gets mounted.
+    (lib32 / "libEGL_nvidia.so.0").write_bytes(_ELF64_HEADER)
+    (multiarch / "libEGL_nvidia.so.0").write_bytes(_ELF32_HEADER)
+    # /usr/lib on a 64-bit host is the 64-bit directory; the Fedora layout that
+    # keeps i686 there is still honoured when the file really is ELF32.
+    (usrlib / "libnvidia-glcore.so.0").write_bytes(_ELF64_HEADER)
+    (usrlib / "libnvidia-eglcore.so.0").write_bytes(_ELF32_HEADER)
+    _isolate_nvidia_mounts(monkeypatch, globs)
+    assert runtime.nvidia_lib32_mounts() == [
+        "-v", f"{lib32}/libGLX_nvidia.so.0:/usr/lib32/libGLX_nvidia.so.0:ro",
+        "-v", f"{multiarch}/libEGL_nvidia.so.0:/usr/lib32/libEGL_nvidia.so.0:ro",
+        "-v", f"{usrlib}/libnvidia-eglcore.so.0:/usr/lib32/libnvidia-eglcore.so.0:ro",
+    ]
+
+
+def test_nvidia_lib32_dirs_prefer_usr_lib32():
+    """/usr/lib32 is searched before /usr/lib, which is all ELF64 on Arch."""
+    assert runtime._NV32_DIRS[0] == "/usr/lib32"
+    assert runtime._NV32_DIRS.index("/usr/lib32") < runtime._NV32_DIRS.index("/usr/lib")
+    for name in runtime._NV32_LIB_NAMES:
+        assert f"/usr/lib32/{name}" in runtime._NV32_GLOBS
+
+
+def test_nvidia_lib32_mounts_skip_unreadable_and_non_elf(tmp_path, monkeypatch):
+    """A truncated file or a directory carrying a lib's name is not a library:
+    skip it instead of mounting it over the container's working stack."""
+    d = tmp_path / "usr-lib32"
+    d.mkdir()
+    (d / "libEGL_nvidia.so.0").write_bytes(b"not an elf")
+    (d / "libGLX_nvidia.so.0").write_bytes(_ELF32_HEADER[:3])  # truncated ident
+    (d / "libnvidia-tls.so.0").mkdir()  # unreadable as a file
+    (d / "libnvidia-glsi.so.0").symlink_to(tmp_path / "gone")  # dangling
+    _isolate_nvidia_mounts(monkeypatch, [f"{d}/*"])
+    assert runtime.nvidia_lib32_mounts() == []
+
+
+def test_nvidia_lib32_mounts_keep_glx_ngx_and_dedupe(tmp_path, monkeypatch):
+    """GLX server and DLSS NGX mounts survive, and one basename is bound once
+    even when two valid 32-bit source dirs carry it."""
+    first = tmp_path / "usr-lib32"
+    second = tmp_path / "i386-linux-gnu"
+    first.mkdir()
+    second.mkdir()
+    (first / "libGLX_nvidia.so.0").write_bytes(_ELF32_HEADER)
+    (second / "libGLX_nvidia.so.0").write_bytes(_ELF32_HEADER)
+    glx = tmp_path / "libglxserver_nvidia.so"
+    glx.write_bytes(_ELF64_HEADER)
+    wine = tmp_path / "nvidia" / "wine"
+    wine.mkdir(parents=True)
+    (wine / "nvngx.dll").write_bytes(b"")
+    _isolate_nvidia_mounts(
+        monkeypatch,
+        [f"{first}/libGLX_nvidia.so.*", f"{second}/libGLX_nvidia.so.*"],
+        glx=glx, wine=wine)
+    assert runtime.nvidia_lib32_mounts() == [
+        "-v", f"{first}/libGLX_nvidia.so.0:/usr/lib32/libGLX_nvidia.so.0:ro",
+        "-v", f"{glx}:/usr/lib/xorg/modules/extensions/libglxserver_nvidia.so:ro",
+        "-v", f"{wine}:{runtime.NV_WINE_TARGET}:ro",
+    ]
+
+
+def test_nvidia_container_flags_keep_cdi_modeset_and_lib32(tmp_path, monkeypatch):
+    """The CDI GPU device, the modeset node and the new 32-bit mounts land in
+    the same NVIDIA flag list; the Mesa vendors stay on /dev/dri only."""
+    d = tmp_path / "usr-lib32"
+    d.mkdir()
+    (d / "libGLX_nvidia.so.0").write_bytes(_ELF32_HEADER)
+    _isolate_nvidia_mounts(monkeypatch, [f"{d}/libGLX_nvidia.so.*"])
+    flags = " ".join(runtime.container_flags([], tmp_path / "home", vendor="nvidia"))
+    assert "nvidia.com/gpu=all" in flags
+    assert "/dev/nvidia-modeset" in flags
+    assert f"{d}/libGLX_nvidia.so.0:/usr/lib32/libGLX_nvidia.so.0:ro" in flags
+    for vendor in runtime.MESA_VENDORS:
+        mesa = " ".join(runtime.container_flags([], tmp_path / "home", vendor=vendor))
+        assert "/usr/lib32" not in mesa
+        assert "nvidia.com/gpu" not in mesa
+
+
 def test_perf_share_dir_is_mounted_from_the_host_tmpfs(tmp_path, monkeypatch):
     """The probe's 1 Hz file belongs on tmpfs, not in the on-disk HOME."""
     monkeypatch.setattr(config, "RUNTIME_SHARE_DIR", tmp_path / "share")

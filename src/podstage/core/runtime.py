@@ -45,11 +45,32 @@ _NV32_LIB_NAMES = [
     "libnvidia-glsi.so.*", "libnvidia-tls.so.*", "libnvidia-glvkspirv.so.*",
     "libnvidia-eglcore.so.*", "libnvidia-gpucomp.so.*",
 ]
-# 32-bit NVIDIA userspace lives in /usr/lib on Fedora/Bazzite/Arch and under the
-# i386 multiarch dir on Debian/Ubuntu. Glob both; the mount builder dedupes by
-# basename so only one copy of each lib is bound.
-_NV32_DIRS = ["/usr/lib", "/usr/lib/i386-linux-gnu"]
+# 32-bit NVIDIA userspace lives in /usr/lib32 on Arch, under the i386
+# multiarch dir on Debian/Ubuntu and in /usr/lib on Fedora/Bazzite. Glob all
+# three in that order and keep only ELFCLASS32 files: on Arch /usr/lib holds
+# the 64-bit libraries under the same names, and binding one into /usr/lib32
+# breaks 32-bit GL silently. The mount builder dedupes by basename so only one
+# copy of each lib is bound.
+_NV32_DIRS = ["/usr/lib32", "/usr/lib/i386-linux-gnu", "/usr/lib"]
 _NV32_GLOBS = [f"{d}/{name}" for d in _NV32_DIRS for name in _NV32_LIB_NAMES]
+
+_ELF_MAGIC = b"\x7fELF"
+_ELFCLASS32 = 1
+
+
+def _is_elf32(path: Path) -> bool:
+    """True when ``path`` starts with a 32-bit ELF identification header.
+
+    Only the first five bytes are checked, not the complete ELF structure.
+    Unreadable files, short idents and non-ELF or 64-bit candidates are skipped.
+    """
+    try:
+        with open(path, "rb") as fh:
+            ident = fh.read(5)
+    except OSError:  # missing, permission denied, a directory, ...
+        return False
+    return (len(ident) == 5 and ident[:4] == _ELF_MAGIC
+            and ident[4] == _ELFCLASS32)
 
 # Xwayland's server-side GLX for NVIDIA is also NOT in the CDI spec. Without it
 # the Xwayland gamescope spawns for Steam's X11 UI falls back to Mesa GLX and
@@ -289,6 +310,10 @@ def nvidia_lib32_mounts() -> list[str]:
         for lib in sorted(glob.glob(pattern)):
             name = Path(lib).name
             if name in seen:  # same lib found under two multiarch dirs
+                continue
+            # Check the architecture BEFORE claiming the basename: an invalid
+            # candidate must not hide a valid duplicate further down.
+            if not _is_elf32(Path(lib)):
                 continue
             seen.add(name)
             flags += ["-v", f"{lib}:/usr/lib32/{name}:ro"]

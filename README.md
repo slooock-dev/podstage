@@ -323,6 +323,10 @@ sunshine package and a pinned moonshine commit.
   (`firewall-cmd --add-service=mdns`, offered as a Setup fix). Pairing by IP
   always works, as long as the profile's moonlight port block is open too,
   which Setup checks separately.
+- **Steam's UI or a 32-bit game falls back to Mesa on NVIDIA.** The runtime
+  binds the host's 32-bit NVIDIA GL libraries into `/usr/lib32`. Install them
+  (`lib32-nvidia-utils` on Arch, the i386 multiarch packages on Debian/Ubuntu)
+  and restart the session.
 - **No GPU load shown on Intel.** The meter samples `intel_gpu_top`. Install it
   (igt-gpu-tools) and make the GPU PMU readable (CAP_PERFMON or a relaxed
   `perf_event_paranoid`). VRAM stays unavailable on i915/xe.
