@@ -8,6 +8,20 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 No image rebuild needed, the runtime image is unchanged.
 
+### Added
+
+- **Gamepad type and moonlight name are now profile settings.** The pad select
+  (auto/x360/xone/xseries/ds4/ds5/switch/generic) joins the encoder knobs on the
+  Session page and the name field sits under Backend, both persisted in the
+  profile instead of the tmpfs `sunshine.conf`. The name reaches
+  `sunshine_name` / `PS_MOONSHINE_NAME` and the host's avahi announcement
+  through `runtime.advertised_name`, sanitized the same way the derived one is.
+- **Pinning a PlayStation pad mounts the host `/dev`.** A ds4/ds5 pad is a
+  kernel HID device built through `/dev/uhid`, not a uinput one, so forcing it
+  without the wide mount made sunshine create no pad at all. `session._options`
+  derives `PS_NEEDS_UHID` from the pinned pad and the doctor checks
+  `/dev/uhid` for those profiles too.
+
 ### Fixed
 
 - **The login button opens the sandbox Steam, not the desktop one.** Steam's

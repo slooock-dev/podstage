@@ -149,6 +149,12 @@ class Session:
         # Hold Select/Back to press Guide (Steam menu): both backends read
         # it, each through its own config key (see runtime._COMMON_ENV).
         env["PS_GUIDE_HOLD_MS"] = str(self.app_config().guide_hold_ms)
+        # PlayStation pads are kernel HID devices (libvirtualhid → /dev/uhid),
+        # not uinput ones: pinning ds4/ds5 needs the host /dev in the container
+        # or sunshine silently creates no pad at all.
+        pinned_pad = self.cfg.sunshine_extra.get("gamepad", "")
+        if pinned_pad in ("ds4", "ds5"):
+            env["PS_NEEDS_UHID"] = "enabled"
         # Settings that only exist on the labwc + sunshine pipeline. Setting
         # them for moonshine would be dead env, and silently pretending they
         # apply is worse than the honest gap (see containers/moonshine/).
@@ -169,6 +175,11 @@ class Session:
                 if self.cfg.moonshine_keyboard_variant:
                     env["PS_MOONSHINE_KB_VARIANT"] = self.cfg.moonshine_keyboard_variant
         experimental = self.app_config().experimental_env()
+        if pinned_pad:
+            # The profile's pad pin and the gamepad_ds5 switch both end up as a
+            # `gamepad` line in sunshine.conf, and only one of them is read.
+            # The explicit pin is the more specific choice, so it wins.
+            experimental.pop("PS_GAMEPAD_DS5", None)
         if backend.name != backends.SUNSHINE.name:
             # gamepad_ds5 configures SUNSHINE's emulated pad; moonshine's
             # inputtino has its own gamepad model and ignores the flag.
@@ -192,6 +203,7 @@ class Session:
             env=env,
             extra_mounts=list(self.cfg.extra_mounts),
             library_rw=self.cfg.library_rw,
+            stream_name=self.cfg.stream_name,
         )
 
     # -- lifecycle -------------------------------------------------------

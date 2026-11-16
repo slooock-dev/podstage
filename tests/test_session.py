@@ -213,6 +213,19 @@ def test_ds5_experimental_does_not_leak_into_moonshine():
     assert sun["PS_GAMEPAD_RECONNECT"] == "enabled"
 
 
+def test_a_pinned_pad_wins_over_the_ds5_switch():
+    """The pin and the switch both write a `gamepad` line into sunshine.conf,
+    and sunshine silently reads one of them, so the explicit pin takes it."""
+    app = AppConfig(experimental={"gamepad_ds5": True})
+    for pad in ("ds4", "ds5", "x360"):
+        sc = SessionConfig(name="deck", sunshine_extra={"gamepad": pad})
+        env = Session(sc, app_config=app)._options().env
+        assert "PS_GAMEPAD_DS5" not in env, pad
+    # An unpinned profile keeps the switch doing its job.
+    env = Session(SessionConfig(name="deck"), app_config=app)._options().env
+    assert env["PS_GAMEPAD_DS5"] == "enabled"
+
+
 def test_moonshine_rejects_the_sunshine_only_modes():
     import pytest
 
@@ -318,3 +331,17 @@ def test_setup_launches_steam_isolated_from_the_host_xdg(tmp_path, monkeypatch):
     assert seen["env"]["XDG_DATA_HOME"] == str(tmp_path / ".local/share")
     assert seen["env"]["XDG_CONFIG_HOME"] == str(tmp_path / ".config")
 
+
+def test_pinned_playstation_pad_requests_uhid():
+    sc = SessionConfig(name="deck", sunshine_extra={"gamepad": "ds4"})
+    assert Session(sc)._options().env["PS_NEEDS_UHID"] == "enabled"
+
+    sc = SessionConfig(name="deck", sunshine_extra={"gamepad": "ds5"})
+    assert Session(sc)._options().env["PS_NEEDS_UHID"] == "enabled"
+
+
+def test_other_pads_do_not_request_uhid():
+    for pad in ("auto", "x360", "xone", "switch"):
+        sc = SessionConfig(name="deck", sunshine_extra={"gamepad": pad})
+        assert "PS_NEEDS_UHID" not in Session(sc)._options().env, pad
+    assert "PS_NEEDS_UHID" not in Session(SessionConfig(name="deck"))._options().env
