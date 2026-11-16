@@ -824,6 +824,9 @@ class SandboxPage(QWidget):
 
         def _prepare() -> str:
             session.home.mkdir(parents=True, exist_ok=True)
+            # The launcher resolves .steam/steam before anything else, so a
+            # link escaping the sandbox would launch the desktop install.
+            sandbox.drop_foreign_steam_links(session.home)
             session.close_host_steam()
             return "prepared"
 
@@ -834,8 +837,11 @@ class SandboxPage(QWidget):
         if not ok or sc is None:
             self._finish_bootstrap(tr("Preparation failed: {msg}", msg=msg))
             return
-        env = QProcessEnvironment.systemEnvironment()
-        env.insert("HOME", str(sc.home_dir()))
+        # Not systemEnvironment()+HOME: Steam prefers XDG over HOME, so the
+        # sandbox env has to repoint both (see sandbox.steam_env).
+        env = QProcessEnvironment()
+        for key, val in sandbox.steam_env(sc.home_dir()).items():
+            env.insert(key, val)
         proc = QProcess(self)
         proc.setProcessEnvironment(env)
         proc.finished.connect(self._on_steam_finished)

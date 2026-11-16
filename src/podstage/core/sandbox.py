@@ -8,6 +8,7 @@ which land on the host under a mapped sub-UID).
 """
 
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -24,6 +25,66 @@ SUNSHINE_STATE = ".config/podstage-sunshine/state.json"
 # ids on that backend.
 MOONSHINE_STATE = ".local/share/moonshine/state.toml"
 LOGINUSERS = ".local/share/Steam/config/loginusers.vdf"
+
+# Steam's launcher resolves its data dir from XDG *before* HOME
+# (``STEAM_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"``), so overriding
+# HOME alone is not isolation: with XDG_DATA_HOME set, the bootstrap, the
+# client and loginusers.vdf all land in the desktop profile and the sandbox
+# never sees the login. XDG_RUNTIME_DIR is deliberately absent — the
+# compositor and PipeWire sockets live there and are shared with the host.
+_XDG_HOME_DIRS = {
+    "XDG_DATA_HOME": Path(".local/share"),
+    "XDG_CONFIG_HOME": Path(".config"),
+    "XDG_CACHE_HOME": Path(".cache"),
+    "XDG_STATE_HOME": Path(".local/state"),
+}
+
+# Install links the launcher resolves before it ever looks at the XDG data dir.
+_STEAM_DATA_LINKS = (".steam/steam", ".steam/root")
+
+
+def drop_foreign_steam_links(home: Path) -> list[Path]:
+    """Unlink sandbox Steam install links that resolve outside ``home``.
+
+    The launcher takes ``~/.steam/steam`` (``readlink -e``) as the install dir
+    before it considers ``$XDG_DATA_HOME/Steam``, so a link that resolves into
+    the desktop profile launches the desktop client instead of the sandbox
+    install. Unlinking it makes the launcher bootstrap a fresh install inside
+    ``home``.
+
+    The link the container writes for its own mount (``.steam/steam`` ->
+    ``/home/player/.local/share/Steam``) never resolves inside ``home`` from
+    the host side, so it is dropped too and ``steam.sh`` recreates it on the
+    next launch.
+
+    Returns the links removed. A link resolving inside ``home`` (a healthy
+    sandbox) and a missing ``.steam`` are both left untouched.
+    """
+    root = home.resolve()
+    dropped: list[Path] = []
+    for rel in _STEAM_DATA_LINKS:
+        link = home / rel
+        if not link.is_symlink():
+            continue
+        target = link.resolve()
+        if target == root or root in target.parents:
+            continue
+        link.unlink(missing_ok=True)
+        dropped.append(link)
+    return dropped
+
+
+def steam_env(home: Path) -> dict[str, str]:
+    """Host-side environment for a Steam that must see only ``home``.
+
+    Inherits the caller's environment — display, session bus, audio,
+    XDG_RUNTIME_DIR — and repoints HOME plus every XDG dir at the sandbox.
+    """
+    env = dict(os.environ)
+    env["HOME"] = str(home)
+    for key, rel in _XDG_HOME_DIRS.items():
+        env[key] = str(home / rel)
+    return env
 
 
 @dataclass

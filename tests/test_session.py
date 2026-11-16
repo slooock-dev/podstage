@@ -286,3 +286,35 @@ def test_start_prunes_duplicate_pairing_records(tmp_path, monkeypatch):
                         lambda home: seen.append(home) or [("deck", "u1")])
     assert s.start().running
     assert seen == [s.home]
+
+
+def test_setup_launches_steam_isolated_from_the_host_xdg(tmp_path, monkeypatch):
+    # Regression: the login button used to pass HOME only, so Steam kept
+    # resolving its data dir from the host XDG_DATA_HOME, opened the desktop
+    # client, and wrote loginusers.vdf into the desktop profile.
+    import subprocess as sp
+
+    from podstage.core import runtime
+    from podstage.core import session as session_mod
+
+    sc = SessionConfig(name="deck", home=str(tmp_path))
+    s = Session(sc)
+    monkeypatch.setattr(runtime, "is_running", lambda: False)
+    monkeypatch.setattr(Session, "close_host_steam",
+                        lambda self, timeout=20: None)
+    monkeypatch.setenv("XDG_DATA_HOME", "/host/.local/share")
+    seen: dict = {}
+
+    def fake_run(cmd, env=None, **kwargs):
+        seen["cmd"] = cmd
+        seen["env"] = env
+        return sp.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(session_mod.subprocess, "run", fake_run)
+    s.setup()
+
+    assert seen["cmd"] == ["steam"]
+    assert seen["env"]["HOME"] == str(tmp_path)
+    assert seen["env"]["XDG_DATA_HOME"] == str(tmp_path / ".local/share")
+    assert seen["env"]["XDG_CONFIG_HOME"] == str(tmp_path / ".config")
+
