@@ -112,3 +112,26 @@ def test_prune_images_runs_when_idle(monkeypatch, capsys):
     assert cli.cmd_runtime_prune_images(argparse.Namespace()) == 0
     out = capsys.readouterr().out
     assert "2" in out and "7.7 GB" in out
+
+
+def test_setup_applied_records_the_ufw_fixes(monkeypatch, tmp_path):
+    """The CLI never elevates, so `--applied` is the user saying the printed
+    commands ran; without it a root-only ufw rule file warns forever."""
+    from podstage import config
+    from podstage.core import doctor, udev
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+
+    mdns = doctor.CheckResult("mdns firewall", doctor.Status.WARN, "blocked",
+                              fix="sudo ufw allow 5353/udp")
+    stream = doctor.CheckResult("stream firewall", doctor.Status.WARN, "closed",
+                                fix="sudo ufw allow 47989/tcp")
+    monkeypatch.setattr(cli.doctor, "run_all", lambda: [mdns, stream])
+    monkeypatch.setattr(udev, "stage", lambda: {"static": "a", "owner": "b"})
+
+    assert cli.cmd_setup(argparse.Namespace(applied=True)) == 0
+
+    state = doctor._ufw_fix_state()
+    assert state["mdns firewall"] is True
+    # recorded with the ports podstage opened, not the single one it printed
+    assert "47989/tcp" in state["stream firewall"]

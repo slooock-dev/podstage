@@ -339,3 +339,20 @@ def test_library_rw_default_and_roundtrip(tmp_path: Path):
     path = tmp_path / "config.toml"
     AppConfig(sessions=[SessionConfig(name="rw", library_rw=True)]).save(path)
     assert AppConfig.load(path).get("rw").library_rw is True
+
+
+def test_stream_name_round_trips(tmp_path):
+    cfg = config.AppConfig(
+        sessions=[config.SessionConfig(name="a", stream_name="Living room")])
+    path = tmp_path / "config.toml"
+    cfg.save(path)
+
+    assert config.AppConfig.load(path).get("a").stream_name == "Living room"
+
+
+def test_stream_name_defaults_to_empty(tmp_path):
+    cfg = config.AppConfig(sessions=[config.SessionConfig(name="a")])
+    path = tmp_path / "config.toml"
+    cfg.save(path)
+
+    assert config.AppConfig.load(path).get("a").stream_name == ""

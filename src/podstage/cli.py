@@ -68,7 +68,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_setup(_args: argparse.Namespace) -> int:
+def cmd_setup(args: argparse.Namespace) -> int:
     """Guided setup: run the checks, stage the host udev rules (the one
     root-gated piece of podstage), and print ready-made commands for
     everything sudo-gated. Nothing is executed with elevated rights —
@@ -97,6 +97,19 @@ def cmd_setup(_args: argparse.Namespace) -> int:
     if udev_needed:
         fixes = udev.install_commands(staged) + fixes
 
+    # ufw keeps its rule list root-only, so these are the fixes podstage cannot
+    # verify later. ``--applied`` is the user telling us they ran them.
+    ufw_fixes = [r for r in results
+                 if r.status is not doctor.Status.OK and r.fix
+                 and r.fix.startswith("sudo ufw")]
+    if getattr(args, "applied", False) and ufw_fixes:
+        for r in ufw_fixes:
+            doctor.record_ufw_fix(r.name)
+        print(_c("Recorded as applied: "
+                 + ", ".join(r.name for r in ufw_fixes) + ".", "32"))
+        print()
+        return 0
+
     if not fixes:
         print(_c("Everything is set up — nothing to do.", "32"))
         return 0
@@ -105,6 +118,10 @@ def cmd_setup(_args: argparse.Namespace) -> int:
         print(f"  {f}")
     print()
     print("Then verify with: podstage doctor")
+    if ufw_fixes:
+        print("ufw keeps its rule list root-only: after running them, "
+              "`podstage setup --applied` records them so the doctor stops "
+              "asking for root.")
     return 0
 
 
@@ -592,6 +609,8 @@ def build_parser() -> argparse.ArgumentParser:
     d.set_defaults(func=cmd_doctor)
 
     st = sub.add_parser("setup", help="guided setup: stage the udev rules + print the sudo commands")
+    st.add_argument("--applied", action="store_true",
+                    help="record the printed ufw fixes as already applied")
     st.set_defaults(func=cmd_setup)
 
     un = sub.add_parser("uninstall", help="remove everything podstage set up (rules, image, data)")

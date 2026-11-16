@@ -105,6 +105,23 @@ TEXTS: dict[str, str] = {
         "dem nächsten Start.",
     "Saved. Live apply failed: {msg}":
         "Gespeichert. Live-Anwendung fehlgeschlagen: {msg}",
+    "Moonlight name": "Moonlight-Name",
+    "Name moonlight lists and the server announces. Leave it empty to derive "
+    "one from the sandbox and backend. Applies at the next session start.":
+        "Name, den moonlight auflistet und den der Server ankündigt. Leer "
+        "lassen, um ihn aus Sandbox und Backend abzuleiten. Gilt ab dem "
+        "nächsten Session-Start.",
+    "auto (client decides)": "automatisch (Client entscheidet)",
+    "generic HID": "generisches HID",
+    "Virtual pad sunshine creates. 'auto' follows what the client reports; "
+    "pin one if a client gets the wrong pad.":
+        "Virtuelles Pad, das sunshine erstellt. 'auto' folgt dem, was der "
+        "Client meldet; einen Typ festlegen, wenn ein Client das falsche Pad "
+        "bekommt.",
+    "Saved. The pad applies from the next stream start: the device bind is "
+    "fixed when the container starts.":
+        "Gespeichert. Das Pad gilt ab dem nächsten Stream-Start: die "
+        "Geräteanbindung steht beim Start des Containers fest.",
 
     # -- pair dialog -----------------------------------------------------
     "Pair client": "Client pairen",

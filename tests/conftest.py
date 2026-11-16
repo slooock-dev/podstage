@@ -3,7 +3,7 @@
 import pytest
 
 from podstage import config
-from podstage.core import desktop
+from podstage.core import desktop, doctor
 
 
 @pytest.fixture(autouse=True)
@@ -26,3 +26,6 @@ def _tmp_web_credentials(tmp_path, monkeypatch):
     creates the user's real ~/.local/share/podstage credentials."""
     monkeypatch.setattr(config, "WEB_CREDENTIALS_FILE",
                         tmp_path / "web_credentials.json")
+    # Same for what podstage recorded as its own ufw fixes: a developer host
+    # that ran the fix must not change what the checks report.
+    monkeypatch.setattr(doctor, "UFW_FIX_STATE", tmp_path / "ufw-fix.json")
