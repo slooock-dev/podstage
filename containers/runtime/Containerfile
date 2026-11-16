@@ -16,7 +16,7 @@
 # to a host run (where Wolf's smithay-EGL fails, GOW #124).
 
 # Pinned digest: build cache + audit anchor.
-FROM docker.io/library/archlinux:latest@sha256:f3691b4dde62ba4c4b6f0ae2c1fbf28e8c0c8c4b9a35c7e06dc1f70e21aa29f6
+FROM docker.io/library/archlinux:latest@sha256:d4594bb2300cba11f41c2f27923eb56f63d9988909c402f9c95517d1e362c899
 
 # --- multilib (Steam is 32-bit) + base refresh -----------------------------
 RUN printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf && \
