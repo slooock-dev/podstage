@@ -513,6 +513,22 @@ def _ufw_fix_recorded(check: str, ports: list[str] | None = None) -> bool:
     return isinstance(applied, list) and set(ports) <= set(applied)
 
 
+def ufw_applied_ports() -> list[str]:
+    """The stream ports podstage itself opened through ufw, from its record.
+
+    Ownership comes from this record and never from the rule file: a rule that
+    merely matches a stream port looks exactly like one of podstage's own, so
+    the rules cannot tell whose allow it is.
+    """
+    applied = _ufw_fix_state().get("stream firewall")
+    return applied if isinstance(applied, list) else []
+
+
+def ufw_mdns_applied() -> bool:
+    """Whether podstage itself opened the mDNS port through ufw."""
+    return _ufw_fix_state().get("mdns firewall") is True
+
+
 def _which_ufw() -> str | None:
     """``ufw`` as the login session would not see it: the sbin dirs count."""
     path = os.environ.get("PATH", "")
@@ -537,12 +553,41 @@ def ufw_enabled() -> bool:
                          re.IGNORECASE | re.MULTILINE))
 
 
+# A rule narrowed by source, destination, interface or a rate limit applies to
+# part of the traffic only, so it never proves the port is globally open.
+_UFW_RESTRICTIONS = re.compile(
+    r"(?:^|\s)(?:-s|-d|-i|-o|--in-interface|--out-interface)(?=\s|$)"
+    r"|(?:^|\s)-m\s+limit(?=\s|$)")
+_UFW_BLOCK = re.compile(r"-j\s+(?:DROP|REJECT)(?=\s|$)")
+
+
+def _ufw_rule_ports(line: str) -> tuple[str, list[tuple[int, int]]] | None:
+    """``(proto, [(lo, hi), ...])`` of a ``ufw-user-input`` rule line.
+
+    ufw writes either a single ``--dport``, a ``--dport lo:hi`` range or a
+    ``--dports a,b,c`` list.
+    """
+    proto = re.search(r"(?:^|\s)-p\s+(tcp|udp)(?=\s|$)", line)
+    if not proto:
+        return None
+    spans: list[tuple[int, int]] = []
+    for token in re.findall(r"--dports?\s+([0-9:,]+)", line):
+        for part in token.split(","):
+            lo, _, hi = part.partition(":")
+            try:
+                spans.append((int(lo), int(hi) if hi else int(lo)))
+            except ValueError:
+                continue
+    return proto.group(1), spans
+
+
 def ufw_open_ranges() -> dict[str, list[tuple[int, int]]] | None:
     """``{proto: [(lo, hi), ...]}`` allowed by ufw's user rules, or None when
     the file cannot be read (root-owned on most distros).
 
-    ufw writes one ``-A ufw-user-input`` line per allow, either a single
-    ``--dport``, a ``--dport lo:hi`` range or a ``--dports a,b,c`` list.
+    Only unrestricted allow lines count: a rule limited to a source,
+    destination, interface or rate is no evidence that the port is open.
+    First-match blocking rules are handled by :func:`_ufw_shadowed_ports`.
     """
     try:
         text = UFW_USER_RULES.read_text(errors="replace")
@@ -550,20 +595,80 @@ def ufw_open_ranges() -> dict[str, list[tuple[int, int]]] | None:
         return None
     ranges: dict[str, list[tuple[int, int]]] = {"tcp": [], "udp": []}
     for line in text.splitlines():
-        if not line.startswith("-A ufw-user-input") or "-j ACCEPT" not in line:
+        if (not line.startswith("-A ufw-user-input")
+                or "-j ACCEPT" not in line or _UFW_RESTRICTIONS.search(line)):
             continue
-        proto = re.search(r"(?:^|\s)-p\s+(tcp|udp)(?=\s|$)", line)
-        if not proto:
+        parsed = _ufw_rule_ports(line)
+        if parsed is None:
             continue
-        for token in re.findall(r"--dports?\s+([0-9:,]+)", line):
-            for part in token.split(","):
-                lo, _, hi = part.partition(":")
-                try:
-                    ranges[proto.group(1)].append(
-                        (int(lo), int(hi) if hi else int(lo)))
-                except ValueError:
-                    continue
+        proto, spans = parsed
+        ranges[proto].extend(spans)
     return ranges
+
+
+def _ufw_shadowed_ports(text: str) -> set[tuple[str, int]]:
+    """``{(proto, port)}`` that a blocking rule answers before any allow.
+
+    ufw is first-match, so a DROP/REJECT that precedes the covering ACCEPT for
+    the same protocol and port leaves that port unreachable; the later allow is
+    dead. A blocking rule after the allow changes nothing. Only exact single
+    ports are reported, a blocked range is not expanded here.
+    """
+    rules: list[tuple[str, bool, list[tuple[int, int]]]] = []
+    candidates: set[tuple[str, int]] = set()
+    for line in text.splitlines():
+        if (not line.startswith("-A ufw-user-input")
+                or _UFW_RESTRICTIONS.search(line)):
+            continue
+        blocks = bool(_UFW_BLOCK.search(line))
+        if not blocks and "-j ACCEPT" not in line:
+            continue
+        parsed = _ufw_rule_ports(line)
+        if parsed is None:
+            continue
+        proto, spans = parsed
+        rules.append((proto, blocks, spans))
+        if blocks:
+            candidates |= {(proto, lo) for lo, hi in spans if lo == hi}
+    shadowed: set[tuple[str, int]] = set()
+    for proto, port in candidates:
+        for rule_proto, blocks, spans in rules:  # file order == match order
+            if rule_proto == proto and any(lo <= port <= hi
+                                           for lo, hi in spans):
+                if blocks:
+                    shadowed.add((proto, port))
+                break
+    return shadowed
+
+
+def _subtract_ports(ranges: dict[str, list[tuple[int, int]]],
+                    shadowed: set[tuple[str, int]]
+                    ) -> dict[str, list[tuple[int, int]]]:
+    """``ranges`` without the single ports that a blocking rule shadows.
+
+    A port inside a range splits it into up to two ranges; empty pieces drop.
+    """
+    out: dict[str, list[tuple[int, int]]] = {}
+    for proto, spans in ranges.items():
+        holes = sorted(port for hole_proto, port in shadowed
+                       if hole_proto == proto)
+        kept: list[tuple[int, int]] = []
+        for lo, hi in spans:
+            pieces = [(lo, hi)]
+            for port in holes:
+                split: list[tuple[int, int]] = []
+                for a, b in pieces:
+                    if port < a or port > b:
+                        split.append((a, b))
+                        continue
+                    if a <= port - 1:
+                        split.append((a, port - 1))
+                    if port + 1 <= b:
+                        split.append((port + 1, b))
+                pieces = split
+            kept.extend(pieces)
+        out[proto] = kept
+    return out
 
 
 def _stream_fw_fix_ufw(tcp: list[int], udp: list[int]) -> str:
@@ -586,8 +691,11 @@ def _stream_fw_verdict(ranges: dict[str, list[tuple[int, int]]],
         return CheckResult("stream firewall", Status.OK, detail)
     missing = ([f"{p}/tcp" for p in missing_tcp]
                + [f"{p}/udp" for p in missing_udp])
+    # firewalld keeps the wording it has always had; only ufw needs to say
+    # which firewall the verdict came from.
+    prefix = "closed in ufw: " if firewall == "ufw" else "closed: "
     return CheckResult("stream firewall", Status.WARN,
-                       f"closed in {firewall}: " + ", ".join(missing)
+                       prefix + ", ".join(missing)
                        + ". Moonlight may fail to pair/stream",
                        fix=fix_of(missing_tcp, missing_udp))
 
@@ -623,6 +731,11 @@ def check_stream_firewall() -> CheckResult:
                                "ufw is active and its rule list is not readable, "
                                "so the moonlight ports cannot be verified",
                                fix=_stream_fw_fix_ufw(tcp, udp))
+        try:
+            rules_text = UFW_USER_RULES.read_text(errors="replace")
+        except OSError:
+            rules_text = ""
+        ranges = _subtract_ports(ranges, _ufw_shadowed_ports(rules_text))
         return _stream_fw_verdict(ranges, tcp, udp,
                                   _stream_fw_fix_ufw, "ufw")
     return CheckResult("stream firewall", Status.OK,

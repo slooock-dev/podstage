@@ -14,7 +14,15 @@ from pathlib import Path
 
 from .. import config
 from . import desktop, runtime, sandbox, udev
-from .doctor import CDI_SPEC, MDNS_PORT, stream_ports, ufw_enabled, ufw_open_ranges
+from .doctor import (
+    CDI_SPEC,
+    MDNS_PORT,
+    stream_ports,
+    ufw_applied_ports,
+    ufw_enabled,
+    ufw_mdns_applied,
+    ufw_open_ranges,
+)
 
 
 @dataclass
@@ -48,9 +56,11 @@ def _firewall_kind() -> str | None:
 def _open_stream_ports() -> list[str]:
     """podstage's moonlight stream ports to remove from the host firewall.
 
-    Only exact single-port tokens are returned: a broad range is the user's own
-    config, not ours, and ``ufw delete allow <port>`` never matches one. That
-    is also why the full set is emitted when ufw's rules cannot be read.
+    Ownership comes from podstage's own fix record, never from the rules: an
+    allow that matches a stream port may be the user's (or another package's),
+    so a matching rule is not evidence that podstage added it. Only exact
+    single-port tokens are returned, because ``ufw delete allow <port>`` never
+    matches a broad range.
     """
     tcp, udp = stream_ports()
     ports = [f"{p}/tcp" for p in tcp] + [f"{p}/udp" for p in udp]
@@ -60,17 +70,25 @@ def _open_stream_ports() -> list[str]:
         toks = set(out.split())
         return [p for p in ports if p in toks]
     if kind == "ufw":
+        recorded = ufw_applied_ports()
+        if not recorded:
+            # Nothing podstage applied, so there is nothing of ours to delete.
+            return []
         ranges = ufw_open_ranges()
         if ranges is None:
             # ufw keeps /etc/ufw/user.rules root-only on Arch, Debian and
-            # Ubuntu, so an unprivileged uninstall sees no rule at all. Emit
-            # every port podstage would have opened instead of silently
+            # Ubuntu, so an unprivileged uninstall cannot cross-check. The
+            # record says these are ours, so emit them instead of silently
             # leaving them behind.
-            return ports
+            return list(recorded)
         found = []
-        for token in ports:
+        for token in recorded:
             num, _, proto = token.partition("/")
-            if (int(num), int(num)) in ranges.get(proto, []):
+            try:
+                port = int(num)
+            except ValueError:
+                continue
+            if (port, port) in ranges.get(proto, []):
                 found.append(token)
         return found
     return []
@@ -82,10 +100,13 @@ def _mdns_allowed() -> bool:
         rc, out = _run(["firewall-cmd", "--query-service=mdns"])
         return rc == 0 and out.strip().endswith("yes")
     if kind == "ufw":
+        # Same rule as the stream ports: a 5353 allow in the rule file may be
+        # the user's own, so only the record says podstage added it.
+        if not ufw_mdns_applied():
+            return False
         ranges = ufw_open_ranges()
         if ranges is None:
-            # Same root-only rule file: assume the mDNS allow may be there, so
-            # uninstall deletes the rule podstage added instead of keeping it.
+            # Root-only rule file: trust the record.
             return True
         return any(lo <= MDNS_PORT <= hi for lo, hi in ranges.get("udp", []))
     return False
