@@ -20,6 +20,21 @@ No image rebuild needed, the runtime image is unchanged.
   an existing `~/.steam/steam` over the XDG data dir, so
   `sandbox.drop_foreign_steam_links` unlinks install links that resolve outside
   the sandbox and the launcher bootstraps a fresh install inside it.
+- **ufw hosts are checked and fixed instead of reported as unprotected.** Both
+  firewall checks only spoke firewalld, so a ufw machine reported mDNS as
+  "cannot query firewalld", the stream ports as a false OK, and every fix ran a
+  `firewall-cmd` that is not installed. The checks now read ufw's enabled flag
+  and its user rules, fixes run `ufw allow` per port, and uninstall deletes
+  exactly the rules podstage added.
+- **A root-only ufw rule file no longer hides podstage's own rules.**
+  `/etc/ufw/user.rules` is unreadable unprivileged, so `uninstall` emits the
+  exact `ufw delete allow` lines podstage would have added, and the checks
+  report a fix podstage applied as "not verifiable without root" instead of a
+  warning that never clears.
+- **`ufw` in `/usr/sbin` and the CLI's own recording.** Debian keeps `ufw`
+  outside a login session's PATH, so the checks saw no host firewall and
+  uninstall skipped the rules; `podstage setup --applied` is the CLI
+  counterpart of the GUI's Fix button for a root-only rule list.
 
 ## [0.5.8] - 2026-11-16
 

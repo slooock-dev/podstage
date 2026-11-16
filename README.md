@@ -203,6 +203,7 @@ podstage runtime build
 ```bash
 podstage doctor                              # what is missing
 podstage setup                               # prints the (sudo) setup commands
+podstage setup --applied                     # ...and records the ufw ones as done
 podstage sandbox add deck
 podstage sandbox login deck                  # first Steam login, over the stream
 podstage session start deck

@@ -145,7 +145,7 @@ def _gamepad_reconnect() -> str:
     return tr("Gamepads disconnected and reconnected.")
 
 
-def _run_fix(fix: str) -> str:
+def _run_fix(fix: str, check: str = "") -> str:
     shell, needs_root = elevate.fix_shell(fix)
     if needs_root:
         rc, out = elevate.run_root(shell)
@@ -155,6 +155,10 @@ def _run_fix(fix: str) -> str:
         rc, out = p.returncode, (p.stdout + p.stderr).strip()
     if rc != 0:
         raise RuntimeError(out or tr("Exit code {rc}", rc=rc))
+    # ufw's rule file is root-only, so the check that asked for this fix cannot
+    # verify it afterwards; remembering the fix keeps that state honest.
+    if check in ("mdns firewall", "stream firewall") and doctor.ufw_enabled():
+        doctor.record_ufw_fix(check)
     return tr("Done.")
 
 
@@ -555,7 +559,8 @@ class SetupPage(QWidget):
             _, needs_root = elevate.fix_shell(r.fix)
             btn = QPushButton(tr("Fix (pkexec)") if needs_root else tr("Fix"))
             fix = r.fix
-            btn.clicked.connect(lambda: self._start(r.name, lambda: _run_fix(fix)))
+            btn.clicked.connect(
+                lambda: self._start(r.name, lambda: _run_fix(fix, r.name)))
         else:
             return None
         # The pkexec-availability gate keys off the literal "pkexec" tag, which
