@@ -4,6 +4,24 @@ All notable changes to podstage are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-11-16
+
+Rebuild the runtime image (`podstage runtime build`), its Arch base digest
+moved.
+
+### Fixed
+
+- **Steam's UI and 32-bit games fall back to Mesa on NVIDIA.** On Arch the
+  32-bit library glob also matched the 64-bit libraries in `/usr/lib`, which
+  were bound into `/usr/lib32` and broke 32-bit GL silently. Only ELFCLASS32
+  files are bound now, searched in `/usr/lib32`, the Debian i386 multiarch dir
+  and `/usr/lib` (thanks @NicolasMunozC).
+
+### Changed
+
+- **Runtime image on a current Arch base**, sunshine and wlroots unchanged.
+  CI tests Python 3.11 to 3.15.
+
 ## [0.5.7] - 2026-09-22
 
 No image rebuild needed, the runtime image is unchanged.
