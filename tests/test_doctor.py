@@ -619,3 +619,98 @@ def test_stream_fix_lists_only_the_missing_ports(monkeypatch, tmp_path):
 
     assert "ufw allow 47984/tcp" not in res.fix   # already open
     assert "ufw allow 47989/tcp" in res.fix
+
+
+# -- what a ufw rule actually proves -----------------------------------------
+#
+# A rule narrowed by source/interface/limit, or one that a blocking rule above
+# it shadows, is no evidence that the port is reachable: ufw is first-match.
+
+def _all_ports_rules(*, tcp_extra="", udp_extra="", restrict=""):
+    """An ufw rule file allowing every default-base stream port."""
+    lines = [f"-A ufw-user-input {restrict}-p tcp -m tcp --dport {port} -j ACCEPT"
+             for port in (47984, 47989, 48010)]
+    lines += [f"-A ufw-user-input {restrict}-p udp -m udp --dport {port} -j ACCEPT"
+              for port in (47998, 47999, 48000, 48100, 48200)]
+    return "\n".join(lines) + "\n" + tcp_extra + udp_extra
+
+
+def test_stream_firewall_ufw_ignores_source_restricted_allows(monkeypatch,
+                                                              tmp_path):
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    _ufw_machine(monkeypatch, tmp_path,
+                 _all_ports_rules(restrict="-s 192.168.1.0/24 "))
+
+    res = doctor.check_stream_firewall()
+
+    assert res.status is doctor.Status.WARN
+    assert "47984/tcp" in res.detail and "48200/udp" in res.detail
+    assert "ufw allow 47984/tcp" in res.fix
+
+
+def test_stream_firewall_ufw_drop_before_accept_leaves_the_port_closed(
+        monkeypatch, tmp_path):
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    rules = ("-A ufw-user-input -p udp -m udp --dport 47998 -j DROP\n"
+             + _all_ports_rules())
+    _ufw_machine(monkeypatch, tmp_path, rules)
+
+    res = doctor.check_stream_firewall()
+
+    assert res.status is doctor.Status.WARN
+    assert "47998/udp" in res.detail
+    assert "47999/udp" not in res.detail   # the rest is still open
+    assert "ufw allow 47998/udp" in res.fix
+
+
+def test_stream_firewall_ufw_drop_after_accept_is_a_dead_rule(monkeypatch,
+                                                             tmp_path):
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    rules = (_all_ports_rules()
+             + "-A ufw-user-input -p udp -m udp --dport 47998 -j DROP\n"
+             + "-A ufw-user-input -p tcp -m tcp --dport 47989 -j REJECT\n")
+    _ufw_machine(monkeypatch, tmp_path, rules)
+
+    res = doctor.check_stream_firewall()
+
+    assert res.status is doctor.Status.OK
+    assert "moonlight stream ports open" in res.detail
+
+
+def test_stream_firewall_ufw_unrestricted_allows_are_open(monkeypatch, tmp_path):
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    # The bare shape ufw itself writes for `ufw allow <port>`: no restriction,
+    # so every stream port is covered.
+    _ufw_machine(monkeypatch, tmp_path, _all_ports_rules())
+
+    res = doctor.check_stream_firewall()
+
+    assert res.status is doctor.Status.OK
+    assert "moonlight stream ports open" in res.detail
+
+
+def test_firewalld_closed_ports_keep_the_historical_wording(monkeypatch,
+                                                            tmp_path):
+    """The firewalld detail string is pre-existing output: scripts and issue
+    reports quote it, so it must not grow into "closed in firewalld"."""
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    monkeypatch.setattr(doctor, "_run",
+                        lambda cmd, timeout=10:
+                        (0, "running") if "--state" in cmd
+                        else (0, "47984/tcp"))
+
+    res = doctor.check_stream_firewall()
+
+    assert res.status is doctor.Status.WARN
+    assert res.detail == (
+        "closed: 47989/tcp, 48010/tcp, 47998/udp, 47999/udp, 48000/udp, "
+        "48100/udp, 48200/udp. Moonlight may fail to pair/stream")
+
+
+def test_ufw_closed_ports_say_which_firewall(monkeypatch, tmp_path):
+    _cfg_with(tmp_path, monkeypatch, '[[sessions]]\nname = "a"\n')
+    _ufw_machine(monkeypatch, tmp_path, "### RULES ###\n")
+
+    res = doctor.check_stream_firewall()
+
+    assert res.detail.startswith("closed in ufw: ")

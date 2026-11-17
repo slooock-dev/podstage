@@ -49,6 +49,10 @@ No image rebuild needed, the runtime image is unchanged.
   outside a login session's PATH, so the checks saw no host firewall and
   uninstall skipped the rules; `podstage setup --applied` is the CLI
   counterpart of the GUI's Fix button for a root-only rule list.
+- **Uninstall only deletes the ufw rules podstage opened.** A matching rule no
+  longer proves ownership, restricted rules no longer count as open for the
+  stream ports, and firewalld reports its closed ports in its own wording
+  again.
 
 ## [0.5.8] - 2026-11-16
 
