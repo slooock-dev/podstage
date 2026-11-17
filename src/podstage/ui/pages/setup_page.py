@@ -121,16 +121,25 @@ def _move_home_root(new_root: str) -> str:
     return tr("Sandboxes moved to {path}.", path=str(new))
 
 
+def _require_pkexec(steps: list[str]) -> None:
+    """Abort the uninstall before it deletes anything it cannot finish.
+
+    The root steps are what pkexec is for; without it the removal would stop
+    half-way, with the data and config already gone and the rules still open.
+    """
+    if steps and not elevate.available():
+        raise RuntimeError(tr("pkexec is missing. Finish with the CLI: "
+                              "podstage uninstall"))
+
+
 def _uninstall(delete_sandboxes: bool, include_shared: bool) -> str:
     # teardown.uninstall plans the root steps before touching DATA_DIR and
-    # CONFIG_DIR: they hold the ufw fix record and the port bases those steps
-    # are built from.
+    # CONFIG_DIR -- they hold the ufw fix record and the port bases those steps
+    # are built from -- and runs the guard while the plan is still only a plan.
     steps, results = teardown.uninstall(include_shared=include_shared,
-                                       keep_sandboxes=not delete_sandboxes)
+                                        keep_sandboxes=not delete_sandboxes,
+                                        guard=_require_pkexec)
     if steps:
-        if not elevate.available():
-            raise RuntimeError(tr("pkexec is missing. Finish with the CLI: "
-                                  "podstage uninstall"))
         rc, out = elevate.run_root(" && ".join(steps))
         if rc != 0:
             raise RuntimeError(out)

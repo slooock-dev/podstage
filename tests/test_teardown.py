@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from podstage import config
 from podstage.core import desktop, doctor, runtime, teardown, udev
 
@@ -246,6 +248,28 @@ def test_uninstall_plans_the_root_steps_before_deleting_the_record(
 
     assert "ufw delete allow 47989/tcp" in " && ".join(steps)
     assert not data.exists()  # the record is gone, the plan is not
+
+
+def test_uninstall_deletes_nothing_when_the_guard_refuses(monkeypatch, tmp_path):
+    # A removal that cannot be finished must not start: the GUI refuses to
+    # uninstall without pkexec, and an abort after the user-level removal would
+    # already have destroyed the data and config the root steps clean up.
+    data = tmp_path / "data"
+    data.mkdir()
+    _ufw_host(monkeypatch, tmp_path, rules_text=None, state=None)
+    monkeypatch.setattr(doctor, "UFW_FIX_STATE", data / "ufw-fix.json")
+    (data / "ufw-fix.json").write_text(
+        json.dumps({"stream firewall": ["47989/tcp"]}))
+    monkeypatch.setattr(runtime, "stop", lambda *a, **k: False)
+    monkeypatch.setattr(desktop, "remove_all", list)
+
+    def refuse(steps: list[str]) -> None:
+        raise RuntimeError("pkexec is missing")
+
+    with pytest.raises(RuntimeError):
+        teardown.uninstall(guard=refuse)
+
+    assert data.exists() and (data / "ufw-fix.json").exists()
 
 
 def test_ufw_uninstall_mdns_is_only_deleted_when_recorded(monkeypatch, tmp_path):

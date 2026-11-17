@@ -9,6 +9,7 @@ software's infrastructure too — listed, but only removed on request.
 
 import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -219,15 +220,23 @@ def remove_user_artifacts(keep_sandboxes: bool = False) -> list[tuple[str, str]]
 
 
 def uninstall(include_shared: bool = False,
-              keep_sandboxes: bool = False) -> tuple[list[str], list[tuple[str, str]]]:
+              keep_sandboxes: bool = False,
+              guard: Callable[[list[str]], None] | None = None,
+              ) -> tuple[list[str], list[tuple[str, str]]]:
     """Plan the root steps, then remove the user-level artifacts.
 
     Returns ``(steps, results)``. The order is the whole point: DATA_DIR holds
     the ufw fix record that says which rules are podstage's, and CONFIG_DIR the
     profiles the stream ports come from, so the plan has to be made while they
     still exist. Deleting first silently turns every ufw delete into a no-op.
+
+    ``guard`` sees the plan and may raise to abort the uninstall: a removal that
+    cannot be finished must not start, or it destroys the data and config the
+    root steps were going to clean up (the GUI aborts when pkexec is missing).
     """
     steps = root_steps(inventory(), include_shared=include_shared)
+    if guard is not None:
+        guard(steps)
     return steps, remove_user_artifacts(keep_sandboxes=keep_sandboxes)
 
 
