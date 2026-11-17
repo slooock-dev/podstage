@@ -218,6 +218,19 @@ def remove_user_artifacts(keep_sandboxes: bool = False) -> list[tuple[str, str]]
     return results
 
 
+def uninstall(include_shared: bool = False,
+              keep_sandboxes: bool = False) -> tuple[list[str], list[tuple[str, str]]]:
+    """Plan the root steps, then remove the user-level artifacts.
+
+    Returns ``(steps, results)``. The order is the whole point: DATA_DIR holds
+    the ufw fix record that says which rules are podstage's, and CONFIG_DIR the
+    profiles the stream ports come from, so the plan has to be made while they
+    still exist. Deleting first silently turns every ufw delete into a no-op.
+    """
+    steps = root_steps(inventory(), include_shared=include_shared)
+    return steps, remove_user_artifacts(keep_sandboxes=keep_sandboxes)
+
+
 def leftovers(include_shared: bool = False) -> list[Artifact]:
     """Re-scan after removal — what is still present (kept shared artifacts
     excluded unless they were meant to go)."""

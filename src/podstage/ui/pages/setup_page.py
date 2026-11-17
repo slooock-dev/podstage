@@ -122,8 +122,11 @@ def _move_home_root(new_root: str) -> str:
 
 
 def _uninstall(delete_sandboxes: bool, include_shared: bool) -> str:
-    results = teardown.remove_user_artifacts(keep_sandboxes=not delete_sandboxes)
-    steps = teardown.root_steps(teardown.inventory(), include_shared=include_shared)
+    # teardown.uninstall plans the root steps before touching DATA_DIR and
+    # CONFIG_DIR: they hold the ufw fix record and the port bases those steps
+    # are built from.
+    steps, results = teardown.uninstall(include_shared=include_shared,
+                                       keep_sandboxes=not delete_sandboxes)
     if steps:
         if not elevate.available():
             raise RuntimeError(tr("pkexec is missing. Finish with the CLI: "

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from podstage import config
-from podstage.core import desktop, doctor, teardown, udev
+from podstage.core import desktop, doctor, runtime, teardown, udev
 
 
 def _fake_system(monkeypatch, tmp_path: Path, *, udev_present=True, ports=None,
@@ -226,6 +226,26 @@ def test_ufw_uninstall_never_deletes_the_users_own_allow(monkeypatch, tmp_path):
 
     assert "ufw delete allow 47989/tcp" in joined
     assert "48100/udp" not in joined
+
+
+def test_uninstall_plans_the_root_steps_before_deleting_the_record(
+        monkeypatch, tmp_path):
+    # The ufw fix record lives in DATA_DIR and the port bases in CONFIG_DIR, so
+    # a plan taken after their removal cannot name a single rule: deleting first
+    # leaves the firewall rules behind while claiming there were none.
+    data = tmp_path / "data"
+    data.mkdir()
+    _ufw_host(monkeypatch, tmp_path, rules_text=None, state=None)
+    monkeypatch.setattr(doctor, "UFW_FIX_STATE", data / "ufw-fix.json")
+    (data / "ufw-fix.json").write_text(
+        json.dumps({"stream firewall": ["47989/tcp"]}))
+    monkeypatch.setattr(runtime, "stop", lambda *a, **k: False)
+    monkeypatch.setattr(desktop, "remove_all", list)
+
+    steps, _ = teardown.uninstall()
+
+    assert "ufw delete allow 47989/tcp" in " && ".join(steps)
+    assert not data.exists()  # the record is gone, the plan is not
 
 
 def test_ufw_uninstall_mdns_is_only_deleted_when_recorded(monkeypatch, tmp_path):
